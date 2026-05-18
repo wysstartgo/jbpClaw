@@ -13,7 +13,7 @@ import { quickActionService } from '../../services/quickAction';
 import { skillService } from '../../services/skill';
 import { RootState } from '../../store';
 import { addMessage, clearCurrentSession, dequeueCoworkInput, requeueCoworkInputToFront, setCurrentSession, setStreaming, updateSessionStatus } from '../../store/slices/coworkSlice';
-import { setSelectedModel } from '../../store/slices/modelSlice';
+import { selectAgentSelectedModel, setSelectedModel } from '../../store/slices/modelSlice';
 import { clearSelection,selectAction, setActions } from '../../store/slices/quickActionSlice';
 import { clearActiveSkills, setActiveSkillIds } from '../../store/slices/skillSlice';
 import type { CoworkImageAttachment, CoworkSession, OpenClawEngineStatus } from '../../types/cowork';
@@ -70,7 +70,14 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
   const quickActions = useSelector((state: RootState) => state.quickAction.actions);
   const selectedActionId = useSelector((state: RootState) => state.quickAction.selectedActionId);
   const currentAgentId = useSelector((state: RootState) => state.agent.currentAgentId);
-  const globalSelectedModel = useSelector((state: RootState) => state.model.selectedModel);
+  const currentAgent = useSelector((state: RootState) => (
+    state.agent.agents.find((agent) => agent.id === state.agent.currentAgentId)
+  ));
+  const currentAgentSelectedModel = useSelector((state: RootState) => {
+    const agent = state.agent.agents.find((item) => item.id === state.agent.currentAgentId);
+    return selectAgentSelectedModel(state.model, state.agent.currentAgentId, agent?.model ?? '');
+  });
+  const currentAgentWorkingDirectory = currentAgent?.workingDirectory?.trim() || config.workingDirectory || '';
   const screenBottomPet = petState?.config.anchor === PetAnchor.ScreenBottom ? (
     <div className="pointer-events-none fixed bottom-5 right-6 z-40 hidden lg:block">
       <div className="pointer-events-auto">
@@ -222,8 +229,10 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
       const now = Date.now();
 
       // Capture active skill IDs before clearing them
-      const sessionSkillIds = [...activeSkillIds];
-      const sessionModelOverride = globalSelectedModel ? toOpenClawModelRef(globalSelectedModel) : '';
+      const sessionSkillIds = activeSkillIds.length > 0
+        ? [...activeSkillIds]
+        : [...(currentAgent?.skillIds ?? [])];
+      const sessionModelOverride = currentAgentSelectedModel ? toOpenClawModelRef(currentAgentSelectedModel) : '';
 
       const tempSession: CoworkSession = {
         id: tempSessionId,
@@ -233,7 +242,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         pinned: false,
         createdAt: now,
         updatedAt: now,
-        cwd: config.workingDirectory || '',
+        cwd: currentAgentWorkingDirectory,
         systemPrompt: '',
         modelOverride: sessionModelOverride,
         executionMode: config.executionMode || 'local',
@@ -279,7 +288,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
       const { session: startedSession, error: startError } = await coworkService.startSession({
         prompt,
         title: fallbackTitle,
-        cwd: config.workingDirectory || undefined,
+        cwd: currentAgentWorkingDirectory || undefined,
         systemPrompt: combinedSystemPrompt,
         activeSkillIds: sessionSkillIds,
         agentId: currentAgentId,
@@ -341,7 +350,11 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
       });
 
       // Capture active skill IDs before clearing
-      const sessionSkillIds = queuedSkillIds ? [...queuedSkillIds] : [...activeSkillIds];
+      const sessionSkillIds = queuedSkillIds
+        ? [...queuedSkillIds]
+        : activeSkillIds.length > 0
+          ? [...activeSkillIds]
+          : [...(currentAgent?.skillIds ?? [])];
 
       // Clear active skills after capturing so they don't persist to next message
       if (sessionSkillIds.length > 0) {
@@ -366,7 +379,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     } finally {
       isContinuingRef.current = false;
     }
-  }, [activeSkillIds, config.systemPrompt, dispatch, isOpenClawEngine, openClawStatus]);
+  }, [activeSkillIds, config.systemPrompt, currentAgent?.skillIds, dispatch, isOpenClawEngine, openClawStatus]);
 
   const handleContinueSession = async (prompt: string, skillPrompt?: string, imageAttachments?: CoworkImageAttachment[]) => {
     if (!currentSession) return;
@@ -526,11 +539,11 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
           </div>
         )}
         <ModelSelector
-          value={isOpenClawEngine ? globalSelectedModel : undefined}
+          value={isOpenClawEngine ? currentAgentSelectedModel : undefined}
           onChange={isOpenClawEngine
             ? async (nextModel) => {
                 if (!nextModel) return;
-                dispatch(setSelectedModel(nextModel));
+                dispatch(setSelectedModel({ agentId: currentAgentId, model: nextModel }));
               }
             : undefined}
           defaultLabel={isOpenClawEngine ? i18nService.t('scheduledTasksFormModelDefault') : undefined}

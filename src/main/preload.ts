@@ -41,6 +41,7 @@ import {
   type AppUpdateSource,
 } from '../shared/appUpdate/constants';
 import { ArtifactIpcChannel } from '../shared/artifact/constants';
+import { ArtifactPreviewIpc } from '../shared/artifactPreview/constants';
 import { CoworkIpcChannel } from '../shared/cowork/constants';
 import { PetIpcChannel } from '../shared/pet/constants';
 import type { PetConfig, PetImportRequest, PetRuntimeState } from '../shared/pet/types';
@@ -100,16 +101,21 @@ contextBridge.exposeInMainWorld('electron', {
     delete: (id: string) => ipcRenderer.invoke('mcp:delete', id),
     setEnabled: (options: { id: string; enabled: boolean }) => ipcRenderer.invoke('mcp:setEnabled', options),
     fetchMarketplace: () => ipcRenderer.invoke('mcp:fetchMarketplace'),
-    refreshBridge: () => ipcRenderer.invoke('mcp:refreshBridge'),
-    onBridgeSyncStart: (callback: () => void) => {
-      const handler = () => callback();
-      ipcRenderer.on('mcp:bridge:syncStart', handler);
-      return () => ipcRenderer.removeListener('mcp:bridge:syncStart', handler);
-    },
-    onBridgeSyncDone: (callback: (data: { tools: number; error?: string }) => void) => {
-      const handler = (_event: IpcRendererEvent, data: { tools: number; error?: string }) => callback(data);
-      ipcRenderer.on('mcp:bridge:syncDone', handler);
-      return () => ipcRenderer.removeListener('mcp:bridge:syncDone', handler);
+  },
+  plugins: {
+    list: () => ipcRenderer.invoke('plugins:list'),
+    install: (params: { source: 'npm' | 'clawhub' | 'git' | 'local'; spec: string; registry?: string; version?: string }) =>
+      ipcRenderer.invoke('plugins:install', params),
+    uninstall: (pluginId: string) => ipcRenderer.invoke('plugins:uninstall', pluginId),
+    setEnabled: (pluginId: string, enabled: boolean) =>
+      ipcRenderer.invoke('plugins:setEnabled', pluginId, enabled),
+    getConfigSchema: (pluginId: string) => ipcRenderer.invoke('plugins:getConfigSchema', pluginId),
+    saveConfig: (pluginId: string, config: Record<string, unknown>) =>
+      ipcRenderer.invoke('plugins:saveConfig', pluginId, config),
+    onInstallLog: (callback: (line: string) => void) => {
+      const handler = (_event: IpcRendererEvent, line: string) => callback(line);
+      ipcRenderer.on('plugins:installLog', handler);
+      return () => ipcRenderer.removeListener('plugins:installLog', handler);
     },
   },
   permissions: {
@@ -461,6 +467,8 @@ contextBridge.exposeInMainWorld('electron', {
     openPath: (filePath: string) => ipcRenderer.invoke('shell:openPath', filePath),
     showItemInFolder: (filePath: string) => ipcRenderer.invoke('shell:showItemInFolder', filePath),
     openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+    getAppsForFile: (filePath: string) => ipcRenderer.invoke('shell:getAppsForFile', filePath),
+    openPathWithApp: (filePath: string, appPath: string) => ipcRenderer.invoke('shell:openPathWithApp', filePath, appPath),
     openHtmlInBrowser: (htmlContent: string) =>
       ipcRenderer.invoke(ArtifactIpcChannel.OpenHtmlInBrowser, htmlContent),
   },
@@ -476,6 +484,9 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.on(ArtifactIpcChannel.FileChanged, handler);
       return () => ipcRenderer.removeListener(ArtifactIpcChannel.FileChanged, handler);
     },
+    createPreviewSession: (filePath: string) => ipcRenderer.invoke(ArtifactPreviewIpc.CreateSession, filePath),
+    createOfficePreviewSession: (filePath: string) => ipcRenderer.invoke(ArtifactPreviewIpc.CreateOfficeSession, filePath),
+    destroyPreviewSession: (sessionId: string) => ipcRenderer.invoke(ArtifactPreviewIpc.DestroySession, sessionId),
   },
   autoLaunch: {
     get: () => ipcRenderer.invoke('app:getAutoLaunch'),

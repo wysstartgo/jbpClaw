@@ -39,6 +39,21 @@ describe('ProviderRegistry', () => {
     expect(def!.region).toBe('global');
   });
 
+  test('deepseek and xiaomi default to OpenAI-compatible endpoints', () => {
+    const deepseek = ProviderRegistry.get(ProviderName.DeepSeek);
+    expect(deepseek?.defaultApiFormat).toBe(ApiFormat.OpenAI);
+    expect(deepseek?.defaultBaseUrl).toBe('https://api.deepseek.com');
+
+    const xiaomi = ProviderRegistry.get(ProviderName.Xiaomi);
+    expect(xiaomi?.defaultApiFormat).toBe(ApiFormat.OpenAI);
+    expect(xiaomi?.defaultBaseUrl).toBe('https://api.xiaomimimo.com/v1/chat/completions');
+  });
+
+  test('xiaomi default models include MiMo V2 Omni', () => {
+    const xiaomi = ProviderRegistry.get(ProviderName.Xiaomi);
+    expect(xiaomi?.defaultModels.some(model => model.id === 'mimo-v2-omni')).toBe(true);
+  });
+
   test('get returns undefined for unknown provider', () => {
     expect(ProviderRegistry.get('nonexistent')).toBeUndefined();
     expect(ProviderRegistry.get(ProviderName.Custom)).toBeUndefined();
@@ -46,7 +61,7 @@ describe('ProviderRegistry', () => {
 
   test('resolveModelSupportsImage repairs known provider model metadata', () => {
     expect(ProviderRegistry.resolveModelSupportsImage(ProviderName.Qwen, 'qwen3.6-plus', false)).toBe(true);
-    expect(ProviderRegistry.resolveModelSupportsImage(ProviderName.Qwen, 'qwen3-coder-plus', true)).toBe(false);
+    expect(ProviderRegistry.resolveModelSupportsImage(ProviderName.Zhipu, 'glm-5.1', true)).toBe(false);
   });
 
   test('resolveModelSupportsImage includes coding plan model metadata', () => {

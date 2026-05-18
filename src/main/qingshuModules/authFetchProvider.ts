@@ -7,6 +7,13 @@ type CreateQingShuAuthFetchProviderDeps = {
   resolveApiBaseUrl: () => string | null;
 };
 
+type QingShuResultBody = {
+  code?: number;
+  msg?: string;
+};
+
+const QINGSHU_AUTH_FAILURE_PATTERN = /authentication failed|please login|未登录|登录失效|登录已失效|认证失败|token.*(expired|invalid)|invalid.*token/i;
+
 const buildUrl = (
   baseUrl: string,
   path: string,
@@ -44,6 +51,20 @@ export const createQingShuAuthFetchProvider = (
     return result;
   };
 
+  const isQingShuAuthFailure = (
+    response: Response,
+    body?: QingShuResultBody | null,
+  ): boolean => {
+    if (response.status === 401) {
+      return true;
+    }
+    if (!body) {
+      return false;
+    }
+    return body.code === 401
+      || (body.code === 403 && QINGSHU_AUTH_FAILURE_PATTERN.test(body.msg || ''));
+  };
+
   const fetchWithAuth = async (path: string, options?: QingShuFetchJsonOptions): Promise<Response> => {
     const adapter = deps.getAuthAdapter();
     const accessToken = await adapter.getAccessToken();
@@ -58,8 +79,14 @@ export const createQingShuAuthFetchProvider = (
         headers: buildHeaders(token, options?.headers),
       });
 
+    const parseResponseBody = async (response: Response): Promise<QingShuResultBody | null> => {
+      const cloned = response.clone();
+      return await cloned.json().catch((): null => null) as QingShuResultBody | null;
+    };
+
     let response = await doFetch(accessToken);
-    if (response.status !== 401) {
+    const responseBody = await parseResponseBody(response);
+    if (!isQingShuAuthFailure(response, responseBody)) {
       return response;
     }
 

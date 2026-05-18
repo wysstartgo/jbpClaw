@@ -61,7 +61,9 @@ vi.mock('./openclawLocalExtensions', () => ({
   resolveOpenClawExtensionConfigId: (id: string) => ({
     'openclaw-nim-channel': 'nimsuite-openclaw-nim-channel',
   }[id] ?? id),
-  resolveOpenClawExtensionLoadPath: () => null,
+  resolveOpenClawExtensionLoadPath: (id: string) => (
+    id === 'custom-plugin' ? '/tmp/custom-plugin' : null
+  ),
 }));
 
 vi.mock('./openclawTokenProxy', () => ({
@@ -173,6 +175,12 @@ describe('OpenClawConfigSync runtime config output', () => {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     expect(config.agents.defaults.workspace).toBe(path.join(stateDir, 'workspace-main'));
     expect(config.agents.defaults).not.toHaveProperty('cwd');
+    expect(config.agents.defaults.heartbeat).toEqual({
+      every: '1h',
+      target: 'none',
+      lightContext: true,
+      isolatedSession: true,
+    });
   });
 
   test('does not write memory search config while embedding is disabled', async () => {
@@ -372,35 +380,124 @@ describe('OpenClawConfigSync runtime config output', () => {
     });
   });
 
-  test('adds missing array items in MCP bridge tool schemas for OpenAI compatibility', async () => {
-    const sync = await createSync({
-      getMcpBridgeConfig: () => ({
-        callbackUrl: 'http://127.0.0.1:12345/mcp',
-        askUserCallbackUrl: 'http://127.0.0.1:12345/ask',
-        secret: 'test-secret',
-        tools: [{
-          server: 'github',
-          name: 'create_issue',
-          description: 'Create an issue',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              attachments: {
-                type: 'array',
-                description: 'Optional issue attachments',
-              },
-            },
-          },
-        }],
-      }),
-    });
+  test('does not write native MCP servers before resolver hook is enabled', async () => {
+    const sync = await createSync();
 
-    const result = sync.sync('mcp-array-items');
+    const result = sync.sync('native-mcp-disabled');
     expect(result.ok).toBe(true);
 
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    const [tool] = config.plugins.entries['mcp-bridge'].config.tools;
-    expect(tool.inputSchema.properties.attachments.items).toEqual({});
+    expect(config).not.toHaveProperty('mcp');
+  });
+
+  test('writes native MCP servers when resolver hook is provided', async () => {
+    const sync = await createSync({
+      getResolvedMcpServers: () => [
+        {
+          name: 'local-memory',
+          transportType: 'stdio',
+          command: '/usr/local/bin/node',
+          args: ['server.js'],
+          env: { MEMORY_PATH: '/tmp/memory' },
+        },
+        {
+          name: 'remote-docs',
+          transportType: 'sse',
+          url: 'https://mcp.example.com/sse',
+          headers: { Authorization: 'Bearer token' },
+        },
+        {
+          name: 'stream-api',
+          transportType: 'http',
+          url: 'https://mcp.example.com/mcp',
+          headers: { 'X-Api-Key': 'secret' },
+        },
+      ],
+    });
+
+    const result = sync.sync('native-mcp-enabled');
+    expect(result.ok).toBe(true);
+
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    expect(config.mcp.servers).toEqual({
+      'local-memory': {
+        command: '/usr/local/bin/node',
+        args: ['server.js'],
+        env: { MEMORY_PATH: '/tmp/memory' },
+      },
+      'remote-docs': {
+        url: 'https://mcp.example.com/sse',
+        headers: { authorization: 'Bearer token' },
+      },
+      'stream-api': {
+        url: 'https://mcp.example.com/mcp',
+        headers: { 'x-api-key': 'secret' },
+        transport: 'streamable-http',
+      },
+    });
+  });
+
+  test('writes QingShu managed native MCP server config', async () => {
+    const sync = await createSync({
+      getResolvedMcpServers: () => [
+        {
+          name: 'qingshu-managed',
+          transportType: 'http',
+          url: 'http://127.0.0.1:54321/mcp',
+          headers: { 'X-QingShu-Managed-Mcp-Secret': 'managed-secret' },
+        },
+      ],
+    });
+
+    const result = sync.sync('qingshu-managed-native-mcp');
+    expect(result.ok).toBe(true);
+
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    expect(config.mcp.servers['qingshu-managed']).toEqual({
+      url: 'http://127.0.0.1:54321/mcp',
+      headers: { 'x-qingshu-managed-mcp-secret': 'managed-secret' },
+      transport: 'streamable-http',
+    });
+  });
+
+  test('writes enabled user plugins into OpenClaw plugin entries', async () => {
+    const sync = await createSync({
+      getUserPlugins: () => [
+        {
+          pluginId: 'custom-plugin',
+          source: 'local',
+          spec: '/tmp/custom-plugin',
+          enabled: true,
+          installedAt: 1,
+          config: {
+            apiKey: '${CUSTOM_PLUGIN_API_KEY}',
+            mode: 'safe',
+          },
+        },
+        {
+          pluginId: 'disabled-plugin',
+          source: 'local',
+          spec: '/tmp/disabled-plugin',
+          enabled: false,
+          installedAt: 2,
+        },
+      ],
+    });
+
+    const result = sync.sync('user-plugin-entries');
+    expect(result.ok).toBe(true);
+
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    expect(config.plugins.entries['custom-plugin']).toEqual({
+      enabled: true,
+      config: {
+        apiKey: '${CUSTOM_PLUGIN_API_KEY}',
+        mode: 'safe',
+      },
+    });
+    expect(config.plugins.entries).not.toHaveProperty('disabled-plugin');
+    expect(config.plugins.allow).toContain('custom-plugin');
+    expect(config.plugins.allow).not.toContain('disabled-plugin');
   });
 
   test('writes only supported Weixin channel schema fields', async () => {
@@ -912,5 +1009,58 @@ describe('OpenClawConfigSync runtime config output', () => {
         model: 'gpt-test',
       },
     });
+  });
+
+  test('writes QingShu managed agents into OpenClaw agent list and workspaces', async () => {
+    const agentId = 'qingshu-managed:qingshu-presales-analysis';
+    const sync = await createSync({
+      getAgents: () => [{
+        id: agentId,
+        name: '售前分析',
+        description: '售前供需分析',
+        systemPrompt: 'managed prompt',
+        identity: 'managed identity',
+        model: '',
+        workingDirectory: '',
+        icon: '',
+        skillIds: ['qingshu-presales-analysis'],
+        toolBundleIds: [],
+        enabled: true,
+        isDefault: false,
+        source: 'managed',
+        sourceType: 'qingshu-managed',
+        readOnly: true,
+        allowed: true,
+        backendAgentId: 'qingshu-presales-analysis',
+        managedToolNames: [
+          'claw.dictionary.search',
+          'lbs.presales.store.supply-demand-balance',
+        ],
+        managedBaseSkillIds: ['qingshu-presales-analysis'],
+        managedExtraSkillIds: [],
+        presetId: '',
+        createdAt: 0,
+        updatedAt: 0,
+      }],
+    });
+
+    const result = sync.sync('qingshu-managed-agent-workspace');
+    expect(result.ok).toBe(true);
+
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    expect(config.agents.list).toContainEqual(expect.objectContaining({
+      id: agentId,
+      identity: { name: '售前分析' },
+      skills: ['qingshu-presales-analysis'],
+      workspace: path.join(stateDir, `workspace-${agentId}`),
+      model: { primary: 'openai/gpt-test' },
+    }));
+
+    const workspaceDir = path.join(stateDir, `workspace-${agentId}`);
+    expect(fs.readFileSync(path.join(workspaceDir, 'SOUL.md'), 'utf8')).toBe('managed prompt\n');
+    expect(fs.readFileSync(path.join(workspaceDir, 'IDENTITY.md'), 'utf8')).toBe('managed identity\n');
+    expect(fs.readFileSync(path.join(workspaceDir, 'AGENTS.md'), 'utf8')).toContain('managed prompt');
+    expect(fs.existsSync(path.join(workspaceDir, 'memory'))).toBe(true);
+    expect(fs.existsSync(path.join(workspaceDir, 'MEMORY.md'))).toBe(true);
   });
 });

@@ -6,7 +6,7 @@
  */
 
 import { PlatformRegistry } from '../../shared/platform';
-import type { CoworkStore } from '../coworkStore';
+import type { CoworkSession, CoworkStore } from '../coworkStore';
 import { t } from '../i18n';
 import type { IMStore } from '../im/imStore';
 import type { Platform } from '../im/types';
@@ -258,6 +258,28 @@ function getChannelTitlePrefix(platform: string): string {
   return `[${label}]`;
 }
 
+const PEER_KIND_LABELS: Record<string, string> = {
+  direct: '',
+  group: 'group:',
+  channel: 'ch:',
+};
+
+export function buildChannelDisplayName(conversationId: string): string {
+  const stripped = conversationId.replace(/@[^:]+/g, '');
+  const segments = stripped.split(':');
+
+  for (let i = 0; i < segments.length; i += 1) {
+    const kind = segments[i];
+    if (kind in PEER_KIND_LABELS) {
+      const peerId = segments.slice(i + 1).join(':') || stripped;
+      const display = `${PEER_KIND_LABELS[kind]}${peerId}`;
+      return display.length > 20 ? display.slice(0, 20) : display;
+    }
+  }
+
+  return stripped.length > 20 ? stripped.slice(-20) : stripped;
+}
+
 export interface ChannelSessionSyncDeps {
   coworkStore: CoworkStore;
   imStore: IMStore;
@@ -290,6 +312,23 @@ export class OpenClawChannelSessionSync {
     this.imStore = deps.imStore;
     this.getDefaultCwd = deps.getDefaultCwd;
     this.resolveJobName = deps.resolveJobName ?? null;
+  }
+
+  private updateLocalSessionCwdIfNeeded(session: CoworkSession, agentId: string): void {
+    const resolvedCwd = this.getDefaultCwd(agentId).trim();
+    if (!resolvedCwd || session.cwd === resolvedCwd) {
+      return;
+    }
+
+    const updateSession = (this.coworkStore as { updateSession?: CoworkStore['updateSession'] }).updateSession;
+    if (!updateSession) {
+      return;
+    }
+
+    updateSession.call(this.coworkStore, session.id, { cwd: resolvedCwd }, { touchUpdatedAt: false });
+    console.debug(
+      `[ChannelSessionSync] corrected local session ${session.id} cwd for agent ${agentId} to ${resolvedCwd}`,
+    );
   }
 
   /**
@@ -363,11 +402,7 @@ export class OpenClawChannelSessionSync {
         if (existingMapping.agentId !== currentAgentId) {
           console.log('[ChannelSessionSync] agent binding changed:', existingMapping.agentId, '→', currentAgentId, '— creating new session');
           const titlePrefix = getChannelTitlePrefix(parsed.platform);
-          const displayId = parsed.conversationId.includes('@')
-            ? parsed.conversationId.split('@')[0]
-            : parsed.conversationId;
-          const shortId = displayId.length > 12 ? displayId.slice(-12) : displayId;
-          const title = `${titlePrefix} ${shortId}`;
+          const title = `${titlePrefix} ${buildChannelDisplayName(parsed.conversationId)}`;
           const cwd = this.getDefaultCwd(currentAgentId);
           const newSession = this.coworkStore.createSession(title, cwd, '', 'local', [], currentAgentId);
           console.log('[ChannelSessionSync] created new session for agent change:', newSession.id);
@@ -378,6 +413,7 @@ export class OpenClawChannelSessionSync {
           this.agentChangedSessionIds.add(newSession.id);
           return newSession.id;
         }
+        this.updateLocalSessionCwdIfNeeded(session, currentAgentId);
         console.log('[ChannelSessionSync] existing cowork session found, reusing:', existingMapping.coworkSessionId);
         this.syncedSessionKeys.set(sessionKey, existingMapping.coworkSessionId);
         if (existingMapping.openClawSessionKey !== sessionKey) {
@@ -393,15 +429,7 @@ export class OpenClawChannelSessionSync {
 
     // 5. Create new Cowork session
     const titlePrefix = getChannelTitlePrefix(parsed.platform);
-    // For conversationIds that look like email addresses (e.g. POPO),
-    // use the local part before '@' as the display name.
-    const displayId = parsed.conversationId.includes('@')
-      ? parsed.conversationId.split('@')[0]
-      : parsed.conversationId;
-    const shortId = displayId.length > 12
-      ? displayId.slice(-12)
-      : displayId;
-    const title = `${titlePrefix} ${shortId}`;
+    const title = `${titlePrefix} ${buildChannelDisplayName(parsed.conversationId)}`;
     // Look up the per-platform agent binding so the session is filed under the correct agent.
     const imSettings = this.imStore.getIMSettings();
     const accountId = extractAccountIdFromKey(sessionKey);
@@ -450,6 +478,7 @@ export class OpenClawChannelSessionSync {
     if (existingMapping) {
       const session = this.coworkStore.getSession(existingMapping.coworkSessionId);
       if (session) {
+        this.updateLocalSessionCwdIfNeeded(session, existingMapping.agentId);
         this.syncedSessionKeys.set(sessionKey, existingMapping.coworkSessionId);
         if (existingMapping.openClawSessionKey !== sessionKey) {
           this.imStore.updateSessionOpenClawSessionKey(parsed.conversationId, parsed.platform, sessionKey);

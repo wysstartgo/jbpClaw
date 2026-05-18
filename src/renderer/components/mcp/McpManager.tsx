@@ -83,8 +83,6 @@ const McpManager: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState('all');
   const [dynamicRegistry, setDynamicRegistry] = useState<McpRegistryEntry[]>(mcpRegistry);
   const [dynamicCategories, setDynamicCategories] = useState<ReadonlyArray<{ id: string; key: string; name_zh?: string; name_en?: string }>>(mcpCategories);
-  const [bridgeSyncing, setBridgeSyncing] = useState(false);
-  const [bridgeSyncResult, setBridgeSyncResult] = useState<{ tools: number; error?: string } | null>(null);
   const currentLanguage = i18nService.getLanguage();
 
   useEffect(() => {
@@ -300,43 +298,6 @@ const McpManager: React.FC = () => {
 
   const existingNames = useMemo(() => servers.map(s => s.name), [servers]);
 
-  /**
-   * Main process refreshes MCP bridge after config changes and broadcasts
-   * syncStart/syncDone. The renderer only reflects that state to avoid
-   * duplicate refresh calls and stacked IPC work.
-   */
-  useEffect(() => {
-    let syncTimeout: ReturnType<typeof setTimeout> | null = null;
-
-    const cleanupStart = mcpService.onBridgeSyncStart(() => {
-      setBridgeSyncing(true);
-      setBridgeSyncResult(null);
-      if (syncTimeout) clearTimeout(syncTimeout);
-      syncTimeout = setTimeout(() => {
-        setBridgeSyncing(false);
-        setBridgeSyncResult({ tools: 0, error: i18nService.t('mcpBridgeSyncError') || 'Sync timed out' });
-      }, 40_000);
-    });
-
-    const cleanupDone = mcpService.onBridgeSyncDone((data) => {
-      if (syncTimeout) {
-        clearTimeout(syncTimeout);
-        syncTimeout = null;
-      }
-      setBridgeSyncing(false);
-      setBridgeSyncResult({ tools: data.tools, error: data.error });
-      if (!data.error) {
-        setTimeout(() => setBridgeSyncResult(null), 5000);
-      }
-    });
-
-    return () => {
-      cleanupStart();
-      cleanupDone();
-      if (syncTimeout) clearTimeout(syncTimeout);
-    };
-  }, []);
-
   const marketplaceCount = useMemo(
     () => dynamicRegistry.length,
     [dynamicRegistry]
@@ -361,19 +322,6 @@ const McpManager: React.FC = () => {
 
   return (
     <div className="relative space-y-4">
-      {bridgeSyncing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
-          <div className="flex flex-col items-center gap-4 px-10 py-8 rounded-2xl bg-surface border border-border shadow-card">
-            <svg className="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <span className="text-sm text-foreground font-medium">
-              {i18nService.t('mcpBridgeSyncing') || 'Syncing MCP tools...'}
-            </span>
-          </div>
-        </div>
-      )}
       {/* Description */}
       <p className="text-sm text-secondary">
         {i18nService.t('mcpDescription')}
@@ -384,29 +332,6 @@ const McpManager: React.FC = () => {
           message={actionError}
           onClose={() => setActionError('')}
         />
-      )}
-
-      {/* MCP Bridge sync result */}
-      {!bridgeSyncing && bridgeSyncResult && (
-        <div className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs border ${
-          bridgeSyncResult.error
-            ? 'dark:bg-red-500/10 bg-red-50 dark:text-red-400 text-red-600 dark:border-red-500/20 border-red-200'
-            : 'dark:bg-green-500/10 bg-green-50 dark:text-green-400 text-green-600 dark:border-green-500/20 border-green-200'
-        }`}>
-          <span>
-            {bridgeSyncResult.error
-              ? `${i18nService.t('mcpBridgeSyncError') || 'Sync failed'}: ${bridgeSyncResult.error}`
-              : `${i18nService.t('mcpBridgeSyncDone') || 'MCP tools synced'}: ${bridgeSyncResult.tools} ${bridgeSyncResult.tools === 1 ? 'tool' : 'tools'}`
-            }
-          </span>
-          <button
-            type="button"
-            onClick={() => setBridgeSyncResult(null)}
-            className="ml-2 opacity-60 hover:opacity-100"
-          >
-            &times;
-          </button>
-        </div>
       )}
 
       {/* Search */}

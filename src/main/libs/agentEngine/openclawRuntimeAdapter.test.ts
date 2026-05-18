@@ -772,6 +772,125 @@ test('chat.final persists usage and model metadata from final payload', async ()
     },
   }]);
   expect(session.status).toBe('completed');
+  expect(adapter.activeTurns.has(session.id)).toBe(true);
+
+  adapter.handleGatewayEvent({
+    event: 'agent',
+    payload: {
+      runId: turn.runId,
+      sessionKey,
+      stream: 'lifecycle',
+      data: { phase: 'end' },
+    },
+  });
+
+  expect(adapter.activeTurns.has(session.id)).toBe(false);
+});
+
+test('chat.final waits for lifecycle end before emitting complete', async () => {
+  const { session, store } = createReconcileStore([
+    { id: 'msg-1', type: 'user', content: 'run a tool', timestamp: 1, metadata: {} },
+    {
+      id: 'msg-2',
+      type: 'assistant',
+      content: 'tool result summary',
+      timestamp: 2,
+      metadata: { isStreaming: true, isFinal: false },
+    },
+  ]);
+  session.status = 'running';
+  const adapter = new OpenClawRuntimeAdapter(store, {});
+  const sessionKey = `agent:main:lobsterai:${session.id}`;
+  const completeEvents: Array<{ sessionId: string; runId: string | null }> = [];
+  const turn = {
+    sessionId: session.id,
+    sessionKey,
+    runId: 'run-chat-final-waits',
+    turnToken: 1,
+    startedAtMs: 1,
+    knownRunIds: new Set(['run-chat-final-waits']),
+    assistantMessageId: 'msg-2',
+    committedAssistantText: '',
+    currentAssistantSegmentText: 'tool result summary',
+    currentText: 'tool result summary',
+    agentAssistantTextLength: 'tool result summary'.length,
+    hasSeenAgentAssistantStream: true,
+    currentContentText: 'tool result summary',
+    currentContentBlocks: ['tool result summary'],
+    sawNonTextContentBlocks: false,
+    textStreamMode: 'snapshot',
+    toolUseMessageIdByToolCallId: new Map(),
+    toolResultMessageIdByToolCallId: new Map([['tool-1', 'tool-result-1']]),
+    toolResultTextByToolCallId: new Map([['tool-1', 'ok']]),
+    stopRequested: false,
+    pendingUserSync: false,
+    bufferedChatPayloads: [],
+    bufferedAgentPayloads: [],
+  };
+
+  adapter.gatewayClient = {
+    start: () => {},
+    stop: () => {},
+    request: async () => ({ messages: [] }),
+  };
+  adapter.rememberSessionKey(session.id, sessionKey);
+  adapter.activeTurns.set(session.id, turn);
+  adapter.sessionIdByRunId.set(turn.runId, session.id);
+  adapter.latestTurnTokenBySession.set(session.id, turn.turnToken);
+  adapter.on('complete', (completedSessionId, runId) => {
+    completeEvents.push({ sessionId: completedSessionId, runId });
+  });
+
+  adapter.handleGatewayEvent({
+    event: 'chat',
+    payload: {
+      runId: turn.runId,
+      sessionKey,
+      state: 'final',
+      message: {
+        role: 'assistant',
+        content: 'tool result summary',
+      },
+    },
+  });
+  await Promise.resolve();
+
+  expect(session.status).toBe('running');
+  expect(adapter.activeTurns.has(session.id)).toBe(true);
+  expect(completeEvents).toEqual([]);
+
+  adapter.handleGatewayEvent({
+    event: 'agent',
+    payload: {
+      runId: turn.runId,
+      sessionKey,
+      stream: 'tool',
+      data: {
+        phase: 'result',
+        toolCallId: 'tool-2',
+        name: 'bash',
+        result: 'late tool result',
+      },
+    },
+  });
+  expect(adapter.activeTurns.has(session.id)).toBe(true);
+  expect(completeEvents).toEqual([]);
+
+  adapter.handleGatewayEvent({
+    event: 'agent',
+    payload: {
+      runId: turn.runId,
+      sessionKey,
+      stream: 'lifecycle',
+      data: { phase: 'end' },
+    },
+  });
+
+  expect(completeEvents).toEqual([{
+    sessionId: session.id,
+    runId: turn.runId,
+  }]);
+  expect(session.status).toBe('completed');
   expect(adapter.activeTurns.has(session.id)).toBe(false);
 });
 
@@ -1864,6 +1983,13 @@ function createHistoryStore(messages: Array<Record<string, unknown>>) {
         session.messages.push(created);
         return created;
       },
+      updateMessage: (sessionId: string, messageId: string, patch: Record<string, unknown>) => {
+        expect(sessionId).toBe(session.id);
+        const message = session.messages.find((item) => item.id === messageId);
+        if (!message) return false;
+        Object.assign(message, patch);
+        return true;
+      },
       replaceConversationMessages: (sessionId: string, authoritative: Array<{ role: string; text: string; timestamp?: number }>) => {
         expect(sessionId).toBe(session.id);
         session.messages = session.messages.filter(
@@ -1879,7 +2005,10 @@ function createHistoryStore(messages: Array<Record<string, unknown>>) {
           });
         }
       },
-      updateSession: () => {},
+      updateSession: (sessionId: string, patch: Record<string, unknown>) => {
+        expect(sessionId).toBe(session.id);
+        Object.assign(session, patch);
+      },
     },
   };
 }

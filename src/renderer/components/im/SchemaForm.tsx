@@ -1,25 +1,28 @@
 /**
  * Schema-driven form component
- * Renders form fields dynamically from JSON Schema + uiHints
+ * Renders form fields dynamically from JSON Schema properties, using uiHints for labels/metadata.
+ * Fields are discovered from the schema — hints are optional supplementary info.
  */
 
-import React from 'react';
+import { ChevronRightIcon, XCircleIcon as XCircleIconSolid } from '@heroicons/react/20/solid';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
-import { XCircleIcon as XCircleIconSolid, ChevronRightIcon } from '@heroicons/react/20/solid';
+import React from 'react';
 
 /** A single uiHint entry from the gateway */
 export interface UiHint {
-  order: number;
+  order?: number;
   label: string;
+  help?: string;
   sensitive?: boolean;
   advanced?: boolean;
+  placeholder?: string;
 }
 
 /** Props for SchemaForm */
 export interface SchemaFormProps {
-  /** JSON Schema for this channel (the `properties` object from `schema.properties.channels.properties.<channel>`) */
+  /** JSON Schema (must have `properties` or be the properties object directly) */
   schema: Record<string, unknown>;
-  /** uiHints entries, already stripped of the `channels.<id>.` prefix. Keys are relative dot paths like 'appKey', 'p2p.policy', etc. */
+  /** uiHints entries. Keys are relative dot paths like 'appKey', 'p2p.policy', etc. */
   hints: Record<string, UiHint>;
   /** Current config value (nested object matching the schema) */
   value: Record<string, unknown>;
@@ -31,6 +34,8 @@ export interface SchemaFormProps {
   showSecrets?: Record<string, boolean>;
   /** Toggle secret field visibility */
   onToggleSecret?: (path: string) => void;
+  /** Optional field filter by relative dot-path */
+  includePath?: (path: string, hint: UiHint) => boolean;
 }
 
 /** Deep-get a value from nested object by dot path */
@@ -53,6 +58,84 @@ function getSchemaProperty(schema: Record<string, unknown>, path: string): Recor
   return current;
 }
 
+/** Humanize a camelCase/snake_case key into a label */
+function humanizeKey(key: string): string {
+  return key
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+const SENSITIVE_KEY_RE = /key|secret|token|password/i;
+
+/** Get or auto-generate a hint for a given path */
+function getHint(hints: Record<string, UiHint>, path: string): UiHint {
+  if (hints[path]) return hints[path];
+  const key = path.split('.').pop() || path;
+  return {
+    label: humanizeKey(key),
+    ...(SENSITIVE_KEY_RE.test(key) ? { sensitive: true } : {}),
+  };
+}
+
+/**
+ * Collect all renderable field paths from schema properties (recursive).
+ * Returns { topLevelFields, groups } where groups have children.
+ */
+function collectFieldPaths(
+  schema: Record<string, unknown>,
+  hints: Record<string, UiHint>,
+  includePath?: (path: string, hint: UiHint) => boolean,
+  prefix = '',
+): { topLevelFields: string[]; groups: { key: string; children: string[] }[] } {
+  const properties = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const topLevelFields: string[] = [];
+  const groups: { key: string; children: string[] }[] = [];
+
+  const sortedKeys = Object.keys(properties).sort((a, b) => {
+    const pa = prefix ? `${prefix}.${a}` : a;
+    const pb = prefix ? `${prefix}.${b}` : b;
+    const orderA = hints[pa]?.order ?? Number.MAX_SAFE_INTEGER;
+    const orderB = hints[pb]?.order ?? Number.MAX_SAFE_INTEGER;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.localeCompare(b);
+  });
+
+  for (const key of sortedKeys) {
+    if (key === 'enabled') continue;
+
+    const dotPath = prefix ? `${prefix}.${key}` : key;
+    const prop = properties[key];
+    if (!prop || typeof prop !== 'object') continue;
+
+    const hint = getHint(hints, dotPath);
+    if (includePath && !includePath(dotPath, hint)) continue;
+
+    if (prop.type === 'object' && prop.properties) {
+      const childProps = prop.properties as Record<string, Record<string, unknown>>;
+      const childKeys = Object.keys(childProps)
+        .map(ck => `${dotPath}.${ck}`)
+        .filter(cp => {
+          const ch = getHint(hints, cp);
+          return !includePath || includePath(cp, ch);
+        })
+        .sort((a, b) => {
+          const oa = hints[a]?.order ?? Number.MAX_SAFE_INTEGER;
+          const ob = hints[b]?.order ?? Number.MAX_SAFE_INTEGER;
+          return oa - ob;
+        });
+
+      if (childKeys.length > 0) {
+        groups.push({ key: dotPath, children: childKeys });
+      }
+    } else {
+      topLevelFields.push(dotPath);
+    }
+  }
+
+  return { topLevelFields, groups };
+}
+
 export const SchemaForm: React.FC<SchemaFormProps> = ({
   schema,
   hints,
@@ -61,34 +144,16 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
   onBlur,
   showSecrets = {},
   onToggleSecret,
+  includePath,
 }) => {
-  // Identify groups and fields
-  const groups: string[] = [];
-  const topLevelFields: string[] = [];
-
-  // Sort all hint keys by order
-  const sortedKeys = Object.keys(hints).sort((a, b) => hints[a].order - hints[b].order);
-
-  for (const key of sortedKeys) {
-    // Skip 'enabled' field
-    if (key === 'enabled') continue;
-
-    // Check if it's a group (no dot + type: "object")
-    if (!key.includes('.')) {
-      const schemaProp = getSchemaProperty(schema, key);
-      if (schemaProp && schemaProp.type === 'object') {
-        groups.push(key);
-      } else {
-        topLevelFields.push(key);
-      }
-    }
-  }
+  const { topLevelFields, groups } = collectFieldPaths(schema, hints, includePath);
 
   // Render a single field
-  const renderField = (path: string, hint: UiHint): React.ReactNode => {
+  const renderField = (path: string): React.ReactNode => {
     const schemaProp = getSchemaProperty(schema, path);
     if (!schemaProp) return null;
 
+    const hint = getHint(hints, path);
     const fieldValue = deepGet(value, path);
     const handleChange = (newValue: unknown) => {
       onChange(path, newValue);
@@ -96,7 +161,9 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
 
     const type = schemaProp.type as string;
     const enumValues = schemaProp.enum as string[] | undefined;
-    const isBoolean = type === 'boolean';
+    const placeholder = hint.placeholder
+      ?? (schemaProp.default !== undefined ? String(schemaProp.default) : undefined);
+    const description = hint.help ?? (schemaProp.description as string | undefined);
 
     // Conditional visibility for allowFrom fields
     if (path.endsWith('.allowFrom')) {
@@ -106,13 +173,18 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
     }
 
     // Boolean toggle
-    if (isBoolean) {
+    if (type === 'boolean') {
       const boolValue = Boolean(fieldValue);
       return (
         <div key={path} className="flex items-center justify-between py-1">
-          <label className="text-xs font-medium text-secondary">
-            {hint.label}
-          </label>
+          <div>
+            <label className="text-xs font-medium text-secondary">
+              {hint.label}
+            </label>
+            {description && (
+              <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>
+            )}
+          </div>
           <div
             className={`w-10 h-5 rounded-full flex items-center transition-colors cursor-pointer ${
               boolValue ? 'bg-green-500' : 'bg-border'
@@ -136,6 +208,9 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
           <label className="block text-xs font-medium text-secondary">
             {hint.label}
           </label>
+          {description && (
+            <p className="text-[11px] text-muted-foreground">{description}</p>
+          )}
           <select
             value={String(fieldValue || '')}
             onChange={(e) => handleChange(e.target.value)}
@@ -161,6 +236,9 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
           <label className="block text-xs font-medium text-secondary">
             {hint.label}
           </label>
+          {description && (
+            <p className="text-[11px] text-muted-foreground">{description}</p>
+          )}
           <div className="relative">
             <input
               type={shown ? 'text' : 'password'}
@@ -168,7 +246,7 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
               onChange={(e) => handleChange(e.target.value)}
               onBlur={onBlur}
               className="block w-full rounded-lg/80 bg-surface/80/60 border-border/60 border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-3 py-2 pr-16 text-sm transition-colors"
-              placeholder="••••••••••••"
+              placeholder={placeholder ?? '••••••••••••'}
             />
             <div className="absolute right-2 inset-y-0 flex items-center gap-1">
               {strValue && (
@@ -202,6 +280,9 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
           <label className="block text-xs font-medium text-secondary">
             {hint.label}
           </label>
+          {description && (
+            <p className="text-[11px] text-muted-foreground">{description}</p>
+          )}
           <div className="relative">
             <input
               type="text"
@@ -209,6 +290,7 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
               onChange={(e) => handleChange(e.target.value)}
               onBlur={onBlur}
               className="block w-full rounded-lg/80 bg-surface/80/60 border-border/60 border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-3 py-2 pr-8 text-sm transition-colors"
+              placeholder={placeholder}
             />
             {strValue && (
               <div className="absolute right-2 inset-y-0 flex items-center">
@@ -235,6 +317,9 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
           <label className="block text-xs font-medium text-secondary">
             {hint.label}
           </label>
+          {description && (
+            <p className="text-[11px] text-muted-foreground">{description}</p>
+          )}
           <textarea
             value={arrValue}
             onChange={(e) => {
@@ -243,6 +328,7 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
             }}
             onBlur={onBlur}
             className="block w-full rounded-lg/80 bg-surface/80/60 border-border/60 border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-3 py-2 text-sm transition-colors min-h-[60px] resize-y"
+            placeholder={placeholder}
           />
         </div>
       );
@@ -256,12 +342,16 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
           <label className="block text-xs font-medium text-secondary">
             {hint.label}
           </label>
+          {description && (
+            <p className="text-[11px] text-muted-foreground">{description}</p>
+          )}
           <input
             type="number"
             value={numValue}
             onChange={(e) => handleChange(e.target.value ? Number(e.target.value) : undefined)}
             onBlur={onBlur}
             className="block w-full rounded-lg/80 bg-surface/80/60 border-border/60 border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-3 py-2 text-sm transition-colors"
+            placeholder={placeholder}
           />
         </div>
       );
@@ -271,21 +361,17 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
   };
 
   // Render a group (collapsible section)
-  const renderGroup = (groupKey: string): React.ReactNode => {
-    const groupHint = hints[groupKey];
-    if (!groupHint) return null;
-
-    // Find all child fields
-    const childFields = sortedKeys.filter((key) => key.startsWith(`${groupKey}.`) && key.split('.').length === 2);
+  const renderGroup = (group: { key: string; children: string[] }): React.ReactNode => {
+    const groupHint = getHint(hints, group.key);
 
     return (
-      <details key={groupKey} className="group">
+      <details key={group.key} className="group">
         <summary className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-secondary select-none py-1">
           <ChevronRightIcon className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
           {groupHint.label}
         </summary>
         <div className="space-y-3 mt-2 ml-1 pl-3 border-l-2 border-border/30/30">
-          {childFields.map((field) => renderField(field, hints[field]))}
+          {group.children.map((field) => renderField(field))}
         </div>
       </details>
     );
@@ -294,7 +380,7 @@ export const SchemaForm: React.FC<SchemaFormProps> = ({
   return (
     <div className="space-y-3">
       {/* Top-level fields */}
-      {topLevelFields.map((field) => renderField(field, hints[field]))}
+      {topLevelFields.map((field) => renderField(field))}
 
       {/* Groups */}
       {groups.map((group) => renderGroup(group))}

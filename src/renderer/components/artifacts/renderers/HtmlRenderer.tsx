@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import type { Artifact } from '@/types/artifact';
 
@@ -6,71 +6,89 @@ interface HtmlRendererProps {
   artifact: Artifact;
 }
 
-function hasRelativeResources(html: string): boolean {
-  const srcRe = /(?:src|href)=["'](?!https?:|data:|blob:|#|javascript:)([^"']+)["']/gi;
-  let match: RegExpExecArray | null;
-  while ((match = srcRe.exec(html)) !== null) {
-    const value = match[1];
-    // Relative paths: ./file, ../file, file (no protocol)
-    if (value.startsWith('./') || value.startsWith('../') || (!value.startsWith('/') && !value.includes(':'))) {
-      return true;
-    }
-    // Absolute paths to local source files (e.g., /src/main.jsx)
-    if (value.startsWith('/') && !value.startsWith('//')) {
-      return true;
-    }
+const HASH_NAV_INTERCEPTOR = `<script>document.addEventListener('click',function(e){var a=e.target&&(e.target.closest?e.target.closest('a'):e.target);if(!a||a.tagName!=='A')return;var h=a.getAttribute('href');if(!h||h.charAt(0)!=='#')return;e.preventDefault();var id=h.slice(1);if(!id){window.scrollTo({top:0,behavior:'smooth'});return;}var el=document.getElementById(id)||document.querySelector('[name="'+id+'"]');if(el)el.scrollIntoView({behavior:'smooth'});});</script>`;
+
+function injectHashNavInterceptor(html: string): string {
+  if (html.includes('</body>')) {
+    return html.replace('</body>', HASH_NAV_INTERCEPTOR + '</body>');
   }
-  return false;
+  if (html.includes('</html>')) {
+    return html.replace('</html>', HASH_NAV_INTERCEPTOR + '</html>');
+  }
+  return html + HASH_NAV_INTERCEPTOR;
 }
 
-const HtmlRenderer: React.FC<HtmlRendererProps> = ({ artifact }) => {
-  const [processedHtml, setProcessedHtml] = useState<string | null>(null);
+/**
+ * File-based HTML: served via local HTTP server for full Chrome-like fidelity.
+ */
+const FileBasedHtmlRenderer: React.FC<{ artifact: Artifact }> = ({ artifact }) => {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
-    if (!artifact.content && !artifact.filePath) {
-      setProcessedHtml(null);
-      return;
-    }
+    if (!artifact.filePath) return;
 
     let cancelled = false;
 
-    const process = async () => {
+    const setupSession = async () => {
       try {
-        let html = artifact.content;
-
-        // If content is empty but filePath exists, read file directly
-        if (!html && artifact.filePath) {
-          const result = await readLocalFileAsDataUrl(artifact.filePath);
-          if (!result || cancelled) return;
-          try {
-            const base64 = result.split(',')[1] || '';
-            const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-            html = new TextDecoder('utf-8').decode(bytes);
-          } catch {
-            if (!cancelled) setProcessedHtml(null);
-            return;
-          }
+        const result = await window.electron.artifact.createPreviewSession(artifact.filePath!);
+        if (cancelled) return;
+        if (result.success && result.url && result.sessionId) {
+          sessionIdRef.current = result.sessionId;
+          setPreviewUrl(result.url);
+          setError(null);
+        } else {
+          setError(result.error || 'Failed to create preview session');
         }
-
-        if (!html) {
-          if (!cancelled) setProcessedHtml(null);
-          return;
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Failed to create preview session');
         }
-
-        if (artifact.filePath && !hasRelativeResources(html)) {
-          html = await inlineLocalResources(html, artifact.filePath);
-        }
-        if (!cancelled) setProcessedHtml(html);
-      } catch {
-        if (!cancelled) setProcessedHtml(artifact.content || null);
       }
     };
 
-    process();
-    return () => { cancelled = true; };
-  }, [artifact.content, artifact.filePath]);
+    setupSession();
 
-  if (!artifact.content && !artifact.filePath) {
+    return () => {
+      cancelled = true;
+      if (sessionIdRef.current) {
+        window.electron.artifact.destroyPreviewSession(sessionIdRef.current);
+        sessionIdRef.current = null;
+      }
+    };
+  }, [artifact.filePath]);
+
+  // Reload iframe when file content changes (triggered by file watcher)
+  const contentVersion = artifact.content;
+  const prevContentRef = useRef(contentVersion);
+  useEffect(() => {
+    if (prevContentRef.current === contentVersion) return;
+    prevContentRef.current = contentVersion;
+    if (!iframeRef.current) return;
+    try {
+      iframeRef.current.contentWindow?.location.reload();
+    } catch {
+      // Cross-origin reload fallback: reset src with cache-busting
+      if (previewUrl) {
+        const url = new URL(previewUrl);
+        url.searchParams.set('_t', String(Date.now()));
+        iframeRef.current.src = url.toString();
+      }
+    }
+  }, [contentVersion, previewUrl]);
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted text-sm">
+        {error}
+      </div>
+    );
+  }
+
+  if (!previewUrl) {
     return (
       <div className="flex items-center justify-center h-full text-muted text-sm">
         Loading...
@@ -78,35 +96,33 @@ const HtmlRenderer: React.FC<HtmlRendererProps> = ({ artifact }) => {
     );
   }
 
-  // Content with relative resources and a filePath: inline resources not possible,
-  // render via srcDoc with a <base> tag so relative URLs resolve
-  if (artifact.filePath && artifact.content && hasRelativeResources(artifact.content)) {
-    const dirPath = artifact.filePath.slice(0, artifact.filePath.lastIndexOf('/') + 1);
-    const baseTag = `<base href="file://${dirPath}">`;
-    const htmlWithBase = artifact.content.replace(/(<head[^>]*>)/i, `$1${baseTag}`);
-    return (
-      <iframe
-        srcDoc={htmlWithBase}
-        className="w-full h-full border-0"
-        sandbox="allow-scripts allow-same-origin"
-        title={artifact.title}
-      />
-    );
-  }
-
-  // Loading state: filePath exists but content not yet processed
-  if (!processedHtml && !artifact.content) {
-    return (
-      <div className="flex items-center justify-center h-full text-muted text-sm">
-        Loading...
-      </div>
-    );
-  }
-
-  // Self-contained HTML (no relative resources): use srcDoc
   return (
     <iframe
-      srcDoc={processedHtml || artifact.content}
+      ref={iframeRef}
+      src={previewUrl}
+      className="w-full h-full border-0"
+      title={artifact.title}
+    />
+  );
+};
+
+/**
+ * Inline HTML (AI-generated): rendered via srcDoc with sandbox for security.
+ */
+const InlineHtmlRenderer: React.FC<{ artifact: Artifact }> = ({ artifact }) => {
+  const html = artifact.content;
+  if (!html) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted text-sm">
+        Loading...
+      </div>
+    );
+  }
+
+  const finalHtml = injectHashNavInterceptor(html);
+  return (
+    <iframe
+      srcDoc={finalHtml}
       className="w-full h-full border-0"
       sandbox="allow-scripts"
       title={artifact.title}
@@ -114,49 +130,11 @@ const HtmlRenderer: React.FC<HtmlRendererProps> = ({ artifact }) => {
   );
 };
 
-async function readLocalFileAsDataUrl(absPath: string): Promise<string | null> {
-  if (typeof window.electron?.dialog?.readFileAsDataUrl !== 'function') return null;
-  try {
-    const res = await window.electron.dialog.readFileAsDataUrl(absPath);
-    return res?.success && res.dataUrl ? res.dataUrl : null;
-  } catch {
-    return null;
+const HtmlRenderer: React.FC<HtmlRendererProps> = ({ artifact }) => {
+  if (artifact.filePath) {
+    return <FileBasedHtmlRenderer artifact={artifact} />;
   }
-}
-
-function resolveRelativePath(src: string, htmlDir: string): string | null {
-  if (!src || src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:') || src.startsWith('blob:')) {
-    return null;
-  }
-  return src.startsWith('/') ? src : htmlDir + src;
-}
-
-async function inlineLocalResources(html: string, filePath: string): Promise<string> {
-  const lastSlash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
-  if (lastSlash <= 0) return html;
-  const dir = filePath.slice(0, lastSlash + 1);
-
-  const srcAttrs = /(?:src|data)=["']([^"']+)["']/gi;
-  const matches = [...html.matchAll(srcAttrs)];
-  const replacements: Array<[string, string]> = [];
-
-  for (const match of matches) {
-    const originalSrc = match[1];
-    const absPath = resolveRelativePath(originalSrc, dir);
-    if (!absPath) continue;
-
-    const dataUrl = await readLocalFileAsDataUrl(absPath);
-    if (dataUrl) {
-      replacements.push([originalSrc, dataUrl]);
-    }
-  }
-
-  let result = html;
-  for (const [original, replacement] of replacements) {
-    result = result.split(original).join(replacement);
-  }
-
-  return result;
-}
+  return <InlineHtmlRenderer artifact={artifact} />;
+};
 
 export default HtmlRenderer;

@@ -42,6 +42,7 @@ import {
 } from '../openclawHistory';
 import { buildOpenClawLocalTimeContextPrompt } from '../openclawLocalTimeContextPrompt';
 import { buildTransientSessionFromOpenClawTranscript } from '../openclawTranscript';
+import { mergeAgentInstructionPrompt, mergeAgentSkillIds } from './agentContext';
 import { AgentLifecyclePhase, type AgentLifecyclePhase as AgentLifecyclePhaseValue } from './constants';
 import type {
   CoworkContinueOptions,
@@ -62,6 +63,7 @@ const CHANNEL_SESSION_DISCOVERY_LIMIT = 200;
 const INTERNAL_SYSTEM_PROMPT_HEADER = '[LobsterAI system instructions]';
 const INTERNAL_SYSTEM_PROMPT_REPLACEMENT_HINT =
   'If earlier LobsterAI system instructions exist, replace them with this version.';
+const CHAT_FINAL_COMPLETION_FALLBACK_DELAY_MS = 3000;
 
 /** How we chose assistant text to persist at chat.final (for tests and logs). */
 export type PersistedSegmentPickReason =
@@ -198,6 +200,14 @@ type ActiveTurn = {
   bufferedAgentPayloads: BufferedAgentEvent[];
   /** Client-side timeout watchdog timer (fallback for missing gateway abort events). */
   timeoutTimer?: ReturnType<typeof setTimeout>;
+  /** True after the gateway has reported the run lifecycle end. */
+  lifecycleEndReceived?: boolean;
+  /** True after chat.final has been reconciled and is waiting for lifecycle end. */
+  chatFinalReady?: boolean;
+  /** Run id captured from chat.final for the eventual completion event. */
+  chatFinalRunId?: string;
+  /** Fallback timer used when chat.final arrives but lifecycle end is lost. */
+  chatFinalCompletionTimer?: ReturnType<typeof setTimeout>;
 };
 
 type BufferedChatEvent = {
@@ -1694,9 +1704,11 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     this.confirmationModeBySession.set(sessionId, confirmationMode);
 
     if (!options.skipInitialUserMessage) {
-      const metadata = (options.skillIds?.length || options.imageAttachments?.length)
+      const agentForMetadata = this.store.getAgent(options.agentId || session.agentId || 'main');
+      const effectiveSkillIds = mergeAgentSkillIds(options.skillIds, agentForMetadata);
+      const metadata = (effectiveSkillIds.length || options.imageAttachments?.length)
         ? {
-          ...(options.skillIds?.length ? { skillIds: options.skillIds } : {}),
+          ...(effectiveSkillIds.length ? { skillIds: effectiveSkillIds } : {}),
           ...(options.imageAttachments?.length ? { imageAttachments: options.imageAttachments } : {}),
         }
         : undefined;
@@ -1721,6 +1733,10 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     const turnToken = this.nextTurnToken(sessionId);
 
     const agent = this.store.getAgent(agentId);
+    const effectiveSystemPrompt = mergeAgentInstructionPrompt(
+      options.systemPrompt ?? session.systemPrompt,
+      agent,
+    );
     const rawCurrentModel = session.modelOverride || agent?.model || '';
     // Session modelOverride is user-selected and must not be rewritten by
     // provider migration; only agent-level refs are safe to normalize.
@@ -1750,7 +1766,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     const outboundMessage = await this.buildOutboundPrompt(
       sessionId,
       prompt,
-      options.systemPrompt ?? session.systemPrompt,
+      effectiveSystemPrompt,
       agentId,
     );
     const runCwd = session.cwd?.trim() ? path.resolve(session.cwd.trim()) : undefined;
@@ -2900,6 +2916,13 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       // run; if the turn is still active after that, complete it ourselves.
       const FALLBACK_DELAY_MS = 3000;
       const endingTurn = this.activeTurns.get(sessionId);
+      if (endingTurn) {
+        endingTurn.lifecycleEndReceived = true;
+        if (endingTurn.chatFinalReady) {
+          this.completeChatFinalReadyTurn(sessionId, endingTurn);
+          return;
+        }
+      }
       const endingTurnToken = endingTurn?.turnToken;
       const endingRunId =
         endingTurn?.runId ??
@@ -3676,8 +3699,30 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       }
     }
 
+    turn.chatFinalReady = true;
+    turn.chatFinalRunId = payload.runId ?? turn.runId;
+    if (turn.lifecycleEndReceived) {
+      this.completeChatFinalReadyTurn(sessionId, turn);
+      return;
+    }
+    if (!turn.chatFinalCompletionTimer) {
+      const turnToken = turn.turnToken;
+      const runId = turn.chatFinalRunId;
+      turn.chatFinalCompletionTimer = setTimeout(() => {
+        const currentTurn = this.activeTurns.get(sessionId);
+        if (!currentTurn || currentTurn.turnToken !== turnToken) return;
+        if (runId && !currentTurn.knownRunIds.has(runId)) return;
+        console.debug('[OpenClawRuntime] chat final completion fallback fired after missing lifecycle end');
+        this.completeChatFinalReadyTurn(sessionId, currentTurn);
+      }, CHAT_FINAL_COMPLETION_FALLBACK_DELAY_MS);
+    }
+  }
+
+  private completeChatFinalReadyTurn(sessionId: string, turn: ActiveTurn): void {
+    if (!this.activeTurns.has(sessionId)) return;
+    const runId = turn.chatFinalRunId ?? turn.runId;
     this.store.updateSession(sessionId, { status: 'completed' });
-    this.emit('complete', sessionId, payload.runId ?? turn.runId);
+    this.emit('complete', sessionId, runId);
     this.cleanupSessionTurn(sessionId);
     this.resolveTurn(sessionId);
   }
@@ -4678,6 +4723,10 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       if (turn.timeoutTimer) {
         clearTimeout(turn.timeoutTimer);
         turn.timeoutTimer = undefined;
+      }
+      if (turn.chatFinalCompletionTimer) {
+        clearTimeout(turn.chatFinalCompletionTimer);
+        turn.chatFinalCompletionTimer = undefined;
       }
       // Cancel any pending throttled messageUpdate timer for this turn
       if (turn.assistantMessageId) {

@@ -4,6 +4,8 @@ interface AgentSummary {
   id: string;
   name: string;
   description: string;
+  systemPrompt: string;
+  identity: string;
   icon: string;
   model: string;
   workingDirectory: string;

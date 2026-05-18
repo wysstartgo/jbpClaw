@@ -521,9 +521,47 @@ interface IElectronAPI {
     delete: (id: string) => Promise<{ success: boolean; servers?: McpServerConfigIPC[]; error?: string }>;
     setEnabled: (options: { id: string; enabled: boolean }) => Promise<{ success: boolean; servers?: McpServerConfigIPC[]; error?: string }>;
     fetchMarketplace: () => Promise<{ success: boolean; data?: McpMarketplaceData; error?: string }>;
-    refreshBridge: () => Promise<{ success: boolean; tools: number; error?: string }>;
-    onBridgeSyncStart?: (callback: () => void) => () => void;
-    onBridgeSyncDone?: (callback: (data: { tools: number; error?: string }) => void) => () => void;
+  };
+  plugins: {
+    list: () => Promise<{
+      success: boolean;
+      plugins?: Array<{
+        pluginId: string;
+        version?: string;
+        description?: string;
+        source: 'npm' | 'clawhub' | 'git' | 'local' | 'bundled';
+        enabled: boolean;
+        canUninstall: boolean;
+        hasConfig: boolean;
+      }>;
+      error?: string;
+    }>;
+    install: (params: {
+      source: 'npm' | 'clawhub' | 'git' | 'local';
+      spec: string;
+      registry?: string;
+      version?: string;
+    }) => Promise<{ ok: boolean; pluginId?: string; version?: string; error?: string }>;
+    uninstall: (pluginId: string) => Promise<{ ok: boolean; error?: string }>;
+    setEnabled: (pluginId: string, enabled: boolean) => Promise<{ ok: boolean; error?: string }>;
+    getConfigSchema: (pluginId: string) => Promise<{
+      success: boolean;
+      schema?: {
+        configSchema: Record<string, unknown>;
+        uiHints: Record<string, {
+          label?: string;
+          help?: string;
+          sensitive?: boolean;
+          advanced?: boolean;
+          placeholder?: string;
+          order?: number;
+        }>;
+      } | null;
+      config?: Record<string, unknown> | null;
+      error?: string;
+    }>;
+    saveConfig: (pluginId: string, config: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>;
+    onInstallLog: (callback: (line: string) => void) => () => void;
   };
   agents: {
     list: (options?: { refreshManagedCatalog?: boolean }) => Promise<Agent[]>;
@@ -719,6 +757,8 @@ interface IElectronAPI {
     openPath: (filePath: string) => Promise<{ success: boolean; error?: string }>;
     showItemInFolder: (filePath: string) => Promise<{ success: boolean; error?: string }>;
     openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
+    getAppsForFile: (filePath: string) => Promise<{ success: boolean; apps: Array<{ name: string; path: string; isDefault: boolean; icon?: string }>; error?: string }>;
+    openPathWithApp: (filePath: string, appPath: string) => Promise<{ success: boolean; error?: string }>;
     openHtmlInBrowser: (htmlContent: string) => Promise<{ success: boolean; error?: string }>;
   };
   clipboard: {
@@ -728,6 +768,9 @@ interface IElectronAPI {
     watchFile: (filePath: string) => Promise<void>;
     unwatchFile: (filePath: string) => Promise<void>;
     onFileChanged: (callback: (data: { filePath: string }) => void) => () => void;
+    createPreviewSession: (filePath: string) => Promise<{ success: boolean; sessionId?: string; url?: string; error?: string }>;
+    createOfficePreviewSession: (filePath: string) => Promise<{ success: boolean; sessionId?: string; url?: string; error?: string }>;
+    destroyPreviewSession: (sessionId: string) => Promise<{ success: boolean }>;
   };
   autoLaunch: {
     get: () => Promise<{ enabled: boolean }>;

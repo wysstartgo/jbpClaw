@@ -265,8 +265,11 @@ class AuthService {
     this.unsubBridgeCode = window.electron.auth.onBridgeCode(async ({ code }) => {
       await this.handleBridgeCode(code);
     });
-    this.unsubSessionInvalidated = window.electron.auth.onSessionInvalidated(() => {
+    this.unsubSessionInvalidated = window.electron.auth.onSessionInvalidated(({ reason }) => {
       this.clearLocalSessionState();
+      if (reason?.startsWith('qingshu-managed-')) {
+        this.showToast(i18nService.t('authQingShuManagedSessionExpired'));
+      }
     });
 
     const pendingCallback = await window.electron.auth.getPendingCallback();

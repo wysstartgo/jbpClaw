@@ -23,13 +23,18 @@ export interface GatewayHistoryEntry {
 }
 
 const HEARTBEAT_ACK_RE = /^[`*_~"'“”‘’()[\]{}<>.,!?;:，。！？；：\s-]{0,8}HEARTBEAT_OK[`*_~"'“”‘’()[\]{}<>.,!?;:，。！？；：\s-]{0,8}$/i;
-const SILENT_REPLY_RE = /^\s*NO_REPLY\s*$/i;
+const SILENT_REPLY_RE = /^[`*_~"'“”‘’()[\]{}<>.,!?;:，。！？；：\s-]{0,8}NO_REPLY[`*_~"'“”‘’()[\]{}<>.,!?;:，。！？；：\s-]{0,8}$/i;
 const SILENT_REPLY_TOKEN = 'NO_REPLY';
 const HEARTBEAT_PROMPT_MARKERS = [
   'read heartbeat.md if it exists',
   'when reading heartbeat.md',
   'reply heartbeat_ok',
   'do not infer or repeat old tasks from prior chats',
+] as const;
+const PRE_COMPACTION_MEMORY_FLUSH_MARKERS = [
+  'pre-compaction memory flush',
+  'store durable memories only in memory/',
+  'reply with no_reply',
 ] as const;
 const TRANSIENT_GATEWAY_STATUS_MAX_CHARS = 600;
 const TRANSIENT_GATEWAY_STATUS_PATTERNS = [
@@ -173,6 +178,7 @@ export const isSilentReplyText = (text: string): boolean => SILENT_REPLY_RE.test
 export const isSilentReplyPrefixText = (text: string): boolean => {
   const trimmed = text.trimStart();
   if (!trimmed || trimmed.length < 2) return false;
+  if (isSilentReplyText(trimmed)) return false;
   if (trimmed !== trimmed.toUpperCase()) return false;
   if (/[^A-Z_]/.test(trimmed)) return false;
   const tokenUpper = SILENT_REPLY_TOKEN.toUpperCase();
@@ -219,11 +225,19 @@ export const isHeartbeatPromptText = (text: string): boolean => {
   return HEARTBEAT_PROMPT_MARKERS.every((marker) => normalized.includes(marker));
 };
 
+export const isPreCompactionMemoryFlushPromptText = (text: string): boolean => {
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return PRE_COMPACTION_MEMORY_FLUSH_MARKERS.every((marker) => normalized.includes(marker));
+};
+
 export const shouldSuppressHeartbeatText = (role: GatewayHistoryRole, text: string): boolean => {
   if ((role === 'assistant' || role === 'system') && (isHeartbeatAckText(text) || isSilentReplyText(text))) {
     return true;
   }
-  if (role === 'user' && isHeartbeatPromptText(text)) {
+  if (role === 'user' && (isHeartbeatPromptText(text) || isPreCompactionMemoryFlushPromptText(text))) {
     return true;
   }
   return false;

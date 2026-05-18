@@ -10,7 +10,6 @@ import type {
 } from '../../shared/qingshuManaged/types';
 import type { AuthAdapter } from '../auth/adapter';
 import type { Agent } from '../coworkStore';
-import type { McpServerManager, McpToolManifestEntry } from '../libs/mcpServerManager';
 import type { SkillManager } from '../skillManager';
 
 type FetchFn = (url: string, options?: RequestInit) => Promise<Response>;
@@ -26,6 +25,7 @@ type QingShuManagedCatalogServiceDeps = {
     set<T = unknown>(key: string, value: T): void;
   };
   onCatalogChanged?: () => void;
+  onAuthSessionInvalidated?: (reason: string) => void;
 };
 
 type QtbResult<T> = {
@@ -42,10 +42,23 @@ type ManagedToolInvokeResponse = {
   errorMessage?: string;
 };
 
+export type QingShuManagedNativeToolManifestEntry = {
+  server: string;
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+};
+
+export type QingShuManagedMcpToolResult = {
+  content: Array<{ type: string; text?: string }>;
+  isError: boolean;
+};
+
 const MANAGED_AGENT_ID_PREFIX = 'qingshu-managed:';
 const QINGSHU_MANAGED_CATALOG_SNAPSHOT_KEY = 'qingshuManaged.catalogSnapshot.v1';
 const QINGSHU_MANAGED_AGENT_EXTRA_SKILL_IDS_KEY = 'qingshuManaged.agentExtraSkillIds.v1';
 const MANAGED_TOOL_TIMEOUT_MS = 200_000;
+const QINGSHU_AUTHENTICATION_FAILED_PATTERN = /authentication failed|please login|未登录|登录失效|登录已失效|认证失败|token.*(expired|invalid)|invalid.*token/i;
 
 const emptySnapshot = (): QingShuManagedCatalogSnapshot => ({
   catalogVersion: '',
@@ -90,6 +103,13 @@ const summarizeToolArgs = (args: Record<string, unknown>): string =>
 const isAbortError = (error: unknown): boolean =>
   error instanceof Error
   && (error.name === 'AbortError' || /abort|timed out/i.test(error.message));
+
+const isQingShuAuthFailure = (response: Response, body?: QtbResult<unknown> | null): boolean => {
+  if (response.status === 401) return true;
+  if (!body) return false;
+  return body.code === 401
+    || (body.code === 403 && QINGSHU_AUTHENTICATION_FAILED_PATTERN.test(body.msg || ''));
+};
 
 export class QingShuManagedCatalogService {
   private snapshot: QingShuManagedCatalogSnapshot;
@@ -310,34 +330,27 @@ export class QingShuManagedCatalogService {
     return this.snapshot.tools.filter((tool) => toolNames.has(tool.toolName));
   }
 
-  registerLocalToolRuntime(mcpServerManager: McpServerManager): void {
+  getManagedToolRuntimeManifest(): QingShuManagedNativeToolManifestEntry[] {
     if (!this.deps.isAuthenticated()) {
-      mcpServerManager.unregisterLocalServer(QingShuManagedToolRuntime.ServerName);
-      return;
+      return [];
     }
 
-    const tools: McpToolManifestEntry[] = this.snapshot.tools
+    return this.snapshot.tools
       .filter((tool) => tool.allowed)
-      .map((tool) => {
-        const toolAlias = buildManagedToolAlias(tool.toolName);
-        const backendPath = `/api/qingshu-claw/managed/tools/${encodeURIComponent(tool.toolName)}/invoke`;
-        console.log(
-          `[QingShuManaged] registered MCP tool "${toolAlias}" for server "${QingShuManagedToolRuntime.ServerName}" ` +
-          `mapping to managed tool "${tool.toolName}" via "${backendPath}"`,
-        );
-        return {
-          server: QingShuManagedToolRuntime.ServerName,
-          name: tool.toolName,
-          description: `${tool.description} [MCP alias: ${toolAlias}]`,
-          inputSchema: tool.inputSchema ?? {},
-        };
-      });
+      .map((tool) => ({
+        server: QingShuManagedToolRuntime.ServerName,
+        name: tool.toolName,
+        description: `${tool.description} [MCP alias: ${buildManagedToolAlias(tool.toolName)}]`,
+        inputSchema: tool.inputSchema ?? {},
+      }));
+  }
 
-    mcpServerManager.registerLocalServer({
-      name: QingShuManagedToolRuntime.ServerName,
-      tools,
-      callTool: async (toolName, args, options) => this.invokeManagedTool(toolName, args, options),
-    });
+  async invokeManagedMcpTool(
+    toolName: string,
+    args: Record<string, unknown>,
+    options?: { signal?: AbortSignal },
+  ): Promise<QingShuManagedMcpToolResult> {
+    return this.invokeManagedTool(toolName, args, options);
   }
 
   private async invokeManagedTool(
@@ -416,6 +429,9 @@ export class QingShuManagedCatalogService {
   ): Promise<T> {
     const response = await this.fetchWithAuth(path, init, options);
     const body = await response.json().catch((): QtbResult<T> | null => null);
+    if (isQingShuAuthFailure(response, body)) {
+      this.notifyAuthSessionInvalidated(`qingshu-managed-auth-failed:${path}`);
+    }
     if (!response.ok || !body || body.code !== 200) {
       throw new Error(body?.msg || `QingShu managed request failed: ${response.status}`);
     }
@@ -488,23 +504,34 @@ export class QingShuManagedCatalogService {
       }
     };
 
+    const parseResponseBody = async (response: Response): Promise<QtbResult<unknown> | null> => {
+      const cloned = response.clone();
+      return await cloned.json().catch((): null => null) as QtbResult<unknown> | null;
+    };
+
     console.debug(`[QingShuManaged] sending authenticated request to "${path}"`);
     let response = await execute(accessToken);
-    if (response.status !== 401) {
+    const responseBody = await parseResponseBody(response);
+    if (!isQingShuAuthFailure(response, responseBody)) {
       console.debug(`[QingShuManaged] request to "${path}" returned status=${response.status}`);
       return response;
     }
 
-    console.warn(`[QingShuManaged] request to "${path}" returned 401, attempting token refresh`);
+    console.warn(`[QingShuManaged] request to "${path}" returned an auth failure, attempting token refresh`);
     const refreshed = await adapter.refreshToken();
     if (!refreshed.success || !refreshed.accessToken) {
-      console.warn(`[QingShuManaged] token refresh failed for "${path}", keeping original 401 response`);
+      console.warn(`[QingShuManaged] token refresh failed for "${path}", keeping original auth failure response`);
+      this.notifyAuthSessionInvalidated(`qingshu-managed-refresh-failed:${path}`);
       return response;
     }
 
     response = await execute(refreshed.accessToken);
     console.debug(`[QingShuManaged] retry request to "${path}" returned status=${response.status}`);
     return response;
+  }
+
+  private notifyAuthSessionInvalidated(reason: string): void {
+    this.deps.onAuthSessionInvalidated?.(reason);
   }
 
   private loadPersistedSnapshot(): QingShuManagedCatalogSnapshot {

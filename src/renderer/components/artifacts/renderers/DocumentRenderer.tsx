@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { i18nService } from '@/services/i18n';
 import type { Artifact } from '@/types/artifact';
 
+import { SheetRenderer } from './sheet/SheetRenderer';
+
 const t = (key: string) => i18nService.t(key);
 
 function getExtension(name: string): string {
@@ -957,6 +959,14 @@ interface DocumentRendererProps {
   artifact: Artifact;
 }
 
+const EnhancedSheetRenderer: React.FC<{ artifact: Artifact }> = ({ artifact }) => {
+  try {
+    return <SheetRenderer artifact={artifact} />;
+  } catch {
+    return <XlsxSubRenderer artifact={artifact} />;
+  }
+};
+
 const DocumentRenderer: React.FC<DocumentRendererProps> = ({ artifact }) => {
   const ext = getExtension(artifact.fileName || artifact.filePath || '');
 
@@ -967,7 +977,7 @@ const DocumentRenderer: React.FC<DocumentRendererProps> = ({ artifact }) => {
     case '.xls':
     case '.csv':
     case '.tsv':
-      return <XlsxSubRenderer artifact={artifact} />;
+      return <EnhancedSheetRenderer artifact={artifact} />;
     case '.pdf':
       return <PdfSubRenderer artifact={artifact} />;
     case '.pptx':

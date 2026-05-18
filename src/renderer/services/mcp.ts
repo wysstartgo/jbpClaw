@@ -133,32 +133,6 @@ class McpService {
     }
   }
 
-  /**
-   * Refresh the MCP Bridge: restarts MCP servers, re-discovers tools,
-   * syncs openclaw.json, and restarts the gateway.
-   * Returns the number of tools discovered.
-   */
-  async refreshBridge(): Promise<{ success: boolean; tools: number; error?: string }> {
-    try {
-      return await window.electron.mcp.refreshBridge();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to refresh MCP bridge';
-      console.error('Failed to refresh MCP bridge:', error);
-      return { success: false, tools: 0, error: message };
-    }
-  }
-
-  onBridgeSyncStart(callback: () => void): () => void {
-    const subscribe = window.electron.mcp.onBridgeSyncStart;
-    if (!subscribe) return () => {};
-    return subscribe(callback);
-  }
-
-  onBridgeSyncDone(callback: (data: { tools: number; error?: string }) => void): () => void {
-    const subscribe = window.electron.mcp.onBridgeSyncDone;
-    if (!subscribe) return () => {};
-    return subscribe(callback);
-  }
 }
 
 export const mcpService = new McpService();

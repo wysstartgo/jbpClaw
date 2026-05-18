@@ -18,6 +18,7 @@ import { buildScheduledTaskEnginePrompt } from '../scheduledTask/enginePrompt';
 import { migrateScheduledTaskRunsToOpenclaw,migrateScheduledTasksToOpenclaw } from '../scheduledTask/migrate';
 import { type AppUpdateInfo,AppUpdateIpc, AppUpdateSource } from '../shared/appUpdate/constants';
 import { ArtifactIpcChannel } from '../shared/artifact/constants';
+import { ArtifactPreviewIpc } from '../shared/artifactPreview/constants';
 import { CoworkIpcChannel } from '../shared/cowork/constants';
 import { PetStatus } from '../shared/pet/constants';
 import { type Platform as SharedPlatform,PlatformRegistry } from '../shared/platform';
@@ -88,6 +89,7 @@ import {
   OpenClawRuntimeAdapter,
   type PermissionRequest,
 } from './libs/agentEngine';
+import { mergeAgentInstructionPrompt, mergeAgentSkillIds } from './libs/agentEngine/agentContext';
 import { AppUpdateCoordinator } from './libs/appUpdateCoordinator';
 import { downloadUpdate, installUpdate } from './libs/appUpdateInstaller';
 import { AssistantSpeechGuard } from './libs/assistantSpeechGuard';
@@ -102,21 +104,22 @@ import { saveCoworkApiConfig } from './libs/coworkConfigStore';
 import { getCoworkLogPath } from './libs/coworkLogger';
 import { registerProxyTokenRefresher,setProxyTokenRefresher,startCoworkOpenAICompatProxy, stopCoworkOpenAICompatProxy } from './libs/coworkOpenAICompatProxy';
 import { CoworkRunner } from './libs/coworkRunner';
-import { generateSessionTitle, probeCoworkModelReadiness } from './libs/coworkUtil';
+import { generateSessionTitle, getElectronNodeRuntimePath, probeCoworkModelReadiness } from './libs/coworkUtil';
 import { EdgeTtsService } from './libs/edgeTtsService';
 import { getServerApiBaseUrl, getSkillStoreUrl, refreshEndpointsTestMode } from './libs/endpoints';
 import { mergeEnterpriseOpenclawConfig,resolveEnterpriseConfigPath, syncEnterpriseConfig } from './libs/enterpriseConfigSync';
+import { createOfficePreviewSession, createPreviewSession, destroyPreviewSession, isPreviewServerUrl, stopHtmlPreviewServer } from './libs/htmlPreviewServer';
 import { exportLogsZip } from './libs/logExport';
 import { broadcastSpeechState,MacSpeechService } from './libs/macSpeechService';
 import { broadcastTtsState,MacTtsService } from './libs/macTtsService';
 import { McpBridgeServer } from './libs/mcpBridgeServer';
-import { McpServerManager } from './libs/mcpServerManager';
+import { PluginManager, type PluginInstallParams } from './libs/pluginManager';
 import { parsePrimaryModelRef } from './libs/openclawAgentModels';
 import {
   buildManagedSessionKey,
   OpenClawChannelSessionSync,
 } from './libs/openclawChannelSessionSync';
-import type { McpBridgeConfig } from './libs/openclawConfigSync';
+import type { ResolvedMcpServer } from './libs/openclawConfigSync';
 import { OpenClawConfigSync } from './libs/openclawConfigSync';
 import { OpenClawEngineManager, type OpenClawEngineStatus } from './libs/openclawEngineManager';
 import {
@@ -135,6 +138,7 @@ import {
 import { startOpenClawTokenProxy, stopOpenClawTokenProxy } from './libs/openclawTokenProxy';
 import { migrateMainAgentWorkspace } from './libs/openclawWorkspaceMigration';
 import { ensurePythonRuntimeReady } from './libs/pythonRuntime';
+import { resolveStdioCommand } from './libs/resolveStdioCommand';
 import { serializeForLog } from './libs/sanitizeForLog';
 import {
   type ForegroundSpeechOrigin,
@@ -158,6 +162,8 @@ import { registerPetIpc } from './pet/petIpc';
 import { PetStore } from './pet/petStore';
 import { PetWindowController } from './pet/petWindowController';
 import { QingShuManagedCatalogService } from './qingshuManaged/catalogService';
+import { QingShuManagedMcpServer } from './qingshuManaged/managedMcpServer';
+import { getAppsForFile, openFileWithApp } from './shellApps';
 import {
   createQingShuAuthFetchProvider,
   createQingShuExtensionHost,
@@ -667,6 +673,18 @@ const resolveShellFilePath = (inputPath: string): string => {
   return path.resolve(normalizedPath);
 };
 
+const resolveExistingShellFilePath = (filePath: string): { ok: true; path: string } | { ok: false; error: string } => {
+  if (typeof filePath !== 'string' || !filePath.trim()) {
+    return { ok: false, error: 'Missing file path' };
+  }
+  const normalizedPath = resolveShellFilePath(filePath);
+  if (!fs.existsSync(normalizedPath)) {
+    console.warn('[Shell] target does not exist:', normalizedPath);
+    return { ok: false, error: `Path does not exist: ${normalizedPath}` };
+  }
+  return { ok: true, path: normalizedPath };
+};
+
 // ==================== macOS Permissions ====================
 
 /**
@@ -834,10 +852,10 @@ let openClawRuntimeAdapter: OpenClawRuntimeAdapter | null = null;
 let coworkEngineRouter: CoworkEngineRouter | null = null;
 let skillManager: SkillManager | null = null;
 let mcpStore: McpStore | null = null;
-let mcpServerManager: McpServerManager | null = null;
 let mcpBridgeServer: McpBridgeServer | null = null;
 let mcpBridgeSecret: string = require('crypto').randomUUID();
-let mcpBridgeStartPromise: Promise<McpBridgeConfig | null> | null = null;
+let resolvedMcpServersCache: ResolvedMcpServer[] = [];
+let pluginManager: PluginManager | null = null;
 let imGatewayManager: IMGatewayManager | null = null;
 let storeInitPromise: Promise<SqliteStore> | null = null;
 let openClawEngineManager: OpenClawEngineManager | null = null;
@@ -845,6 +863,7 @@ let openClawConfigSync: OpenClawConfigSync | null = null;
 let qingShuExtensionHost: QingShuExtensionHost | null = null;
 let qingShuGovernanceService: QingShuGovernanceService | null = null;
 let qingShuManagedCatalogService: QingShuManagedCatalogService | null = null;
+let qingShuManagedMcpServer: QingShuManagedMcpServer | null = null;
 let appUpdateCoordinator: AppUpdateCoordinator | null = null;
 let openClawBootstrapPromise: Promise<OpenClawEngineStatus> | null = null;
 let openClawStatusForwarderBound = false;
@@ -992,13 +1011,11 @@ const bootstrapOpenClawEngine = async (options: { forceReinstall?: boolean; reas
     try {
       console.log(`[OpenClaw] bootstrap starting (reason=${reason})`);
 
-      // Start MCP Bridge before config sync so mcpBridge tools are included in openclaw.json
-      const bridgeResult = await startMcpBridge().catch((err: unknown) => {
-        console.error(`[OpenClaw] bootstrap: MCP bridge startup failed (non-fatal):`, err);
-        return null as McpBridgeConfig | null;
+      // Start AskUser before config sync so the ask-user-question plugin receives a callback URL.
+      await startAskUserServer().catch((err: unknown) => {
+        console.error('[OpenClaw] bootstrap: AskUser server startup failed (non-fatal):', err);
       });
-      console.log(`[OpenClaw] bootstrap: MCP bridge setup done (${elapsed()}), result=${bridgeResult ? `${bridgeResult.tools.length} tools` : 'null'}`);
-      console.log(`[OpenClaw] bootstrap: mcpBridgeServer=${mcpBridgeServer?.callbackUrl || 'null'}, mcpServerManager.tools=${mcpServerManager?.toolManifest?.length ?? 'null'}, secret=${mcpBridgeSecret ? 'set' : 'null'}`);
+      console.log(`[OpenClaw] bootstrap: AskUser server setup done (${elapsed()}), askUserUrl=${mcpBridgeServer?.askUserCallbackUrl || 'null'}`);
 
       // Ensure IDENTITY.md has default content in the main agent workspace
       try {
@@ -1069,13 +1086,12 @@ const ensureOpenClawRunningForCowork = async () => {
     await pendingTokenRefresh.catch(() => {});
   }
 
-  // Ensure MCP bridge is started and config is synced before launching the gateway,
-  // so that mcpBridge tools are available in openclaw.json when the gateway loads.
-  await startMcpBridge().catch((err: unknown) => {
-    console.error('[OpenClaw] ensureRunning: MCP bridge startup failed (non-fatal):', err);
+  // Ensure AskUser server is started and config is synced before launching the gateway.
+  await startAskUserServer().catch((err: unknown) => {
+    console.error('[OpenClaw] ensureRunning: AskUser server startup failed (non-fatal):', err);
   });
   const syncResult = await syncOpenClawConfig({
-    reason: 'ensureRunning:mcpBridge',
+    reason: 'ensureRunning:mcpConfig',
     restartGatewayIfRunning: false,
   });
   if (!syncResult.success) {
@@ -1395,19 +1411,11 @@ const getOpenClawConfigSync = (): OpenClawConfigSync => {
           return null;
         }
       },
-      getMcpBridgeConfig: (): McpBridgeConfig | null => {
-        if (!mcpBridgeServer?.callbackUrl || !mcpBridgeServer?.askUserCallbackUrl || !mcpBridgeSecret) {
-          return null;
-        }
-        return {
-          callbackUrl: mcpBridgeServer.callbackUrl,
-          askUserCallbackUrl: mcpBridgeServer.askUserCallbackUrl,
-          secret: mcpBridgeSecret,
-          tools: mcpServerManager?.toolManifest ?? [],
-        };
-      },
       getMcpBridgeSecret: () => mcpBridgeSecret,
-      getAgents: () => getCoworkStore().listAgents(),
+      getResolvedMcpServers: () => resolvedMcpServersCache,
+      getAskUserCallbackUrl: () => mcpBridgeServer?.askUserCallbackUrl ?? null,
+      getAgents: () => getAgentManager().listAgents(),
+      getUserPlugins: () => getCoworkStore().listUserPlugins(),
       getQingShuEnabledToolBundles: () => qingShuExtensionHost?.getEnabledToolBundles() ?? [],
       getQingShuSharedToolCatalog: () => qingShuExtensionHost?.getSharedToolCatalog() ?? {
         generatedAt: Date.now(),
@@ -1427,11 +1435,9 @@ let deferredHardRestartTimer: ReturnType<typeof setInterval> | null = null;
 let deferredHardRestartTimeout: ReturnType<typeof setTimeout> | null = null;
 const DEFERRED_RESTART_POLL_MS = 3_000;
 const DEFERRED_RESTART_WAIT_LOG_MS = 5 * 60_000;
-let mcpBridgeRefreshInProgress = false;
 
 const hasActiveGatewayWorkloads = (): boolean => {
   if (openClawRuntimeAdapter?.hasActiveSessions()) return true;
-  if (mcpBridgeRefreshInProgress) return true;
   try {
     if (getCronJobService()?.hasRunningJobs()) return true;
   } catch {
@@ -1499,12 +1505,95 @@ const requestGatewayRestart = async (reason: string): Promise<OpenClawEngineStat
   return performGatewayRestart(reason);
 };
 
+const ensureQingShuManagedMcpServer = async (): Promise<void> => {
+  if (!qingShuManagedCatalogService) {
+    return;
+  }
+  if (!qingShuManagedMcpServer) {
+    qingShuManagedMcpServer = new QingShuManagedMcpServer(qingShuManagedCatalogService);
+  }
+  await qingShuManagedMcpServer.start();
+};
+
+const getQingShuManagedNativeMcpServerConfig = async (): Promise<ResolvedMcpServer | null> => {
+  if (!qingShuManagedCatalogService) {
+    return null;
+  }
+  await ensureQingShuManagedMcpServer();
+  const config = qingShuManagedMcpServer?.getServerConfig();
+  if (!config) {
+    return null;
+  }
+  return config;
+};
+
+const refreshQingShuManagedMcpRuntimeConfig = (reason: string): void => {
+  void ensureQingShuManagedMcpServer()
+    .then(() => syncOpenClawConfig({ reason, restartGatewayIfRunning: false }))
+    .catch((error) => {
+      console.warn('[QingShuManagedMcp] failed to refresh native MCP config:', error);
+    });
+};
+
+const getResolvedMcpServers = async (): Promise<ResolvedMcpServer[]> => {
+  const enabledServers = getMcpStore().getEnabledServers();
+  const electronPath = getElectronNodeRuntimePath();
+  const npmBinDir = app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'npm', 'bin')
+    : '';
+  const resolved: ResolvedMcpServer[] = [];
+
+  for (const server of enabledServers) {
+    try {
+      if (server.transportType === 'stdio') {
+        const stdio = await resolveStdioCommand(server);
+        const shimEnv: Record<string, string> = {
+          LOBSTERAI_ELECTRON_PATH: electronPath,
+        };
+        if (npmBinDir) {
+          shimEnv.LOBSTERAI_NPM_BIN_DIR = npmBinDir;
+        }
+        resolved.push({
+          name: server.name,
+          transportType: 'stdio',
+          command: stdio.command,
+          args: stdio.args,
+          env: { ...shimEnv, ...(stdio.env || {}) },
+        });
+        continue;
+      }
+
+      resolved.push({
+        name: server.name,
+        transportType: server.transportType,
+        url: server.url,
+        headers: server.headers,
+      });
+    } catch (error) {
+      console.warn(`[MCP] failed to resolve native server "${server.name}", skipping:`, error);
+    }
+  }
+
+  const managedConfig = await getQingShuManagedNativeMcpServerConfig();
+  if (managedConfig) {
+    resolved.push(managedConfig);
+  }
+
+  return resolved;
+};
+
 const syncOpenClawConfig = async (
   options: { reason: string; restartGatewayIfRunning?: boolean } = { reason: 'unknown' },
-): Promise<{ success: boolean; changed: boolean; mcpBridgeConfigChanged?: boolean; status?: OpenClawEngineStatus; error?: string }> => {
+): Promise<{ success: boolean; changed: boolean; status?: OpenClawEngineStatus; error?: string }> => {
   // Always write openclaw.json immediately. OpenClaw's file watcher can drain
   // active work before reloading; deferring the write keeps model/channel
   // changes stale for new sessions. Only hard restarts are deferred below.
+  try {
+    resolvedMcpServersCache = await getResolvedMcpServers();
+  } catch (error) {
+    console.warn('[OpenClaw] failed to resolve native MCP server config:', error);
+    resolvedMcpServersCache = [];
+  }
 
   const syncResult = getOpenClawConfigSync().sync(options.reason);
   if (!syncResult.ok) {
@@ -1533,16 +1622,12 @@ const syncOpenClawConfig = async (
   const secretEnvVarsChanged = JSON.stringify(nextSecretEnvVars) !== JSON.stringify(prevSecretEnvVars);
   getOpenClawEngineManager().setSecretEnvVars(nextSecretEnvVars);
 
-  // Secret env var changes and mcp-bridge callback/tool changes require a hard
-  // restart because the gateway snapshots both process env and plugin config.
-  const mcpBridgeForceRestart = !!syncResult.mcpBridgeConfigChanged;
-  const needsRestart = secretEnvVarsChanged || mcpBridgeForceRestart || (syncResult.changed && !!options.restartGatewayIfRunning);
+  const needsRestart = secretEnvVarsChanged || (syncResult.changed && !!options.restartGatewayIfRunning);
 
   if (!needsRestart) {
     return {
       success: true,
       changed: syncResult.changed,
-      mcpBridgeConfigChanged: syncResult.mcpBridgeConfigChanged,
     };
   }
 
@@ -1552,7 +1637,6 @@ const syncOpenClawConfig = async (
     return {
       success: true,
       changed: true,
-      mcpBridgeConfigChanged: syncResult.mcpBridgeConfigChanged,
       status,
     };
   }
@@ -1563,7 +1647,6 @@ const syncOpenClawConfig = async (
     return {
       success: true,
       changed: true,
-      mcpBridgeConfigChanged: syncResult.mcpBridgeConfigChanged,
       status,
     };
   }
@@ -1582,7 +1665,6 @@ const syncOpenClawConfig = async (
     return {
       success: false,
       changed: true,
-      mcpBridgeConfigChanged: syncResult.mcpBridgeConfigChanged,
       status: restarted,
       error: restarted.message || 'Failed to restart OpenClaw gateway after config sync.',
     };
@@ -1590,7 +1672,6 @@ const syncOpenClawConfig = async (
   return {
     success: true,
     changed: true,
-    mcpBridgeConfigChanged: syncResult.mcpBridgeConfigChanged,
     status: restarted,
   };
 };
@@ -1792,170 +1873,63 @@ const getMcpStore = () => {
   return mcpStore;
 };
 
-/**
- * Start the MCP Bridge: server manager + HTTP callback.
- * Called during OpenClaw bootstrap before config sync.
- * Returns the bridge config to be written into openclaw.json.
- *
- * The HTTP callback server is always started (even without MCP servers)
- * because the AskUserQuestion plugin also uses it for user confirmation dialogs.
- */
-const startMcpBridge = (): Promise<McpBridgeConfig | null> => {
-  // Deduplicate concurrent calls — only one initialization at a time
-  if (mcpBridgeStartPromise) {
-    return mcpBridgeStartPromise;
+const getPluginManager = (): PluginManager => {
+  if (!pluginManager) {
+    pluginManager = new PluginManager(getCoworkStore());
   }
-  mcpBridgeStartPromise = (async (): Promise<McpBridgeConfig | null> => {
-  try {
-    console.log('[McpBridge] startMcpBridge called');
-
-    if (!mcpServerManager) {
-      mcpServerManager = new McpServerManager();
-    }
-    qingShuManagedCatalogService?.registerLocalToolRuntime(mcpServerManager);
-
-    // Discover MCP tools (may be empty if no servers configured)
-    const enabledServers = getMcpStore().getEnabledServers();
-    console.log(`[McpBridge] enabledServers: ${enabledServers.length} (${enabledServers.map(s => s.name).join(', ')})`);
-
-    let tools: Awaited<ReturnType<McpServerManager['startServers']>> = mcpServerManager.toolManifest;
-    if (enabledServers.length > 0) {
-      console.log('[McpBridge] starting MCP servers...');
-      tools = await mcpServerManager.startServers(enabledServers);
-      console.log(`[McpBridge] tools discovered: ${tools.length}`);
-    }
-
-    // Always start HTTP callback server (serves both MCP Bridge and AskUserQuestion)
-    if (!mcpBridgeServer) {
-      mcpBridgeServer = new McpBridgeServer(mcpServerManager, mcpBridgeSecret);
-    }
-    if (!mcpBridgeServer.port) {
-      console.log('[McpBridge] starting HTTP callback server...');
-      await mcpBridgeServer.start();
-    }
-
-    // Register AskUserQuestion callback — shows a permission modal when the
-    // ask-user-question OpenClaw plugin sends a request via HTTP.
-    mcpBridgeServer.onAskUser((request) => {
-      const windows = BrowserWindow.getAllWindows();
-      windows.forEach((win) => {
-        if (win.isDestroyed()) return;
-        try {
-          win.webContents.send('cowork:stream:permission', {
-            sessionId: '__askuser__',
-            request: {
-              requestId: request.requestId,
-              toolName: 'AskUserQuestion',
-              toolInput: { questions: request.questions },
-            },
-          });
-        } catch (error) {
-          console.error('[AskUser] failed to send permission request to window:', error);
-        }
-      });
-    });
-
-    // Dismiss the AskUser modal when timeout or resolved from server side.
-    // Simulate a deny response to remove it from the renderer's pending queue.
-    mcpBridgeServer.onAskUserDismiss((requestId) => {
-      const windows = BrowserWindow.getAllWindows();
-      windows.forEach((win) => {
-        if (win.isDestroyed()) return;
-        try {
-          win.webContents.send('cowork:stream:permissionDismiss', { requestId });
-        } catch {
-          // ignore
-        }
-      });
-    });
-
-    const callbackUrl = mcpBridgeServer.callbackUrl;
-    const askUserCallbackUrl = mcpBridgeServer.askUserCallbackUrl;
-    if (!callbackUrl || !askUserCallbackUrl) {
-      console.error('[McpBridge] failed to get callback URL');
-      return null;
-    }
-
-    console.log(`[McpBridge] started: ${tools.length} MCP tools, callback=${callbackUrl}`);
-    return { callbackUrl, askUserCallbackUrl, secret: mcpBridgeSecret, tools };
-  } catch (error) {
-    console.error('[McpBridge] startup error:', error instanceof Error ? error.stack || error.message : String(error));
-    return null;
-  }
-  })().finally(() => {
-    mcpBridgeStartPromise = null;
-  });
-  return mcpBridgeStartPromise;
+  return pluginManager;
 };
 
 /**
- * Refresh the MCP Bridge after server config changes:
- * stop existing MCP servers → restart with new config → sync openclaw.json → restart gateway.
- * Returns a summary for the renderer to display.
+ * Start the AskUser HTTP callback server for the ask-user-question plugin.
+ * MCP tools are configured through OpenClaw native `mcp.servers`.
  */
-let mcpBridgeRefreshPromise: Promise<{ tools: number; error?: string }> | null = null;
+const startAskUserServer = async (): Promise<void> => {
+  if (!mcpBridgeServer) {
+    mcpBridgeServer = new McpBridgeServer(mcpBridgeSecret);
+  }
+  if (!mcpBridgeServer.port) {
+    console.log('[AskUser] starting HTTP callback server...');
+    await mcpBridgeServer.start();
+  }
 
-const broadcastMcpBridgeSync = (channel: string, data?: Record<string, unknown>): void => {
-  const windows = BrowserWindow.getAllWindows();
-  windows.forEach((win) => {
-    if (win.isDestroyed()) return;
-    try {
-      win.webContents.send(channel, data ?? {});
-    } catch (error) {
-      console.error(`[McpBridge] Failed to broadcast ${channel}:`, error);
-    }
+  mcpBridgeServer.onAskUser((request) => {
+    const windows = BrowserWindow.getAllWindows();
+    windows.forEach((win) => {
+      if (win.isDestroyed()) return;
+      try {
+        win.webContents.send('cowork:stream:permission', {
+          sessionId: '__askuser__',
+          request: {
+            requestId: request.requestId,
+            toolName: 'AskUserQuestion',
+            toolInput: { questions: request.questions },
+          },
+        });
+      } catch (error) {
+        console.error('[AskUser] failed to send permission request to window:', error);
+      }
+    });
   });
+
+  mcpBridgeServer.onAskUserDismiss((requestId) => {
+    const windows = BrowserWindow.getAllWindows();
+    windows.forEach((win) => {
+      if (win.isDestroyed()) return;
+      try {
+        win.webContents.send('cowork:stream:permissionDismiss', { requestId });
+      } catch {
+        // ignore
+      }
+    });
+  });
+
+  console.log(`[AskUser] started: askUserUrl=${mcpBridgeServer.askUserCallbackUrl}`);
 };
 
-const refreshMcpBridge = (): Promise<{ tools: number; error?: string }> => {
-  if (mcpBridgeRefreshPromise) {
-    return mcpBridgeRefreshPromise;
-  }
-  mcpBridgeRefreshPromise = (async () => {
-    mcpBridgeRefreshInProgress = true;
-    try {
-      console.log('[McpBridge] refreshing after config change...');
-      broadcastMcpBridgeSync('mcp:bridge:syncStart');
-
-      // 1. Stop existing MCP servers (but keep HTTP callback server alive — port stays the same)
-      if (mcpServerManager) {
-        await mcpServerManager.stopServers();
-      }
-
-      // 2. Re-discover tools from the new set of enabled servers
-      const bridgeConfig = await startMcpBridge();
-      const toolCount = bridgeConfig?.tools.length ?? 0;
-      console.log(`[McpBridge] refresh: ${toolCount} tools discovered`);
-
-      // 3. Sync openclaw.json and restart gateway if running
-      const syncResult = await syncOpenClawConfig({
-        reason: 'mcp-server-changed',
-        restartGatewayIfRunning: true,
-      });
-      if (!syncResult.success) {
-        console.error('[McpBridge] refresh: config sync failed:', syncResult.error);
-        return { tools: toolCount, error: syncResult.error };
-      }
-
-      console.log(`[McpBridge] refresh complete: ${toolCount} tools, gateway restarted=${syncResult.changed}`);
-      return { tools: toolCount };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error('[McpBridge] refresh error:', msg);
-      return { tools: 0, error: msg };
-    }
-  })().then((result) => {
-    broadcastMcpBridgeSync('mcp:bridge:syncDone', { tools: result.tools, error: result.error });
-    return result;
-  }).catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    broadcastMcpBridgeSync('mcp:bridge:syncDone', { tools: 0, error: message });
-    return { tools: 0, error: message };
-  }).finally(() => {
-    mcpBridgeRefreshInProgress = false;
-    mcpBridgeRefreshPromise = null;
-  });
-  return mcpBridgeRefreshPromise;
+const refreshMcpRuntimeConfig = (reason: string): void => {
+  syncOpenClawConfig({ reason, restartGatewayIfRunning: false })
+    .catch(err => console.error('[MCP] native config sync error:', err));
 };
 
 const getIMGatewayManager = (): IMGatewayManager => {
@@ -2131,6 +2105,21 @@ function mergeCoworkSystemPrompt(
     systemPrompt?.trim() || '',
   ].filter(Boolean);
   return sections.length > 0 ? sections.join('\n\n') : undefined;
+}
+
+function buildCoworkSessionAgentContext(options: {
+  engine: CoworkAgentEngine;
+  agentId?: string;
+  systemPrompt?: string;
+  skillIds?: string[];
+}): { systemPrompt?: string; skillIds: string[] } {
+  const agentId = options.agentId?.trim() || 'main';
+  const agent = getAgentManager().getAgent(agentId);
+  const baseSystemPrompt = mergeCoworkSystemPrompt(options.engine, options.systemPrompt);
+  return {
+    systemPrompt: mergeAgentInstructionPrompt(baseSystemPrompt, agent),
+    skillIds: mergeAgentSkillIds(options.skillIds, agent),
+  };
 }
 
 const resolveExistingPath = (candidates: string[]): string => {
@@ -3222,21 +3211,7 @@ if (!gotTheLock) {
     clearServerModelMetadata();
     clearPendingAuthState();
     console.warn(`[Auth] Cleared the local auth session, reason=${reason}`);
-    if (mcpServerManager && qingShuManagedCatalogService) {
-      qingShuManagedCatalogService.registerLocalToolRuntime(mcpServerManager);
-    }
-    if (mcpBridgeServer || mcpServerManager) {
-      void refreshMcpBridge().catch((error) => {
-        console.warn('[Auth] Failed to refresh MCP bridge after auth session invalidation:', error);
-      });
-    } else {
-      void syncOpenClawConfig({
-        reason: 'auth-session-invalidated',
-        restartGatewayIfRunning: true,
-      }).catch((error) => {
-        console.warn('[Auth] Failed to sync OpenClaw config after auth session invalidation:', error);
-      });
-    }
+    refreshQingShuManagedMcpRuntimeConfig('auth-session-invalidated');
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('auth:sessionInvalidated', { reason });
     }
@@ -3412,22 +3387,9 @@ if (!gotTheLock) {
         isAuthenticated: hasQingShuAuthSession,
         skillManager: getSkillManager(),
         store: getStore(),
+        onAuthSessionInvalidated: clearLocalAuthSession,
         onCatalogChanged: () => {
-          if (mcpServerManager && qingShuManagedCatalogService) {
-            qingShuManagedCatalogService.registerLocalToolRuntime(mcpServerManager);
-          }
-          if (mcpBridgeServer || mcpServerManager) {
-            void refreshMcpBridge().catch((error) => {
-              console.warn('[QingShuManaged] Failed to refresh MCP bridge after catalog sync:', error);
-            });
-          } else {
-            void syncOpenClawConfig({
-              reason: 'qingshu-managed-catalog-changed',
-              restartGatewayIfRunning: true,
-            }).catch((error) => {
-              console.warn('[QingShuManaged] Failed to sync OpenClaw config after catalog sync:', error);
-            });
-          }
+          refreshQingShuManagedMcpRuntimeConfig('qingshu-managed-catalog-changed');
         },
       });
       console.log('[QingShuManaged] Initialized managed catalog service');
@@ -3435,12 +3397,29 @@ if (!gotTheLock) {
     return qingShuManagedCatalogService;
   };
 
+  const syncQingShuManagedCatalogAndOpenClaw = async (
+    reason: string,
+  ): Promise<{ success: boolean; snapshot?: unknown; error?: string }> => {
+    const syncResult = await getQingShuManagedCatalogService().syncCatalog();
+    if (!syncResult.success) {
+      console.warn(`[QingShuManaged] failed to sync managed catalog for "${reason}":`, syncResult.error);
+    }
+    const openClawResult = await syncOpenClawConfig({
+      reason,
+      restartGatewayIfRunning: false,
+    });
+    if (!openClawResult.success) {
+      console.warn(`[QingShuManaged] failed to sync OpenClaw config for "${reason}":`, openClawResult.error);
+    }
+    return syncResult;
+  };
+
   ipcMain.handle('auth:getBackend', async () => {
     return getCurrentAuthAdapter().getBackend();
   });
 
   ipcMain.handle('qingshuManaged:syncCatalog', async () => {
-    return getQingShuManagedCatalogService().syncCatalog();
+    return syncQingShuManagedCatalogAndOpenClaw('qingshu-managed-catalog-sync');
   });
 
   ipcMain.handle('qingshuManaged:getCatalog', async () => {
@@ -3828,8 +3807,7 @@ if (!gotTheLock) {
     try {
       getMcpStore().createServer(data);
       const servers = getMcpStore().listServers();
-      // Trigger async MCP bridge refresh (don't await — let UI show DB result immediately)
-      refreshMcpBridge().catch(err => console.error('[McpBridge] background refresh error:', err));
+      refreshMcpRuntimeConfig('mcp-server-created');
       return { success: true, servers };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Failed to create MCP server' };
@@ -3840,7 +3818,7 @@ if (!gotTheLock) {
     try {
       getMcpStore().updateServer(id, data);
       const servers = getMcpStore().listServers();
-      refreshMcpBridge().catch(err => console.error('[McpBridge] background refresh error:', err));
+      refreshMcpRuntimeConfig('mcp-server-updated');
       return { success: true, servers };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Failed to update MCP server' };
@@ -3851,7 +3829,7 @@ if (!gotTheLock) {
     try {
       getMcpStore().deleteServer(id);
       const servers = getMcpStore().listServers();
-      refreshMcpBridge().catch(err => console.error('[McpBridge] background refresh error:', err));
+      refreshMcpRuntimeConfig('mcp-server-deleted');
       return { success: true, servers };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Failed to delete MCP server' };
@@ -3862,7 +3840,7 @@ if (!gotTheLock) {
     try {
       getMcpStore().setEnabled(options.id, options.enabled);
       const servers = getMcpStore().listServers();
-      refreshMcpBridge().catch(err => console.error('[McpBridge] background refresh error:', err));
+      refreshMcpRuntimeConfig('mcp-server-toggled');
       return { success: true, servers };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Failed to update MCP server' };
@@ -3903,13 +3881,70 @@ if (!gotTheLock) {
     }
   });
 
-  // Explicit bridge refresh — renderer can await this for loading state
-  ipcMain.handle('mcp:refreshBridge', async () => {
+  ipcMain.handle('plugins:list', async () => {
     try {
-      const result = await refreshMcpBridge();
-      return { success: true, tools: result.tools, error: result.error };
+      const plugins = await getPluginManager().listPlugins();
+      return { success: true, plugins };
     } catch (error) {
-      return { success: false, tools: 0, error: error instanceof Error ? error.message : 'Failed to refresh MCP bridge' };
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to list plugins' };
+    }
+  });
+
+  ipcMain.handle('plugins:install', async (event, params: PluginInstallParams) => {
+    try {
+      const result = await getPluginManager().installPlugin(params, (line) => {
+        event.sender.send('plugins:installLog', line);
+      });
+      if (result.ok) {
+        void syncOpenClawConfig({ reason: 'plugin-installed', restartGatewayIfRunning: false });
+      }
+      return result;
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : 'Failed to install plugin' };
+    }
+  });
+
+  ipcMain.handle('plugins:uninstall', async (_event, pluginId: string) => {
+    try {
+      const result = await getPluginManager().uninstallPlugin(pluginId);
+      if (result.ok) {
+        void syncOpenClawConfig({ reason: 'plugin-uninstalled', restartGatewayIfRunning: false });
+      }
+      return result;
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : 'Failed to uninstall plugin' };
+    }
+  });
+
+  ipcMain.handle('plugins:setEnabled', async (_event, pluginId: string, enabled: boolean) => {
+    try {
+      getPluginManager().setPluginEnabled(pluginId, enabled);
+      await syncOpenClawConfig({ reason: 'plugin-enabled-updated', restartGatewayIfRunning: false });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : 'Failed to update plugin state' };
+    }
+  });
+
+  ipcMain.handle('plugins:getConfigSchema', async (_event, pluginId: string) => {
+    try {
+      return {
+        success: true,
+        schema: getPluginManager().getPluginConfigSchema(pluginId),
+        config: getPluginManager().getPluginConfig(pluginId),
+      };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to load plugin config schema' };
+    }
+  });
+
+  ipcMain.handle('plugins:saveConfig', async (_event, pluginId: string, config: Record<string, unknown>) => {
+    try {
+      getPluginManager().savePluginConfig(pluginId, config);
+      await syncOpenClawConfig({ reason: 'plugin-config-saved', restartGatewayIfRunning: false });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : 'Failed to save plugin config' };
     }
   });
 
@@ -3925,14 +3960,6 @@ if (!gotTheLock) {
     modelOverride?: string;
   }) => {
     try {
-      const denied = resolveCoworkManagedCapabilityDeniedResult({
-        agentId: options.agentId || 'main',
-        skillIds: options.activeSkillIds,
-      });
-      if (denied) {
-        return denied;
-      }
-
       const activeEngine = resolveCoworkAgentEngine();
       if (activeEngine === 'openclaw') {
         const engineStatus = await ensureOpenClawRunningForCowork();
@@ -3943,10 +3970,22 @@ if (!gotTheLock) {
 
       const coworkStoreInstance = getCoworkStore();
       const config = coworkStoreInstance.getConfig();
-      const systemPrompt = mergeCoworkSystemPrompt(
-        activeEngine,
-        options.systemPrompt ?? config.systemPrompt,
-      );
+      const sessionAgentContext = buildCoworkSessionAgentContext({
+        engine: activeEngine,
+        agentId: options.agentId,
+        systemPrompt: options.systemPrompt ?? config.systemPrompt,
+        skillIds: options.activeSkillIds,
+      });
+      const systemPrompt = sessionAgentContext.systemPrompt;
+      const sessionSkillIds = sessionAgentContext.skillIds;
+      const denied = resolveCoworkManagedCapabilityDeniedResult({
+        agentId: options.agentId || 'main',
+        skillIds: sessionSkillIds,
+      });
+      if (denied) {
+        return denied;
+      }
+
       const selectedWorkspaceRoot = resolveSessionWorkingDirectory({
         cwd: options.cwd,
         agentId: options.agentId,
@@ -3969,7 +4008,7 @@ if (!gotTheLock) {
         taskWorkingDirectory,
         systemPrompt,
         config.executionMode || 'local',
-        options.activeSkillIds || [],
+        sessionSkillIds,
         options.agentId || 'main',
         options.modelOverride || ''
       );
@@ -3980,8 +4019,8 @@ if (!gotTheLock) {
 
       // Build metadata, include imageAttachments if present
       const messageMetadata: Record<string, unknown> = {};
-      if (options.activeSkillIds?.length) {
-        messageMetadata.skillIds = options.activeSkillIds;
+      if (sessionSkillIds.length) {
+        messageMetadata.skillIds = sessionSkillIds;
       }
       if (options.imageAttachments?.length) {
         messageMetadata.imageAttachments = options.imageAttachments;
@@ -4002,7 +4041,7 @@ if (!gotTheLock) {
       runtime.startSession(session.id, options.prompt, {
         skipInitialUserMessage: true,
         systemPrompt,
-        skillIds: options.activeSkillIds,
+        skillIds: sessionSkillIds,
         workspaceRoot: selectedWorkspaceRoot,
         confirmationMode: 'modal',
         imageAttachments: options.imageAttachments,
@@ -4050,14 +4089,6 @@ if (!gotTheLock) {
   }) => {
     try {
       const existingSession = getCoworkStore().getSession(options.sessionId);
-      const denied = resolveCoworkManagedCapabilityDeniedResult({
-        agentId: existingSession?.agentId || 'main',
-        skillIds: options.activeSkillIds,
-      });
-      if (denied) {
-        return denied;
-      }
-
       const activeEngine = resolveCoworkAgentEngine();
       if (activeEngine === 'openclaw') {
         const engineStatus = await ensureOpenClawRunningForCowork();
@@ -4067,12 +4098,23 @@ if (!gotTheLock) {
       }
 
       const runtime = getCoworkEngineRouter();
-      runtime.continueSession(options.sessionId, options.prompt, {
-        systemPrompt: mergeCoworkSystemPrompt(
-          activeEngine,
-          options.systemPrompt ?? existingSession?.systemPrompt,
-        ),
+      const sessionAgentContext = buildCoworkSessionAgentContext({
+        engine: activeEngine,
+        agentId: existingSession?.agentId,
+        systemPrompt: options.systemPrompt ?? existingSession?.systemPrompt,
         skillIds: options.activeSkillIds,
+      });
+      const denied = resolveCoworkManagedCapabilityDeniedResult({
+        agentId: existingSession?.agentId || 'main',
+        skillIds: sessionAgentContext.skillIds,
+      });
+      if (denied) {
+        return denied;
+      }
+
+      runtime.continueSession(options.sessionId, options.prompt, {
+        systemPrompt: sessionAgentContext.systemPrompt,
+        skillIds: sessionAgentContext.skillIds,
         imageAttachments: options.imageAttachments,
       }).catch(error => {
         console.error('[Cowork] continue error:', error);
@@ -4283,7 +4325,7 @@ if (!gotTheLock) {
   ipcMain.handle('agents:list', async (_event, options?: { refreshManagedCatalog?: boolean }) => {
     try {
       if (options?.refreshManagedCatalog !== false && hasQingShuAuthSession()) {
-        const syncResult = await getQingShuManagedCatalogService().syncCatalog();
+        const syncResult = await syncQingShuManagedCatalogAndOpenClaw('agents-list-refresh-managed-catalog');
         if (!syncResult.success) {
           console.warn('[QingShuManaged] Failed to refresh managed catalog before listing agents:', syncResult.error);
         }
@@ -6195,18 +6237,12 @@ end tell'`, { timeout: 5000 });
   // Shell handlers - 打开文件/文件夹
   ipcMain.handle('shell:openPath', async (_event, filePath: string) => {
     try {
-      if (typeof filePath !== 'string' || !filePath.trim()) {
-        return { success: false, error: 'Missing file path' };
-      }
-      const normalizedPath = resolveShellFilePath(filePath);
-      if (!fs.existsSync(normalizedPath)) {
-        console.warn('[Shell] open path target does not exist:', normalizedPath);
-        return { success: false, error: `Path does not exist: ${normalizedPath}` };
-      }
+      const resolved = resolveExistingShellFilePath(filePath);
+      if (resolved.ok === false) return { success: false, error: resolved.error };
+      const normalizedPath = resolved.path;
       const result = await shell.openPath(normalizedPath);
       if (result) {
         console.warn('[Shell] open path failed:', normalizedPath, result);
-        // 如果返回非空字符串，表示打开失败
         return { success: false, error: `${result}: ${normalizedPath}` };
       }
       return { success: true };
@@ -6217,15 +6253,9 @@ end tell'`, { timeout: 5000 });
 
   ipcMain.handle('shell:showItemInFolder', async (_event, filePath: string) => {
     try {
-      if (typeof filePath !== 'string' || !filePath.trim()) {
-        return { success: false, error: 'Missing file path' };
-      }
-      const normalizedPath = resolveShellFilePath(filePath);
-      if (!fs.existsSync(normalizedPath)) {
-        console.warn('[Shell] show item target does not exist:', normalizedPath);
-        return { success: false, error: `Path does not exist: ${normalizedPath}` };
-      }
-      shell.showItemInFolder(normalizedPath);
+      const resolved = resolveExistingShellFilePath(filePath);
+      if (resolved.ok === false) return { success: false, error: resolved.error };
+      shell.showItemInFolder(resolved.path);
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -6234,7 +6264,36 @@ end tell'`, { timeout: 5000 });
 
   ipcMain.handle('shell:openExternal', async (_event, url: string) => {
     try {
+      if (typeof url === 'string' && isPreviewServerUrl(url)) {
+        await shell.openExternal(url);
+        return { success: true };
+      }
       await shell.openExternal(url);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  ipcMain.handle('shell:getAppsForFile', async (_event, filePath: string) => {
+    try {
+      const resolved = resolveExistingShellFilePath(filePath);
+      if (resolved.ok === false) return { success: false, apps: [], error: resolved.error };
+      const apps = await getAppsForFile(resolved.path);
+      return { success: true, apps };
+    } catch (error) {
+      return { success: false, apps: [], error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  ipcMain.handle('shell:openPathWithApp', async (_event, filePath: string, appPath: string) => {
+    try {
+      const resolved = resolveExistingShellFilePath(filePath);
+      if (resolved.ok === false) return { success: false, error: resolved.error };
+      if (typeof appPath !== 'string' || !appPath.trim()) {
+        return { success: false, error: 'Missing app path' };
+      }
+      await openFileWithApp(resolved.path, appPath);
       return { success: true };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -6314,6 +6373,33 @@ end tell'`, { timeout: 5000 });
     if (entry.debounceTimer) clearTimeout(entry.debounceTimer);
     entry.watcher.close();
     artifactFileWatchers.delete(normalizedPath);
+  });
+
+  ipcMain.handle(ArtifactPreviewIpc.CreateSession, async (_event, filePath: string) => {
+    try {
+      const resolved = resolveExistingShellFilePath(filePath);
+      if (resolved.ok === false) return { success: false, error: resolved.error };
+      const preview = await createPreviewSession(resolved.path);
+      return { success: true, ...preview };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  ipcMain.handle(ArtifactPreviewIpc.CreateOfficeSession, async (_event, filePath: string) => {
+    try {
+      const resolved = resolveExistingShellFilePath(filePath);
+      if (resolved.ok === false) return { success: false, error: resolved.error };
+      const preview = await createOfficePreviewSession(resolved.path);
+      return { success: true, ...preview };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  ipcMain.handle(ArtifactPreviewIpc.DestroySession, (_event, sessionId: string) => {
+    destroyPreviewSession(sessionId);
+    return { success: true };
   });
 
   // App update state, download & install
@@ -6913,10 +6999,16 @@ end tell'`, { timeout: 5000 });
 
     if (mcpBridgeServer) {
       await mcpBridgeServer.stop().catch((error) => {
-        console.error('[McpBridge] Failed to stop bridge server on quit:', error);
+      console.error('[McpBridge] Failed to stop bridge server on quit:', error);
+    });
+    mcpBridgeServer = null;
+  }
+
+    if (qingShuManagedMcpServer) {
+      await qingShuManagedMcpServer.stop().catch((error) => {
+        console.error('[QingShuManagedMcp] Failed to stop native MCP server on quit:', error);
       });
-      mcpBridgeServer = null;
-      mcpBridgeStartPromise = null;
+      qingShuManagedMcpServer = null;
     }
 
     // Stop the cron job polling
@@ -7213,6 +7305,10 @@ end tell'`, { timeout: 5000 });
       console.error('Failed to start OpenAI compatibility proxy:', error);
     });
 
+    if (hasQingShuAuthSession()) {
+      await syncQingShuManagedCatalogAndOpenClaw('startup-qingshu-managed-catalog');
+    }
+
     const startupSync = await syncOpenClawConfig({
       reason: 'startup',
       restartGatewayIfRunning: false,
@@ -7427,5 +7523,9 @@ end tell'`, { timeout: 5000 });
     if (process.platform !== 'darwin') {
       app.quit();
     }
+  });
+
+  app.on('before-quit', () => {
+    void stopHtmlPreviewServer();
   });
 } 

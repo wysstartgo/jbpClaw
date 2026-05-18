@@ -91,6 +91,8 @@ export default defineConfig({
     },
     watch: {
       usePolling: false,
+      // Ignore vendor/ to avoid dev reloads while OpenClaw plugins are installed.
+      ignored: ['**/vendor/**'],
     },
   },
   optimizeDeps: {

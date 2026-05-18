@@ -334,6 +334,15 @@ function shouldAutoDeleteMemoryText(text: string): boolean {
     || isQuestionLikeMemoryText(normalized);
 }
 
+function hasTableColumn(db: Database.Database, tableName: string, columnName: string): boolean {
+  try {
+    const columns = db.pragma(`table_info(${tableName})`) as Array<{ name: string }>;
+    return columns.some(column => column.name === columnName);
+  } catch {
+    return false;
+  }
+}
+
 // Types mirroring src/types/cowork.ts for main process use
 export type CoworkSessionStatus = 'idle' | 'running' | 'completed' | 'error';
 export type CoworkMessageType = 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'system';
@@ -341,6 +350,7 @@ export type CoworkExecutionMode = 'auto' | 'local' | 'sandbox';
 export type CoworkAgentEngine = 'openclaw' | 'yd_cowork';
 
 export type AgentSource = 'custom' | 'preset' | 'managed';
+export type PluginSource = 'npm' | 'clawhub' | 'git' | 'local';
 
 export interface Agent {
   id: string;
@@ -367,6 +377,17 @@ export interface Agent {
   presetId: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface UserInstalledPlugin {
+  pluginId: string;
+  source: PluginSource;
+  spec: string;
+  registry?: string;
+  version?: string;
+  enabled: boolean;
+  installedAt: number;
+  config?: Record<string, unknown>;
 }
 
 export interface CreateAgentRequest {
@@ -717,8 +738,18 @@ export class CoworkStore {
       updated_at: number;
     }
 
+    const parentSessionExpr = hasTableColumn(this.db, 'cowork_sessions', 'parent_session_id')
+      ? 'parent_session_id'
+      : 'NULL AS parent_session_id';
+    const forkedFromMessageExpr = hasTableColumn(this.db, 'cowork_sessions', 'forked_from_message_id')
+      ? 'forked_from_message_id'
+      : 'NULL AS forked_from_message_id';
+    const forkedAtExpr = hasTableColumn(this.db, 'cowork_sessions', 'forked_at')
+      ? 'forked_at'
+      : 'NULL AS forked_at';
+
     const row = this.getOne<SessionRow>(`
-      SELECT id, title, claude_session_id, status, pinned, parent_session_id, forked_from_message_id, forked_at, cwd, system_prompt, model_override, execution_mode, active_skill_ids, agent_id, created_at, updated_at
+      SELECT id, title, claude_session_id, status, pinned, ${parentSessionExpr}, ${forkedFromMessageExpr}, ${forkedAtExpr}, cwd, system_prompt, model_override, execution_mode, active_skill_ids, agent_id, created_at, updated_at
       FROM cowork_sessions
       WHERE id = ?
     `, [id]);
@@ -855,11 +886,17 @@ export class CoworkStore {
 
   updateSession(
     id: string,
-    updates: Partial<Pick<CoworkSession, 'title' | 'claudeSessionId' | 'status' | 'cwd' | 'systemPrompt' | 'modelOverride' | 'executionMode'>>
+    updates: Partial<Pick<CoworkSession, 'title' | 'claudeSessionId' | 'status' | 'cwd' | 'systemPrompt' | 'modelOverride' | 'executionMode'>>,
+    options: { touchUpdatedAt?: boolean } = {},
   ): void {
     const now = Date.now();
-    const setClauses: string[] = ['updated_at = ?'];
-    const values: (string | number | null)[] = [now];
+    const setClauses: string[] = [];
+    const values: (string | number | null)[] = [];
+
+    if (options.touchUpdatedAt !== false) {
+      setClauses.push('updated_at = ?');
+      values.push(now);
+    }
 
     if (updates.title !== undefined) {
       setClauses.push('title = ?');
@@ -888,6 +925,10 @@ export class CoworkStore {
     if (updates.executionMode !== undefined) {
       setClauses.push('execution_mode = ?');
       values.push(updates.executionMode);
+    }
+
+    if (setClauses.length === 0) {
+      return;
     }
 
     values.push(id);
@@ -2351,6 +2392,110 @@ export class CoworkStore {
     }
     this.saveDb();
     return deleted;
+  }
+
+  listUserPlugins(): UserInstalledPlugin[] {
+    const rows = this.getAll<{
+      plugin_id: string;
+      source: string;
+      spec: string;
+      registry: string | null;
+      version: string | null;
+      enabled: number;
+      installed_at: number;
+      config: string | null;
+    }>('SELECT * FROM user_plugins ORDER BY installed_at ASC');
+
+    return rows.map(row => ({
+      pluginId: row.plugin_id,
+      source: row.source as PluginSource,
+      spec: row.spec,
+      registry: row.registry || undefined,
+      version: row.version || undefined,
+      enabled: Boolean(row.enabled),
+      installedAt: row.installed_at,
+      config: row.config ? JSON.parse(row.config) as Record<string, unknown> : undefined,
+    }));
+  }
+
+  addUserPlugin(plugin: UserInstalledPlugin): void {
+    this.db.prepare(
+      `INSERT INTO user_plugins (plugin_id, source, spec, registry, version, enabled, installed_at, config)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(plugin_id) DO UPDATE SET
+         source = excluded.source,
+         spec = excluded.spec,
+         registry = excluded.registry,
+         version = excluded.version,
+         enabled = excluded.enabled,
+         installed_at = excluded.installed_at,
+         config = COALESCE(excluded.config, user_plugins.config)`,
+    ).run(
+      plugin.pluginId,
+      plugin.source,
+      plugin.spec,
+      plugin.registry || null,
+      plugin.version || null,
+      plugin.enabled ? 1 : 0,
+      plugin.installedAt,
+      plugin.config ? JSON.stringify(plugin.config) : null,
+    );
+    this.saveDb();
+  }
+
+  removeUserPlugin(pluginId: string): void {
+    this.db.prepare('DELETE FROM user_plugins WHERE plugin_id = ?').run(pluginId);
+    this.saveDb();
+  }
+
+  setUserPluginEnabled(pluginId: string, enabled: boolean): void {
+    this.db.prepare('UPDATE user_plugins SET enabled = ? WHERE plugin_id = ?')
+      .run(enabled ? 1 : 0, pluginId);
+    this.saveDb();
+  }
+
+  getUserPluginConfig(pluginId: string): Record<string, unknown> | null {
+    const row = this.getOne<{ config: string | null }>(
+      'SELECT config FROM user_plugins WHERE plugin_id = ?',
+      [pluginId],
+    );
+    if (!row?.config) return null;
+    try {
+      return JSON.parse(row.config) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  setUserPluginConfig(pluginId: string, config: Record<string, unknown>): void {
+    this.db.prepare('UPDATE user_plugins SET config = ? WHERE plugin_id = ?')
+      .run(JSON.stringify(config), pluginId);
+    this.saveDb();
+  }
+
+  getUserPlugin(pluginId: string): UserInstalledPlugin | undefined {
+    const row = this.getOne<{
+      plugin_id: string;
+      source: string;
+      spec: string;
+      registry: string | null;
+      version: string | null;
+      enabled: number;
+      installed_at: number;
+      config: string | null;
+    }>('SELECT * FROM user_plugins WHERE plugin_id = ?', [pluginId]);
+
+    if (!row) return undefined;
+    return {
+      pluginId: row.plugin_id,
+      source: row.source as PluginSource,
+      spec: row.spec,
+      registry: row.registry || undefined,
+      version: row.version || undefined,
+      enabled: Boolean(row.enabled),
+      installedAt: row.installed_at,
+      config: row.config ? JSON.parse(row.config) as Record<string, unknown> : undefined,
+    };
   }
 
   private mapAgentRow(row: {

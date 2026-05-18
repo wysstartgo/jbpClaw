@@ -1,5 +1,6 @@
 import { describe,expect, test } from 'vitest';
 
+import { buildOpenClawMcpServers } from './openclawConfigSync';
 import {
   OpenClawApi,
   OpenClawProviderId,
@@ -87,6 +88,57 @@ describe('env var stability on model switch', () => {
   });
 });
 
+describe('buildOpenClawMcpServers', () => {
+  test('maps stdio, sse and http servers to OpenClaw native MCP config', () => {
+    expect(buildOpenClawMcpServers([
+      {
+        name: 'stdio-server',
+        transportType: 'stdio',
+        command: '/usr/local/bin/node',
+        args: ['server.js'],
+        env: { TOKEN: 'secret' },
+      },
+      {
+        name: 'sse-server',
+        transportType: 'sse',
+        url: 'https://mcp.example.com/sse',
+        headers: { Authorization: 'Bearer token' },
+      },
+      {
+        name: 'http-server',
+        transportType: 'http',
+        url: 'https://mcp.example.com/mcp',
+        headers: { 'X-Api-Key': 'secret' },
+      },
+    ])).toEqual({
+      'stdio-server': {
+        command: '/usr/local/bin/node',
+        args: ['server.js'],
+        env: { TOKEN: 'secret' },
+      },
+      'sse-server': {
+        url: 'https://mcp.example.com/sse',
+        headers: { authorization: 'Bearer token' },
+      },
+      'http-server': {
+        url: 'https://mcp.example.com/mcp',
+        headers: { 'x-api-key': 'secret' },
+        transport: 'streamable-http',
+      },
+    });
+  });
+
+  test('omits empty optional fields', () => {
+    expect(buildOpenClawMcpServers([
+      { name: 'empty-stdio', transportType: 'stdio' },
+      { name: 'empty-sse', transportType: 'sse' },
+    ])).toEqual({
+      'empty-stdio': {},
+      'empty-sse': {},
+    });
+  });
+});
+
 // ═══════════════════════════════════════════════════════
 // Provider Descriptor Registry Tests
 //
@@ -114,12 +166,27 @@ type ProviderDescriptor = {
   resolveApi: (ctx: { apiType: 'anthropic' | 'openai' | undefined; baseURL: string }) => OpenClawProviderApi;
   normalizeBaseUrl: (rawBaseUrl: string) => string;
   resolveSessionModelId?: (modelId: string) => string;
+  resolveModelReasoning?: (modelId: string, codingPlanEnabled: boolean) => boolean | undefined;
   modelDefaults?: Partial<{
     reasoning: boolean;
     cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
     contextWindow: number;
     maxTokens: number;
   }>;
+};
+
+const DEEPSEEK_REASONING_MODEL_IDS = new Set(['deepseek-reasoner', 'deepseek-r1']);
+const DEEPSEEK_V4_MODEL_PATTERN = /^deepseek-v4(?:[-_.]|$)/;
+
+const resolveDeepSeekModelReasoning = (modelId: string): boolean | undefined => {
+  const normalized = modelId.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  if (DEEPSEEK_REASONING_MODEL_IDS.has(normalized) || DEEPSEEK_V4_MODEL_PATTERN.test(normalized)) {
+    return true;
+  }
+  return undefined;
 };
 
 const stripChatCompletionsSuffix = (rawBaseUrl: string): string => {
@@ -180,6 +247,7 @@ const PROVIDER_REGISTRY: Record<string, ProviderDescriptor> = {
     providerId: OpenClawProviderId.DeepSeek,
     resolveApi: ({ apiType }) => mapApiTypeToOpenClawApi(apiType),
     normalizeBaseUrl: stripChatCompletionsSuffix,
+    resolveModelReasoning: resolveDeepSeekModelReasoning,
   },
   [ProviderName.Qwen]: {
     providerId: OpenClawProviderId.Qwen,
@@ -220,6 +288,7 @@ const PROVIDER_REGISTRY: Record<string, ProviderDescriptor> = {
     providerId: OpenClawProviderId.Xiaomi,
     resolveApi: ({ apiType }) => mapApiTypeToOpenClawApi(apiType),
     normalizeBaseUrl: stripChatCompletionsSuffix,
+    resolveModelReasoning: () => true,
   },
   [ProviderName.OpenRouter]: {
     providerId: OpenClawProviderId.OpenRouter,
@@ -317,6 +386,20 @@ describe('resolveDescriptor', () => {
     expect(d.providerId).toBe(OpenClawProviderId.DeepSeek);
     expect(d.resolveApi({ apiType: 'openai', baseURL: '' })).toBe(OpenClawApi.OpenAICompletions);
     expect(d.resolveApi({ apiType: 'anthropic', baseURL: '' })).toBe(OpenClawApi.AnthropicMessages);
+  });
+
+  test('deepseek marks reasoning models but leaves chat models unspecified', () => {
+    const d = resolveDescriptor(ProviderName.DeepSeek, false);
+    expect(d.resolveModelReasoning?.('deepseek-reasoner', false)).toBe(true);
+    expect(d.resolveModelReasoning?.('deepseek-v4-pro', false)).toBe(true);
+    expect(d.resolveModelReasoning?.('deepseek-v4_flash', false)).toBe(true);
+    expect(d.resolveModelReasoning?.('deepseek-chat', false)).toBeUndefined();
+  });
+
+  test('xiaomi marks every model as reasoning-capable', () => {
+    const d = resolveDescriptor(ProviderName.Xiaomi, false);
+    expect(d.resolveModelReasoning?.('mimo-v2.5-pro', false)).toBe(true);
+    expect(d.resolveModelReasoning?.('mimo-custom-model', false)).toBe(true);
   });
 
   test('youdaozhiyun always uses openai-completions', () => {
@@ -454,5 +537,34 @@ describe('buildProviderSelection compatibility', () => {
 
     expect(selection.providerConfig.api).toBe(OpenClawApi.OpenAICompletions);
     expect(selection.providerConfig.baseUrl).toBe('https://coding.dashscope.aliyuncs.com/v1');
+  });
+
+  test('marks DeepSeek reasoning models and all Xiaomi models as reasoning-capable', async () => {
+    const { buildProviderSelection } = await import('./openclawConfigSync');
+
+    const deepseekSelection = buildProviderSelection({
+      apiKey: 'sk-test',
+      baseURL: 'https://api.deepseek.com',
+      modelId: 'deepseek-v4-pro',
+      apiType: 'openai',
+      providerName: ProviderName.DeepSeek,
+      supportsImage: false,
+      modelName: 'DeepSeek V4 Pro',
+    });
+    expect(deepseekSelection.providerConfig.api).toBe(OpenClawApi.OpenAICompletions);
+    expect(deepseekSelection.providerConfig.models[0].reasoning).toBe(true);
+
+    const xiaomiSelection = buildProviderSelection({
+      apiKey: 'sk-test',
+      baseURL: 'https://api.xiaomimimo.com/v1/chat/completions',
+      modelId: 'mimo-any-model',
+      apiType: 'openai',
+      providerName: ProviderName.Xiaomi,
+      supportsImage: false,
+      modelName: 'MiMo Any Model',
+    });
+    expect(xiaomiSelection.providerConfig.baseUrl).toBe('https://api.xiaomimimo.com/v1');
+    expect(xiaomiSelection.providerConfig.api).toBe(OpenClawApi.OpenAICompletions);
+    expect(xiaomiSelection.providerConfig.models[0].reasoning).toBe(true);
   });
 });

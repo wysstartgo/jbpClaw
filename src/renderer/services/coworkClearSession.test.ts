@@ -25,6 +25,13 @@ const makeSession = (): CoworkSession => ({
 });
 
 beforeEach(() => {
+  (globalThis as { window?: unknown }).window = {
+    electron: {
+      pet: {
+        setRuntimeProjection: () => Promise.resolve({ success: true }),
+      },
+    },
+  };
   store.dispatch(setAgents([]));
   store.dispatch(setCurrentAgentId('main'));
   store.dispatch(setCurrentSession(null));
@@ -37,6 +44,8 @@ describe('coworkService.clearSession', () => {
       id: 'agent-1',
       name: 'Agent 1',
       description: '',
+      systemPrompt: '',
+      identity: '',
       icon: '',
       model: '',
       workingDirectory: '',
@@ -70,6 +79,8 @@ describe('coworkService.clearSession', () => {
       id: 'agent-1',
       name: 'Agent 1',
       description: '',
+      systemPrompt: '',
+      identity: '',
       icon: '',
       model: '',
       workingDirectory: '',

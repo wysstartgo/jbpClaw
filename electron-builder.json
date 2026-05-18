@@ -45,6 +45,13 @@
   ],
   "extraResources": [
     {
+      "from": ".keyfrom-build",
+      "to": "keyfrom",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
       "from": "resources/tray",
       "to": "tray",
       "filter": [

@@ -4,7 +4,7 @@ import path from 'path';
 
 import { buildScheduledTaskEnginePrompt } from '../../scheduledTask/enginePrompt';
 import { AuthType, OpenClawApi as OpenClawApiConst, OpenClawProviderId, ProviderName, ProviderRegistry } from '../../shared/providers';
-import type { Agent,CoworkConfig, CoworkExecutionMode } from '../coworkStore';
+import type { Agent,CoworkConfig, CoworkExecutionMode, UserInstalledPlugin } from '../coworkStore';
 import type { DiscordOpenClawConfig, EmailMultiInstanceConfig, IMSettings,TelegramOpenClawConfig } from '../im/types';
 import type { DingTalkInstanceConfig, FeishuInstanceConfig, NeteaseBeeChanConfig,NimConfig, NimInstanceConfig, PopoInstanceConfig, PopoOpenClawConfig, QQInstanceConfig, WecomInstanceConfig, WeixinOpenClawConfig } from '../im/types';
 import {
@@ -17,7 +17,6 @@ import {
 } from '../qingshuModules';
 import { getAllServerModelMetadata,resolveAllEnabledProviderConfigs, resolveAllProviderApiKeys, resolveRawApiConfig } from './claudeSettings';
 import { getCoworkOpenAICompatProxyBaseURL, getCoworkOpenAICompatProxyToken } from './coworkOpenAICompatProxy';
-import type { McpToolManifestEntry } from './mcpServerManager';
 import { readOpenAICodexAuthFile } from './openaiCodexAuth';
 import {
   buildAgentEntry,
@@ -37,13 +36,6 @@ import {
 import { getMainAgentWorkspacePath } from './openclawMemoryFile';
 import { getOpenClawTokenProxyPort } from './openclawTokenProxy';
 import { isSystemProxyEnabled } from './systemProxy';
-
-export type McpBridgeConfig = {
-  callbackUrl: string;
-  askUserCallbackUrl: string;
-  secret: string;
-  tools: McpToolManifestEntry[];
-};
 
 const mapExecutionModeToSandboxMode = (mode: CoworkExecutionMode): 'off' | 'non-main' | 'all' => {
   switch (mode) {
@@ -561,12 +553,27 @@ type ProviderDescriptor = {
   normalizeBaseUrl: (rawBaseUrl: string) => string;
   resolveApiKey?: (ctx: { apiKey: string; providerName: string }) => string | undefined;
   resolveSessionModelId?: (modelId: string) => string;
+  resolveModelReasoning?: (modelId: string, codingPlanEnabled: boolean) => boolean | undefined;
   modelDefaults?: Partial<{
     reasoning: boolean;
     cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
     contextWindow: number;
     maxTokens: number;
   }>;
+};
+
+const DEEPSEEK_REASONING_MODEL_IDS = new Set(['deepseek-reasoner', 'deepseek-r1']);
+const DEEPSEEK_V4_MODEL_PATTERN = /^deepseek-v4(?:[-_.]|$)/;
+
+const resolveDeepSeekModelReasoning = (modelId: string): boolean | undefined => {
+  const normalized = modelId.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  if (DEEPSEEK_REASONING_MODEL_IDS.has(normalized) || DEEPSEEK_V4_MODEL_PATTERN.test(normalized)) {
+    return true;
+  }
+  return undefined;
 };
 
 const PROVIDER_REGISTRY: Record<string, ProviderDescriptor> = {
@@ -644,6 +651,7 @@ const PROVIDER_REGISTRY: Record<string, ProviderDescriptor> = {
     providerId: OpenClawProviderId.DeepSeek,
     resolveApi: ({ apiType, baseURL }) => mapApiTypeToOpenClawApi(apiType, undefined, baseURL),
     normalizeBaseUrl: stripChatCompletionsSuffix,
+    resolveModelReasoning: resolveDeepSeekModelReasoning,
   },
 
   [ProviderName.Qwen]: {
@@ -692,6 +700,7 @@ const PROVIDER_REGISTRY: Record<string, ProviderDescriptor> = {
     providerId: OpenClawProviderId.Xiaomi,
     resolveApi: ({ apiType, baseURL }) => mapApiTypeToOpenClawApi(apiType, undefined, baseURL),
     normalizeBaseUrl: stripChatCompletionsSuffix,
+    resolveModelReasoning: () => true,
   },
 
   [ProviderName.OpenRouter]: {
@@ -792,11 +801,15 @@ export const buildProviderSelection = (options: {
   );
   const modelInput: string[] = supportsImage ? ['text', 'image'] : ['text'];
 
-  // moonshot reasoning depends on modelId containing 'thinking'
-  const dynamicReasoning =
+  const descriptorReasoning = descriptor.resolveModelReasoning?.(
+    options.modelId,
+    !!options.codingPlanEnabled,
+  );
+  const moonshotReasoning =
     providerName === ProviderName.Moonshot && !options.codingPlanEnabled
       ? options.modelId.includes('thinking')
       : undefined;
+  const reasoning = descriptorReasoning ?? moonshotReasoning ?? descriptor.modelDefaults?.reasoning;
   const auth = options.providerName === ProviderName.Copilot
     || (
       (options.providerName === ProviderName.Minimax || options.providerName === ProviderName.OpenAI)
@@ -829,11 +842,7 @@ export const buildProviderSelection = (options: {
           name: providerModelName,
           api,
           input: modelInput,
-          ...(dynamicReasoning !== undefined
-            ? { reasoning: dynamicReasoning }
-            : descriptor.modelDefaults?.reasoning !== undefined
-              ? { reasoning: descriptor.modelDefaults.reasoning }
-              : {}),
+          ...(reasoning !== undefined ? { reasoning } : {}),
           ...(descriptor.modelDefaults?.cost
             ? { cost: descriptor.modelDefaults.cost }
             : {}),
@@ -853,36 +862,54 @@ const isBundledPluginAvailable = (pluginId: string): boolean => {
   return hasBundledOpenClawExtension(pluginId);
 };
 
-function normalizeMcpToolInputSchemaForOpenAI(schema: unknown): unknown {
-  if (Array.isArray(schema)) {
-    return schema.map(normalizeMcpToolInputSchemaForOpenAI);
-  }
-  if (!schema || typeof schema !== 'object') {
-    return schema;
-  }
-
-  const record = schema as Record<string, unknown>;
-  const normalized: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(record)) {
-    normalized[key] = normalizeMcpToolInputSchemaForOpenAI(value);
-  }
-
-  const schemaType = normalized.type;
-  const isArraySchema = schemaType === 'array'
-    || (Array.isArray(schemaType) && schemaType.includes('array'));
-  if (isArraySchema && normalized.items === undefined) {
-    normalized.items = {};
-  }
-
-  return normalized;
+export interface ResolvedMcpServer {
+  name: string;
+  transportType: 'stdio' | 'sse' | 'http';
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
 }
 
-const normalizeMcpBridgeToolManifestEntry = (
-  tool: McpToolManifestEntry,
-): McpToolManifestEntry => ({
-  ...tool,
-  inputSchema: normalizeMcpToolInputSchemaForOpenAI(tool.inputSchema) as Record<string, unknown>,
-});
+function lowercaseHeaderKeys(headers: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    result[key.toLowerCase()] = value;
+  }
+  return result;
+}
+
+export function buildOpenClawMcpServers(
+  servers: ResolvedMcpServer[],
+): Record<string, Record<string, unknown>> {
+  const result: Record<string, Record<string, unknown>> = {};
+  for (const server of servers) {
+    const entry: Record<string, unknown> = {};
+    switch (server.transportType) {
+      case 'stdio':
+        if (server.command) entry.command = server.command;
+        if (server.args?.length) entry.args = server.args;
+        if (server.env && Object.keys(server.env).length > 0) entry.env = server.env;
+        break;
+      case 'sse':
+        if (server.url) entry.url = server.url;
+        if (server.headers && Object.keys(server.headers).length > 0) {
+          entry.headers = lowercaseHeaderKeys(server.headers);
+        }
+        break;
+      case 'http':
+        if (server.url) entry.url = server.url;
+        if (server.headers && Object.keys(server.headers).length > 0) {
+          entry.headers = lowercaseHeaderKeys(server.headers);
+        }
+        entry.transport = 'streamable-http';
+        break;
+    }
+    result[server.name] = entry;
+  }
+  return result;
+}
 
 const upsertProviderModel = (
   providerConfig: OpenClawProviderSelection['providerConfig'],
@@ -978,7 +1005,6 @@ export type OpenClawConfigSyncResult = {
   configPath: string;
   error?: string;
   agentsMdWarning?: string;
-  mcpBridgeConfigChanged?: boolean;
 };
 
 type OpenClawConfigSyncDeps = {
@@ -998,10 +1024,12 @@ type OpenClawConfigSyncDeps = {
   getWeixinConfig: () => WeixinOpenClawConfig | null;
   getEmailOpenClawConfig?: () => EmailMultiInstanceConfig | null;
   getIMSettings?: () => IMSettings | null;
-  getMcpBridgeConfig?: () => McpBridgeConfig | null;
   getMcpBridgeSecret?: () => string | null;
+  getResolvedMcpServers?: () => ResolvedMcpServer[];
+  getAskUserCallbackUrl?: () => string | null;
   getSkillsList?: () => Array<{ id: string; enabled: boolean }>;
   getAgents?: () => Agent[];
+  getUserPlugins?: () => UserInstalledPlugin[];
   getQingShuEnabledToolBundles?: () => QingShuToolBundleId[];
   getQingShuSharedToolCatalog?: () => QingShuSharedToolCatalog;
 };
@@ -1023,10 +1051,12 @@ export class OpenClawConfigSync {
   private readonly getWeixinConfig: () => WeixinOpenClawConfig | null;
   private readonly getEmailOpenClawConfig?: () => EmailMultiInstanceConfig | null;
   private readonly getIMSettings?: () => IMSettings | null;
-  private readonly getMcpBridgeConfig?: () => McpBridgeConfig | null;
   private readonly getMcpBridgeSecret?: () => string | null;
+  private readonly getResolvedMcpServers?: () => ResolvedMcpServer[];
+  private readonly getAskUserCallbackUrl?: () => string | null;
   private readonly getSkillsList?: () => Array<{ id: string; enabled: boolean }>;
   private readonly getAgents?: () => Agent[];
+  private readonly getUserPlugins: () => UserInstalledPlugin[];
   private readonly getQingShuEnabledToolBundles?: () => QingShuToolBundleId[];
   private readonly getQingShuSharedToolCatalog?: () => QingShuSharedToolCatalog;
 
@@ -1047,10 +1077,12 @@ export class OpenClawConfigSync {
     this.getWeixinConfig = deps.getWeixinConfig;
     this.getEmailOpenClawConfig = deps.getEmailOpenClawConfig;
     this.getIMSettings = deps.getIMSettings;
-    this.getMcpBridgeConfig = deps.getMcpBridgeConfig;
     this.getMcpBridgeSecret = deps.getMcpBridgeSecret;
+    this.getResolvedMcpServers = deps.getResolvedMcpServers;
+    this.getAskUserCallbackUrl = deps.getAskUserCallbackUrl;
     this.getSkillsList = deps.getSkillsList;
     this.getAgents = deps.getAgents;
+    this.getUserPlugins = deps.getUserPlugins ?? (() => []);
     this.getQingShuEnabledToolBundles = deps.getQingShuEnabledToolBundles;
     this.getQingShuSharedToolCatalog = deps.getQingShuSharedToolCatalog;
   }
@@ -1225,7 +1257,6 @@ export class OpenClawConfigSync {
     ensureDir(mainWorkspacePath);
     const memorySearchConfig = buildMemorySearchConfig(coworkConfig);
 
-    const hasMcpBridgePlugin = isBundledPluginAvailable('mcp-bridge');
     const hasAskUserPlugin = isBundledPluginAvailable('ask-user-question');
     const hasQwenProvider = Object.values(allProvidersMap).some((provider) => (
       isDashScopeUrl(provider.baseUrl)
@@ -1326,11 +1357,14 @@ export class OpenClawConfigSync {
       neteaseBeePluginId,
       weixinPluginId,
       emailPluginId,
-      hasMcpBridgePlugin ? 'mcp-bridge' : null,
       hasAskUserPlugin ? 'ask-user-question' : null,
       qwenPortalAuthPluginId,
     ].filter((id): id is string => Boolean(id));
-    const externalPluginLoadPaths = resolveExternalPluginLoadPaths(enabledExternalPluginIds);
+    const enabledUserPlugins = this.getUserPlugins()
+      .filter(plugin => plugin.enabled && plugin.pluginId.trim().length > 0);
+    const enabledUserPluginIds = enabledUserPlugins.map(plugin => plugin.pluginId.trim());
+    const allEnabledPluginIds = [...enabledExternalPluginIds, ...enabledUserPluginIds];
+    const externalPluginLoadPaths = resolveExternalPluginLoadPaths(allEnabledPluginIds);
     const existingGatewayConfig = this.getExistingGatewayConfig(configPath);
     const existingPluginEntries = this.getExistingPluginEntries(configPath);
 
@@ -1364,6 +1398,12 @@ export class OpenClawConfigSync {
           // 当前打包的 OpenClaw schema 不接受 agents.defaults.cwd，避免网关启动前配置校验失败。
           workspace: path.resolve(mainWorkspacePath),
           ...(memorySearchConfig ? { memorySearch: memorySearchConfig } : {}),
+          heartbeat: {
+            every: '1h',
+            target: 'none',
+            lightContext: true,
+            isolatedSession: true,
+          },
         },
         ...this.buildAgentsList(providerSelection.primaryModel, this.engineManager.getStateDir()),
       },
@@ -1399,7 +1439,7 @@ export class OpenClawConfigSync {
         sessionRetention: '7d',
       },
       ...((() => {
-        const pluginEntries = cleanExistingPluginEntries(existingPluginEntries, enabledExternalPluginIds);
+        const pluginEntries = cleanExistingPluginEntries(existingPluginEntries, allEnabledPluginIds);
         mergePluginEntry(pluginEntries, dingTalkPluginId, { enabled: true });
         mergePluginEntry(pluginEntries, feishuPluginId, { enabled: true });
         mergePluginEntry(pluginEntries, 'qqbot', { enabled: enabledQQInstances.length > 0 });
@@ -1409,9 +1449,17 @@ export class OpenClawConfigSync {
         mergePluginEntry(pluginEntries, neteaseBeePluginId, { enabled: true });
         mergePluginEntry(pluginEntries, weixinPluginId, { enabled: true });
         mergePluginEntry(pluginEntries, emailPluginId, { enabled: true });
-        mergePluginEntry(pluginEntries, hasMcpBridgePlugin ? 'mcp-bridge' : null, { enabled: true });
         mergePluginEntry(pluginEntries, hasAskUserPlugin ? 'ask-user-question' : null, { enabled: true });
         mergePluginEntry(pluginEntries, qwenPortalAuthPluginId, { enabled: true });
+        for (const plugin of enabledUserPlugins) {
+          const config = plugin.config && Object.keys(plugin.config).length > 0
+            ? { config: plugin.config }
+            : {};
+          mergePluginEntry(pluginEntries, plugin.pluginId.trim(), {
+            enabled: true,
+            ...config,
+          });
+        }
         mergePluginEntry(pluginEntries, 'acpx', { enabled: false });
 
         return Object.keys(pluginEntries).length > 0
@@ -1419,7 +1467,7 @@ export class OpenClawConfigSync {
               plugins: {
                 ...(externalPluginLoadPaths.length > 0
                   ? {
-                      allow: enabledExternalPluginIds,
+                      allow: allEnabledPluginIds,
                       load: { paths: externalPluginLoadPaths },
                     }
                   : {}),
@@ -1430,32 +1478,26 @@ export class OpenClawConfigSync {
       })())
     };
 
-    // Sync MCP Bridge config into the plugin's own config section
-    // (root-level keys are rejected by OpenClaw's strict schema validation)
-    const mcpBridgeCfg = this.getMcpBridgeConfig?.();
-    if (hasMcpBridgePlugin && mcpBridgeCfg && mcpBridgeCfg.tools.length > 0 && managedConfig.plugins) {
-      const plugins = managedConfig.plugins as Record<string, unknown>;
-      const entries = plugins.entries as Record<string, Record<string, unknown>>;
-      entries['mcp-bridge'] = {
-        ...entries['mcp-bridge'],
-        config: {
-          callbackUrl: mcpBridgeCfg.callbackUrl,
-          secret: '${LOBSTER_MCP_BRIDGE_SECRET}',
-          tools: mcpBridgeCfg.tools.map(normalizeMcpBridgeToolManifestEntry),
-        },
-      };
-    }
-
-    // Sync AskUserQuestion plugin config — uses the same HTTP callback server
-    if (hasAskUserPlugin && mcpBridgeCfg && managedConfig.plugins) {
+    // Sync AskUserQuestion plugin config — uses a lightweight local callback server.
+    const askUserCallbackUrl = this.getAskUserCallbackUrl?.();
+    if (hasAskUserPlugin && askUserCallbackUrl && managedConfig.plugins) {
       const plugins = managedConfig.plugins as Record<string, unknown>;
       const entries = plugins.entries as Record<string, Record<string, unknown>>;
       entries['ask-user-question'] = {
         enabled: true,
         config: {
-          callbackUrl: mcpBridgeCfg.askUserCallbackUrl,
+          callbackUrl: askUserCallbackUrl,
           secret: '${LOBSTER_MCP_BRIDGE_SECRET}',
         },
+      };
+    }
+
+    // Sync MCP servers into OpenClaw's native mcp.servers config field.
+    // OpenClaw handles connection, tool discovery, and execution natively.
+    const resolvedMcpServers = this.getResolvedMcpServers?.() ?? [];
+    if (resolvedMcpServers.length > 0) {
+      managedConfig.mcp = {
+        servers: buildOpenClawMcpServers(resolvedMcpServers),
       };
     }
 
@@ -1873,30 +1915,6 @@ export class OpenClawConfigSync {
         return currentContent !== nextContent;
       }
     })();
-    let mcpBridgeConfigChanged = false;
-    try {
-      const currentObj = currentContent ? JSON.parse(currentContent) : {};
-      const nextObj = JSON.parse(nextContent);
-      const currentConfig = currentObj?.plugins?.entries?.['mcp-bridge']?.config;
-      const nextConfig = nextObj?.plugins?.entries?.['mcp-bridge']?.config;
-      const currentCallbackUrl = currentConfig?.callbackUrl;
-      const nextCallbackUrl = nextConfig?.callbackUrl;
-      const currentTools = currentConfig?.tools;
-      const nextTools = nextConfig?.tools;
-      const currentToolsJson = JSON.stringify(Array.isArray(currentTools) ? currentTools : []);
-      const nextToolsJson = JSON.stringify(Array.isArray(nextTools) ? nextTools : []);
-      const currentToolCount = Array.isArray(currentTools) ? currentTools.length : 0;
-      const nextToolCount = Array.isArray(nextTools) ? nextTools.length : 0;
-      mcpBridgeConfigChanged = currentCallbackUrl !== nextCallbackUrl || currentToolsJson !== nextToolsJson;
-      if (mcpBridgeConfigChanged) {
-        console.log(
-          `[OpenClawConfigSync] mcp-bridge config changed: callbackUrl ${currentCallbackUrl ?? 'null'} -> ${nextCallbackUrl ?? 'null'}, tools ${currentToolCount} -> ${nextToolCount}`,
-        );
-      }
-    } catch {
-      // Ignore JSON parse failures and fall back to regular configChanged handling.
-    }
-
     if (configChanged) {
       try {
         ensureDir(path.dirname(configPath));
@@ -1933,7 +1951,6 @@ export class OpenClawConfigSync {
       changed: configChanged || sessionStoreChanged,
       configPath,
       ...(agentsMdWarning ? { agentsMdWarning } : {}),
-      ...(mcpBridgeConfigChanged ? { mcpBridgeConfigChanged } : {}),
     };
   }
 
@@ -1991,8 +2008,7 @@ export class OpenClawConfigSync {
 
     // MCP Bridge Secret — always set so stale openclaw.json with
     // ${LOBSTER_MCP_BRIDGE_SECRET} placeholder doesn't crash the gateway.
-    const mcpBridgeCfg = this.getMcpBridgeConfig?.();
-    env.LOBSTER_MCP_BRIDGE_SECRET = mcpBridgeCfg?.secret || this.getMcpBridgeSecret?.() || 'unconfigured';
+    env.LOBSTER_MCP_BRIDGE_SECRET = this.getMcpBridgeSecret?.() || 'unconfigured';
 
     // Telegram
     const tgConfig = this.getTelegramOpenClawConfig?.();
