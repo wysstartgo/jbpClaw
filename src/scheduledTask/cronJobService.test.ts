@@ -1,6 +1,247 @@
-import { test, expect, describe } from 'vitest';
-import { mapGatewayJob, mapGatewayRun, mapGatewayTaskState } from './cronJobService';
-import { DeliveryMode, GatewayStatus, TaskStatus } from './constants';
+import { describe, expect, test } from 'vitest';
+
+import {
+  DeliveryMode,
+  GatewayStatus,
+  PayloadKind,
+  SessionTarget,
+  TaskStatus,
+  WakeMode,
+} from './constants';
+import {
+  CronJobService,
+  isInternalScheduledTaskJob,
+  mapGatewayJob,
+  mapGatewayRun,
+  mapGatewayTaskState,
+} from './cronJobService';
+
+function makeGatewayJob(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'job-1',
+    name: 'Morning brief',
+    description: 'Send a summary',
+    enabled: true,
+    schedule: { kind: 'cron', expr: '0 9 * * *', tz: 'Asia/Shanghai' },
+    sessionTarget: SessionTarget.Isolated,
+    wakeMode: WakeMode.Now,
+    payload: { kind: PayloadKind.AgentTurn, message: 'Summarize updates' },
+    delivery: { mode: DeliveryMode.None },
+    agentId: null,
+    sessionKey: null,
+    state: {},
+    createdAtMs: 1_700_000_000_000,
+    updatedAtMs: 1_700_000_100_000,
+    ...overrides,
+  };
+}
+
+describe('isInternalScheduledTaskJob', () => {
+  test('detects memory-core managed descriptions', () => {
+    expect(
+      isInternalScheduledTaskJob(
+        makeGatewayJob({
+          description: '[managed-by=memory-core.short-term-promotion] Promote recalls',
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  test('detects memory-core payload sentinels', () => {
+    expect(
+      isInternalScheduledTaskJob(
+        makeGatewayJob({
+          description: '',
+          payload: {
+            kind: PayloadKind.AgentTurn,
+            message: '__openclaw_memory_core_short_term_promotion_dream__',
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  test('does not hide regular user tasks', () => {
+    expect(isInternalScheduledTaskJob(makeGatewayJob())).toBe(false);
+  });
+});
+
+describe('CronJobService internal task filtering', () => {
+  test('hides memory-core tasks from the task list', async () => {
+    const userJob = makeGatewayJob({ id: 'user-job', name: 'User task' });
+    const internalJob = makeGatewayJob({
+      id: 'dream-job',
+      name: 'Memory Dreaming Promotion',
+      description: '[managed-by=memory-core.short-term-promotion] Promote recalls',
+      payload: {
+        kind: PayloadKind.AgentTurn,
+        message: '__openclaw_memory_core_short_term_promotion_dream__',
+      },
+    });
+    const service = new CronJobService({
+      getGatewayClient: () => ({
+        request: async <T>() => ({ jobs: [internalJob, userJob] }) as T,
+      }),
+      ensureGatewayReady: async () => {},
+    });
+
+    const jobs = await service.listJobs();
+
+    expect(jobs.map(job => job.id)).toEqual(['user-job']);
+  });
+
+  test('hides memory-core runs from the global run history', async () => {
+    const userJob1 = makeGatewayJob({ id: 'user-job-1', name: 'User task 1' });
+    const userJob2 = makeGatewayJob({ id: 'user-job-2', name: 'User task 2' });
+    const internalJob = makeGatewayJob({
+      id: 'dream-job',
+      name: 'Memory Dreaming Promotion',
+      description: '[managed-by=memory-core.short-term-promotion] Promote recalls',
+      payload: {
+        kind: PayloadKind.AgentTurn,
+        message: '__openclaw_memory_core_short_term_promotion_dream__',
+      },
+    });
+    const entries = [
+      { ts: 4, jobId: 'dream-job', status: GatewayStatus.Ok, runAtMs: 4 },
+      { ts: 3, jobId: 'user-job-1', status: GatewayStatus.Ok, runAtMs: 3 },
+      { ts: 2, jobId: 'dream-job', status: GatewayStatus.Ok, runAtMs: 2 },
+      { ts: 1, jobId: 'user-job-2', status: GatewayStatus.Ok, runAtMs: 1 },
+    ];
+    const service = new CronJobService({
+      getGatewayClient: () => ({
+        request: async <T>(method: string, params?: unknown) => {
+          if (method === 'cron.list') {
+            return { jobs: [internalJob, userJob1, userJob2] } as T;
+          }
+          if (method === 'cron.runs') {
+            const runParams = params as { offset?: number; limit?: number } | undefined;
+            const start = runParams?.offset ?? 0;
+            const end = start + (runParams?.limit ?? entries.length);
+            return { entries: entries.slice(start, end) } as T;
+          }
+          return {} as T;
+        },
+      }),
+      ensureGatewayReady: async () => {},
+    });
+
+    const runs = await service.listAllRuns(2, 0);
+
+    expect(runs.map(run => run.taskId)).toEqual(['user-job-1', 'user-job-2']);
+    expect(runs.map(run => run.taskName)).toEqual(['User task 1', 'User task 2']);
+  });
+
+  test('applies global run offsets after internal runs are hidden', async () => {
+    const userJob1 = makeGatewayJob({ id: 'user-job-1', name: 'User task 1' });
+    const userJob2 = makeGatewayJob({ id: 'user-job-2', name: 'User task 2' });
+    const internalJob = makeGatewayJob({
+      id: 'dream-job',
+      name: 'Memory Dreaming Promotion',
+      description: '[managed-by=memory-core.short-term-promotion] Promote recalls',
+    });
+    const entries = [
+      { ts: 3, jobId: 'user-job-1', status: GatewayStatus.Ok, runAtMs: 3 },
+      { ts: 2, jobId: 'dream-job', status: GatewayStatus.Ok, runAtMs: 2 },
+      { ts: 1, jobId: 'user-job-2', status: GatewayStatus.Ok, runAtMs: 1 },
+    ];
+    const service = new CronJobService({
+      getGatewayClient: () => ({
+        request: async <T>(method: string, params?: unknown) => {
+          if (method === 'cron.list') {
+            return { jobs: [internalJob, userJob1, userJob2] } as T;
+          }
+          if (method === 'cron.runs') {
+            const runParams = params as { offset?: number; limit?: number } | undefined;
+            const start = runParams?.offset ?? 0;
+            const end = start + (runParams?.limit ?? entries.length);
+            return { entries: entries.slice(start, end) } as T;
+          }
+          return {} as T;
+        },
+      }),
+      ensureGatewayReady: async () => {},
+    });
+
+    const runs = await service.listAllRuns(1, 1);
+
+    expect(runs.map(run => run.taskId)).toEqual(['user-job-2']);
+  });
+});
+
+describe('CronJobService run history filtering', () => {
+  test('filters global runs by application status after reading gateway entries', async () => {
+    const job = makeGatewayJob({ id: 'job-1', name: 'User task' });
+    const entries = [
+      { ts: 4, jobId: 'job-1', status: GatewayStatus.Skipped, runAtMs: 4 },
+      { ts: 3, jobId: 'job-1', status: GatewayStatus.Ok, runAtMs: 3 },
+      {
+        ts: 2,
+        jobId: 'job-1',
+        status: GatewayStatus.Error,
+        runAtMs: 2,
+        error: 'delivery failed',
+        deliveryError: 'delivery failed',
+      },
+      { ts: 1, jobId: 'job-1', status: GatewayStatus.Error, runAtMs: 1, error: 'agent failed' },
+    ];
+    const runRequests: unknown[] = [];
+    const service = new CronJobService({
+      getGatewayClient: () => ({
+        request: async <T>(method: string, params?: unknown) => {
+          if (method === 'cron.list') {
+            return { jobs: [job] } as T;
+          }
+          if (method === 'cron.runs') {
+            runRequests.push(params);
+            return { entries } as T;
+          }
+          return {} as T;
+        },
+      }),
+      ensureGatewayReady: async () => {},
+    });
+
+    const runs = await service.listAllRuns(10, 0, { status: TaskStatus.Success });
+
+    expect(runs.map(run => run.id)).toEqual(['job-1-3', 'job-1-2']);
+    expect(runRequests.every(params => !('status' in (params as Record<string, unknown>)))).toBe(
+      true,
+    );
+  });
+
+  test('applies job run offsets after status filtering', async () => {
+    const job = makeGatewayJob({ id: 'job-1', name: 'User task' });
+    const entries = [
+      { ts: 4, jobId: 'job-1', status: GatewayStatus.Ok, runAtMs: 4 },
+      { ts: 3, jobId: 'job-1', status: GatewayStatus.Error, runAtMs: 3 },
+      { ts: 2, jobId: 'job-1', status: GatewayStatus.Ok, runAtMs: 2 },
+    ];
+    const runRequests: unknown[] = [];
+    const service = new CronJobService({
+      getGatewayClient: () => ({
+        request: async <T>(method: string, params?: unknown) => {
+          if (method === 'cron.list') {
+            return { jobs: [job] } as T;
+          }
+          if (method === 'cron.runs') {
+            runRequests.push(params);
+            return { entries } as T;
+          }
+          return {} as T;
+        },
+      }),
+      ensureGatewayReady: async () => {},
+    });
+
+    const runs = await service.listRuns('job-1', 1, 1, { status: TaskStatus.Success });
+
+    expect(runs.map(run => run.id)).toEqual(['job-1-2']);
+    expect(runRequests.every(params => !('status' in (params as Record<string, unknown>)))).toBe(
+      true,
+    );
+  });
+});
 
 describe('mapGatewayRun', () => {
   const baseEntry = {

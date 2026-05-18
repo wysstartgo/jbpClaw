@@ -2,6 +2,7 @@ import { ClockIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 
+import { TaskStatus } from '../../../scheduledTask/constants';
 import type { RunFilter, ScheduledTaskRunWithName } from '../../../scheduledTask/types';
 import { i18nService } from '../../services/i18n';
 import { scheduledTaskService } from '../../services/scheduledTask';
@@ -10,25 +11,34 @@ import DateInput from './DateInput';
 import RunSessionModal from './RunSessionModal';
 import { formatDateTime, formatDuration } from './utils';
 
-const STATUS_OPTIONS = ['success', 'error', 'skipped', 'running'] as const;
+const STATUS_OPTIONS = [
+  TaskStatus.Success,
+  TaskStatus.Error,
+  TaskStatus.Skipped,
+  TaskStatus.Running,
+] as const;
 
-const statusConfig: Record<string, { label: string; color: string; activeColor: string }> = {
-  success: {
+const historyPageClass = 'px-6 py-4 sm:px-8 lg:px-10';
+const historyContentClass = 'mx-auto w-full max-w-[760px]';
+const historyGridClass = 'grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_88px] items-center gap-3';
+
+const statusConfig: Record<TaskStatus, { label: string; color: string; activeColor: string }> = {
+  [TaskStatus.Success]: {
     label: 'scheduledTasksStatusSuccess',
     color: 'text-green-600 dark:text-green-400',
     activeColor: 'bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400',
   },
-  error: {
+  [TaskStatus.Error]: {
     label: 'scheduledTasksStatusError',
     color: 'text-red-500',
     activeColor: 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400',
   },
-  skipped: {
+  [TaskStatus.Skipped]: {
     label: 'scheduledTasksStatusSkipped',
     color: 'text-yellow-500',
     activeColor: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-600 dark:text-yellow-400',
   },
-  running: {
+  [TaskStatus.Running]: {
     label: 'scheduledTasksStatusRunning',
     color: 'text-blue-500',
     activeColor: 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400',
@@ -80,7 +90,7 @@ const AllRunsHistory: React.FC = () => {
     handleFilterChange(EMPTY_FILTER);
   };
 
-  const handleStatusToggle = (status: string) => {
+  const handleStatusToggle = (status: TaskStatus) => {
     handleFilterChange({
       ...filter,
       status: filter.status === status ? undefined : status,
@@ -100,160 +110,168 @@ const AllRunsHistory: React.FC = () => {
   const isEmpty = displayedRuns.length === 0;
 
   return (
-    <div>
-      {/* Filter area */}
-      <div className="px-4 pt-3 pb-2 flex flex-wrap items-center gap-x-4 gap-y-2">
-        {/* Status pills */}
-        <div className="flex items-center gap-1.5">
-          {STATUS_OPTIONS.map(s => {
-            const cfg = statusConfig[s];
-            const isActive = filter.status === s;
-            return (
-              <button
-                key={s}
-                type="button"
-                onClick={() => handleStatusToggle(s)}
-                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                  isActive
-                    ? cfg.activeColor
-                    : 'border-transparent text-secondary hover:bg-surface-raised'
-                }`}
-              >
-                {i18nService.t(cfg.label)}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Date range */}
-        <div className="flex items-center gap-1.5 ml-auto">
-          <DateInput
-            value={filter.startDate ?? ''}
-            max={filter.endDate}
-            onChange={v => handleFilterChange({ ...filter, startDate: v || undefined })}
-            placeholder={i18nService.t('scheduledTasksFilterStartDate')}
-          />
-          <span className="text-xs text-secondary/50">–</span>
-          <DateInput
-            value={filter.endDate ?? ''}
-            min={filter.startDate}
-            onChange={v => handleFilterChange({ ...filter, endDate: v || undefined })}
-            placeholder={i18nService.t('scheduledTasksFilterEndDate')}
-          />
-          {hasActiveFilter && (
-            <button
-              type="button"
-              onClick={handleClearFilter}
-              className="ml-1 p-0.5 rounded text-secondary hover:text-foreground hover:bg-surface-raised transition-colors"
-              title={i18nService.t('scheduledTasksFilterClear')}
-            >
-              <XMarkIcon className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Empty state */}
-      {isEmpty && (
-        <div className="flex flex-col items-center justify-center py-16 px-6">
-          <ClockIcon className="h-12 w-12 text-secondary/40 mb-4" />
-          <p className="text-sm font-medium text-secondary">
-            {hasActiveFilter
-              ? i18nService.t('scheduledTasksFilterNoResults')
-              : i18nService.t('scheduledTasksHistoryEmpty')}
-          </p>
-        </div>
-      )}
-
-      {/* Column headers */}
-      {!isEmpty && (
-        <div className="grid grid-cols-[1fr_1fr_80px] items-center gap-3 px-4 py-2 border-b border-border-subtle">
-          <div className="text-xs font-medium text-secondary">
-            {i18nService.t('scheduledTasksHistoryColTitle')}
-          </div>
-          <div className="text-xs font-medium text-secondary">
-            {i18nService.t('scheduledTasksHistoryColTime')}
-          </div>
-          <div className="text-xs font-medium text-secondary">
-            {i18nService.t('scheduledTasksHistoryColStatus')}
-          </div>
-        </div>
-      )}
-
-      {/* Run rows */}
-      {displayedRuns.map(run => {
-        const cfg = statusConfig[run.status] || { label: '', color: '' };
-        const hasSession = run.sessionId || run.sessionKey;
-        return (
-          <div
-            key={run.id}
-            className={`grid grid-cols-[1fr_1fr_80px] items-center gap-3 px-4 py-3 border-b border-border-subtle transition-colors ${
-              hasSession ? 'hover:bg-surface-raised/50 cursor-pointer' : ''
-            }`}
-            onClick={() => handleViewSession(run)}
-          >
-            {/* Task title */}
-            <div className="text-sm text-foreground truncate">
-              {run.taskName}
-              {run.status === 'running' && (
-                <svg
-                  className="inline-block w-3 h-3 ml-1.5 animate-spin text-blue-500"
-                  viewBox="0 0 24 24"
-                  fill="none"
+    <div className={historyPageClass}>
+      <div className={historyContentClass}>
+        {/* Filter area */}
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          {/* Status pills */}
+          <div className="flex items-center gap-1.5">
+            {STATUS_OPTIONS.map(s => {
+              const cfg = statusConfig[s];
+              const isActive = filter.status === s;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => handleStatusToggle(s)}
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                    isActive
+                      ? cfg.activeColor
+                      : 'border-transparent text-secondary hover:bg-surface-raised'
+                  }`}
                 >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                    className="opacity-25"
-                  />
-                  <path
-                    d="M4 12a8 8 0 018-8"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    className="opacity-75"
-                  />
-                </svg>
-              )}
-            </div>
-
-            {/* Run time + duration */}
-            <div className="text-sm text-secondary truncate">
-              {formatDateTime(new Date(run.startedAt))}
-              {run.durationMs !== null && (
-                <span className="ml-1.5 text-xs opacity-70">
-                  ({formatDuration(run.durationMs)})
-                </span>
-              )}
-            </div>
-
-            {/* Status */}
-            <div className={`text-sm font-medium ${cfg.color}`}>{i18nService.t(cfg.label)}</div>
+                  {i18nService.t(cfg.label)}
+                </button>
+              );
+            })}
           </div>
-        );
-      })}
 
-      {/* Load more */}
-      {allRunsHasMore && (
-        <button
-          type="button"
-          onClick={handleLoadMore}
-          className="w-full py-3 text-sm text-primary hover:text-primary-hover transition-colors"
-        >
-          {i18nService.t('scheduledTasksLoadMore')}
-        </button>
-      )}
+          {/* Date range */}
+          <div className="flex items-center gap-1.5 ml-auto">
+            <DateInput
+              value={filter.startDate ?? ''}
+              max={filter.endDate}
+              onChange={v => handleFilterChange({ ...filter, startDate: v || undefined })}
+              placeholder={i18nService.t('scheduledTasksFilterStartDate')}
+            />
+            <span className="text-xs text-secondary/50">–</span>
+            <DateInput
+              value={filter.endDate ?? ''}
+              min={filter.startDate}
+              onChange={v => handleFilterChange({ ...filter, endDate: v || undefined })}
+              placeholder={i18nService.t('scheduledTasksFilterEndDate')}
+            />
+            {hasActiveFilter && (
+              <button
+                type="button"
+                onClick={handleClearFilter}
+                className="ml-1 p-0.5 rounded text-secondary hover:text-foreground hover:bg-surface-raised transition-colors"
+                title={i18nService.t('scheduledTasksFilterClear')}
+              >
+                <XMarkIcon className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
 
-      {viewingRun && (
-        <RunSessionModal
-          sessionId={viewingRun.sessionId}
-          sessionKey={viewingRun.sessionKey}
-          onClose={() => setViewingRun(null)}
-        />
-      )}
+        {/* Empty state */}
+        {isEmpty && (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-border/60 px-6 py-16">
+            <ClockIcon className="h-12 w-12 text-secondary/40 mb-4" />
+            <p className="text-sm font-medium text-secondary">
+              {hasActiveFilter
+                ? i18nService.t('scheduledTasksFilterNoResults')
+                : i18nService.t('scheduledTasksHistoryEmpty')}
+            </p>
+          </div>
+        )}
+
+        {!isEmpty && (
+          <div className="overflow-hidden rounded-lg border border-border/60 bg-background">
+            {/* Column headers */}
+            <div className={`${historyGridClass} bg-surface/30 px-5 py-2.5`}>
+              <div className="text-xs font-medium text-secondary">
+                {i18nService.t('scheduledTasksHistoryColTitle')}
+              </div>
+              <div className="text-xs font-medium text-secondary">
+                {i18nService.t('scheduledTasksHistoryColTime')}
+              </div>
+              <div className="text-xs font-medium text-secondary">
+                {i18nService.t('scheduledTasksHistoryColStatus')}
+              </div>
+            </div>
+
+            {/* Run rows */}
+            <div className="p-2">
+              {displayedRuns.map(run => {
+                const cfg = statusConfig[run.status];
+                const hasSession = run.sessionId || run.sessionKey;
+                return (
+                  <div
+                    key={run.id}
+                    className={`${historyGridClass} rounded-md px-3 py-3 transition-colors ${
+                      hasSession ? 'hover:bg-surface-raised/60 cursor-pointer' : ''
+                    }`}
+                    onClick={() => handleViewSession(run)}
+                  >
+                    {/* Task title */}
+                    <div className="text-sm text-foreground truncate">
+                      {run.taskName}
+                      {run.status === 'running' && (
+                        <svg
+                          className="inline-block w-3 h-3 ml-1.5 animate-spin text-blue-500"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                        >
+                          <circle
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                            className="opacity-25"
+                          />
+                          <path
+                            d="M4 12a8 8 0 018-8"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                            strokeLinecap="round"
+                            className="opacity-75"
+                          />
+                        </svg>
+                      )}
+                    </div>
+
+                    {/* Run time + duration */}
+                    <div className="text-sm text-secondary truncate">
+                      {formatDateTime(new Date(run.startedAt))}
+                      {run.durationMs !== null && (
+                        <span className="ml-1.5 text-xs opacity-70">
+                          ({formatDuration(run.durationMs)})
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Status */}
+                    <div className={`text-sm font-medium ${cfg.color}`}>
+                      {i18nService.t(cfg.label)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Load more */}
+            {allRunsHasMore && (
+              <button
+                type="button"
+                onClick={handleLoadMore}
+                className="w-full py-3 text-sm text-primary hover:text-primary-hover transition-colors"
+              >
+                {i18nService.t('scheduledTasksLoadMore')}
+              </button>
+            )}
+          </div>
+        )}
+
+        {viewingRun && (
+          <RunSessionModal
+            sessionId={viewingRun.sessionId}
+            sessionKey={viewingRun.sessionKey}
+            onClose={() => setViewingRun(null)}
+          />
+        )}
+      </div>
     </div>
   );
 };

@@ -2,6 +2,7 @@ import { XMarkIcon } from '@heroicons/react/24/outline';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 
+import { TaskStatus } from '../../../scheduledTask/constants';
 import type { RunFilter, ScheduledTaskRun } from '../../../scheduledTask/types';
 import { i18nService } from '../../services/i18n';
 import { scheduledTaskService } from '../../services/scheduledTask';
@@ -15,27 +16,32 @@ interface TaskRunHistoryProps {
   runs: ScheduledTaskRun[];
 }
 
-const STATUS_OPTIONS = ['success', 'error', 'skipped', 'running'] as const;
+const STATUS_OPTIONS = [
+  TaskStatus.Success,
+  TaskStatus.Error,
+  TaskStatus.Skipped,
+  TaskStatus.Running,
+] as const;
 
-const statusLabelKeys: Record<string, string> = {
-  success: 'scheduledTasksStatusSuccess',
-  error: 'scheduledTasksStatusError',
-  skipped: 'scheduledTasksStatusSkipped',
-  running: 'scheduledTasksStatusRunning',
+const statusLabelKeys: Record<TaskStatus, string> = {
+  [TaskStatus.Success]: 'scheduledTasksStatusSuccess',
+  [TaskStatus.Error]: 'scheduledTasksStatusError',
+  [TaskStatus.Skipped]: 'scheduledTasksStatusSkipped',
+  [TaskStatus.Running]: 'scheduledTasksStatusRunning',
 };
 
-const statusPillColors: Record<string, string> = {
-  success: 'bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400',
-  error: 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400',
-  skipped: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-600 dark:text-yellow-400',
-  running: 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400',
+const statusPillColors: Record<TaskStatus, string> = {
+  [TaskStatus.Success]: 'bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400',
+  [TaskStatus.Error]: 'bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400',
+  [TaskStatus.Skipped]: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-600 dark:text-yellow-400',
+  [TaskStatus.Running]: 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400',
 };
 
-const statusIcons: Record<string, { icon: string; color: string }> = {
-  success: { icon: '✓', color: 'text-green-500' },
-  error: { icon: '✗', color: 'text-red-500' },
-  skipped: { icon: '↷', color: 'text-yellow-500' },
-  running: { icon: '●', color: 'text-blue-500' },
+const statusIcons: Record<TaskStatus, { icon: string; color: string }> = {
+  [TaskStatus.Success]: { icon: '✓', color: 'text-green-500' },
+  [TaskStatus.Error]: { icon: '✗', color: 'text-red-500' },
+  [TaskStatus.Skipped]: { icon: '↷', color: 'text-yellow-500' },
+  [TaskStatus.Running]: { icon: '●', color: 'text-blue-500' },
 };
 
 function applyClientFilter(runs: ScheduledTaskRun[], filter: RunFilter): ScheduledTaskRun[] {
@@ -84,7 +90,7 @@ const TaskRunHistory: React.FC<TaskRunHistoryProps> = ({ taskId, runs }) => {
     handleFilterChange(EMPTY_FILTER);
   };
 
-  const handleStatusToggle = (status: string) => {
+  const handleStatusToggle = (status: TaskStatus) => {
     handleFilterChange({
       ...filter,
       status: filter.status === status ? undefined : status,
@@ -157,7 +163,7 @@ const TaskRunHistory: React.FC<TaskRunHistoryProps> = ({ taskId, runs }) => {
       ) : (
         <div className="divide-y divide-border/50">
           {displayedRuns.map(run => {
-            const statusInfo = statusIcons[run.status] || { icon: '?', color: '' };
+            const statusInfo = statusIcons[run.status];
             return (
               <div key={run.id} className="flex items-center justify-between py-2.5 px-1">
                 <div className="flex items-center gap-3 min-w-0">

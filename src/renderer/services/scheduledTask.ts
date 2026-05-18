@@ -57,6 +57,8 @@ function checkTasksForAnomalies(tasks: ScheduledTask[]): void {
 class ScheduledTaskService {
   private cleanupFns: (() => void)[] = [];
   private initialized = false;
+  private allRunsRequestId = 0;
+  private runRequestIds = new Map<string, number>();
 
   async init(): Promise<void> {
     if (this.initialized) return;
@@ -218,8 +220,11 @@ class ScheduledTaskService {
     const api = window.electron?.scheduledTasks;
     if (!api) return;
 
+    const requestId = (this.runRequestIds.get(taskId) ?? 0) + 1;
+    this.runRequestIds.set(taskId, requestId);
     try {
       const result = await api.listRuns(taskId, limit, offset, filter);
+      if (this.runRequestIds.get(taskId) !== requestId) return;
       if (result.success && result.runs) {
         const hasMore = result.runs.length >= limit;
         if (offset && offset > 0) {
@@ -229,6 +234,7 @@ class ScheduledTaskService {
         }
       }
     } catch (err: unknown) {
+      if (this.runRequestIds.get(taskId) !== requestId) return;
       store.dispatch(setError(err instanceof Error ? err.message : String(err)));
     }
   }
@@ -237,8 +243,11 @@ class ScheduledTaskService {
     const api = window.electron?.scheduledTasks;
     if (!api) return;
 
+    const requestId = this.allRunsRequestId + 1;
+    this.allRunsRequestId = requestId;
     try {
       const result = await api.listAllRuns(limit, offset, filter);
+      if (this.allRunsRequestId !== requestId) return;
       if (result.success && result.runs) {
         const hasMore = (result.runs as unknown[]).length >= (limit ?? 50);
         if (offset && offset > 0) {
@@ -248,6 +257,7 @@ class ScheduledTaskService {
         }
       }
     } catch (err: unknown) {
+      if (this.allRunsRequestId !== requestId) return;
       store.dispatch(setError(err instanceof Error ? err.message : String(err)));
     }
   }

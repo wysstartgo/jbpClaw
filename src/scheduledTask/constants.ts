@@ -91,6 +91,12 @@ export type GatewayStatus = typeof GatewayStatus[keyof typeof GatewayStatus];
 // ─── Default Agent ID ───────────────────────────────────────────────────────
 export const DefaultAgentId = 'main' as const;
 
+// ─── Internal OpenClaw Task Markers ─────────────────────────────────────────
+export const InternalTaskMarker = {
+  MemoryCoreManagedDescriptionPrefix: '[managed-by=memory-core',
+  MemoryCorePayloadPrefix: '__openclaw_memory_core_',
+} as const;
+
 // ─── Policy Run-Behavior Descriptions ───────────────────────────────────────
 export const RunBehavior = {
   newSession: 'Creates a new session on each trigger',

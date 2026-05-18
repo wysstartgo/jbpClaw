@@ -33,12 +33,14 @@ type ProviderModelConfig = {
   id: string;
   name: string;
   supportsImage?: boolean;
+  contextWindow?: number;
 };
 
 type ProviderModelInputConfig = {
   id: string;
   name?: string;
   supportsImage?: boolean;
+  contextWindow?: number;
 };
 
 export type ApiConfigResolution = {
@@ -50,6 +52,7 @@ export type ApiConfigResolution = {
     codingPlanEnabled: boolean;
     supportsImage?: boolean;
     modelName?: string;
+    contextWindow?: number;
   };
 };
 
@@ -159,6 +162,7 @@ type MatchedProvider = {
   baseURL: string;
   supportsImage?: boolean;
   modelName?: string;
+  contextWindow?: number;
 };
 
 function getEffectiveProviderApiFormat(providerName: string, apiFormat: unknown): AnthropicApiFormat {
@@ -340,6 +344,7 @@ function resolveMatchedProvider(appConfig: AppConfig): { matched: MatchedProvide
       baseURL,
       supportsImage: matchedModel?.supportsImage,
       modelName: matchedModel?.name,
+      contextWindow: matchedModel?.contextWindow,
     },
   };
 }
@@ -497,6 +502,7 @@ export function resolveRawApiConfig(): ApiConfigResolution {
       codingPlanEnabled: !!matched.providerConfig.codingPlanEnabled,
       supportsImage: matched.supportsImage,
       modelName: matched.modelName,
+      contextWindow: matched.contextWindow,
     },
   };
 }

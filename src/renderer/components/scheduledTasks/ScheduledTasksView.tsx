@@ -24,6 +24,9 @@ interface ScheduledTasksViewProps {
 
 type TabType = 'tasks' | 'history';
 
+const pageGutterClass = 'px-6 sm:px-8 lg:px-10';
+const pageContentClass = 'mx-auto flex w-full max-w-[760px] items-center justify-between';
+
 const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
   isSidebarCollapsed,
   onToggleSidebar,
@@ -151,42 +154,46 @@ const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
 
       {/* Tabs + New Task button */}
       {showTabs && (
-        <div className="flex items-center justify-between border-b border-border px-4 shrink-0">
-          <div className="flex">
-            <button
-              type="button"
-              onClick={() => handleTabChange('tasks')}
-              className={`px-4 py-2.5 text-[14px] font-normal leading-5 transition-colors relative ${
-                activeTab === 'tasks' ? 'text-foreground' : 'text-secondary hover:text-foreground'
-              }`}
-            >
-              {i18nService.t('scheduledTasksTabTasks')}
+        <div className="shrink-0">
+          <div className={pageGutterClass}>
+            <div className={pageContentClass}>
+              <div className="flex">
+                <button
+                  type="button"
+                  onClick={() => handleTabChange('tasks')}
+                  className={`px-4 py-2.5 text-[14px] font-normal leading-5 transition-colors relative ${
+                    activeTab === 'tasks' ? 'text-foreground' : 'text-secondary hover:text-foreground'
+                  }`}
+                >
+                  {i18nService.t('scheduledTasksTabTasks')}
+                  {activeTab === 'tasks' && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange('history')}
+                  className={`px-4 py-2.5 text-[14px] font-normal leading-5 transition-colors relative ${
+                    activeTab === 'history' ? 'text-foreground' : 'text-secondary hover:text-foreground'
+                  }`}
+                >
+                  {i18nService.t('scheduledTasksTabHistory')}
+                  {activeTab === 'history' && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t" />
+                  )}
+                </button>
+              </div>
               {activeTab === 'tasks' && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t" />
+                <button
+                  type="button"
+                  onClick={() => dispatch(setViewMode('create'))}
+                  className="px-3 py-1 text-[14px] font-normal leading-5 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors"
+                >
+                  {i18nService.t('scheduledTasksNewTask')}
+                </button>
               )}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTabChange('history')}
-              className={`px-4 py-2.5 text-[14px] font-normal leading-5 transition-colors relative ${
-                activeTab === 'history' ? 'text-foreground' : 'text-secondary hover:text-foreground'
-              }`}
-            >
-              {i18nService.t('scheduledTasksTabHistory')}
-              {activeTab === 'history' && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t" />
-              )}
-            </button>
+            </div>
           </div>
-          {activeTab === 'tasks' && (
-            <button
-              type="button"
-              onClick={() => dispatch(setViewMode('create'))}
-              className="px-3 py-1 text-[14px] font-normal leading-5 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors"
-            >
-              {i18nService.t('scheduledTasksNewTask')}
-            </button>
-          )}
         </div>
       )}
 

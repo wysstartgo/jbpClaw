@@ -56,7 +56,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
   const [presetTemplates, setPresetTemplates] = useState<PresetAgent[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
-  const [activeTab, setActiveTab] = useState<AgentDetailTab>(AgentDetailTab.Prompt);
+  const [activeTab, setActiveTab] = useState<AgentDetailTab>(AgentDetailTab.Identity);
   const globalSelectedModel = useSelector((state: RootState) => state.model.defaultSelectedModel);
   const agents = useSelector((state: RootState) => state.agent.agents);
   const currentAgentId = useSelector((state: RootState) => state.agent.currentAgentId);
@@ -155,10 +155,10 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
     setName(isEn && preset.nameEn ? preset.nameEn : preset.name);
     setDescription(isEn && preset.descriptionEn ? preset.descriptionEn : preset.description);
     setSystemPrompt(isEn && preset.systemPromptEn ? preset.systemPromptEn : preset.systemPrompt);
-    setIdentity('');
+    setIdentity(isEn && preset.identityEn ? preset.identityEn : preset.identity);
     setIcon(preset.icon?.trim() || DefaultAgentAvatarIcon);
     setSkillIds(preset.skillIds ?? []);
-    setActiveTab(AgentDetailTab.Prompt);
+    setActiveTab(AgentDetailTab.Identity);
     setShowTemplatePicker(false);
   };
 
@@ -296,7 +296,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
     </div>
   );
 
-  const content = (
+  const editorContent = (
     <>
       <div className="flex shrink-0 items-start justify-between gap-4 px-7 py-5">
         <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -543,6 +543,18 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
     </>
   );
 
+  const closeTemplatePicker = () => setShowTemplatePicker(false);
+
+  const content = showTemplatePicker ? (
+    <AgentTemplatePickerContent
+      presets={presetTemplates}
+      loading={templatesLoading}
+      onClose={closeTemplatePicker}
+      onNew={closeTemplatePicker}
+      onSelect={handleApplyTemplate}
+    />
+  ) : editorContent;
+
   return (
     <>
       {presentation === 'page' ? (
@@ -552,22 +564,12 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
       ) : (
         <Modal
           isOpen={isOpen}
-          onClose={handleClose}
+          onClose={showTemplatePicker ? closeTemplatePicker : handleClose}
           overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/10 dark:bg-black/50"
           className="w-[calc(100vw-56px)] max-w-[854px] h-[82vh] max-h-[664px] rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.16)] bg-surface border border-surface flex flex-col overflow-hidden"
         >
           {content}
         </Modal>
-      )}
-
-      {showTemplatePicker && (
-        <AgentTemplatePickerModal
-          presets={presetTemplates}
-          loading={templatesLoading}
-          onClose={() => setShowTemplatePicker(false)}
-          onNew={() => setShowTemplatePicker(false)}
-          onSelect={handleApplyTemplate}
-        />
       )}
 
       {showUnsavedConfirm && (
@@ -585,7 +587,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({
   );
 };
 
-const AgentTemplatePickerModal: React.FC<{
+const AgentTemplatePickerContent: React.FC<{
   presets: PresetAgent[];
   loading: boolean;
   onClose: () => void;
@@ -595,13 +597,8 @@ const AgentTemplatePickerModal: React.FC<{
   const isEn = i18nService.getLanguage() === 'en';
 
   return (
-    <Modal
-      isOpen
-      onClose={onClose}
-      overlayClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/10 dark:bg-black/50"
-      className="w-[calc(100vw-56px)] max-w-[760px] max-h-[82vh] rounded-xl border border-surface bg-surface shadow-[0_12px_40px_rgba(0,0,0,0.16)] overflow-hidden flex flex-col"
-    >
-      <div className="flex shrink-0 items-center justify-between gap-3 px-5 py-4">
+    <>
+      <div className="flex shrink-0 items-center justify-between gap-3 px-7 py-5">
         <h2 className="text-lg font-semibold text-foreground">
           {i18nService.t('agentTemplateTitle')}
         </h2>
@@ -619,7 +616,7 @@ const AgentTemplatePickerModal: React.FC<{
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-7 pb-7">
         {loading ? (
           <div className="flex h-40 items-center justify-center text-sm text-secondary">
             {i18nService.t('loading')}
@@ -661,7 +658,7 @@ const AgentTemplatePickerModal: React.FC<{
           </div>
         )}
       </div>
-    </Modal>
+    </>
   );
 };
 

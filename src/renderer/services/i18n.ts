@@ -107,6 +107,11 @@ const translations: Record<LanguageType, Record<string, string>> = {
     lmStudioDisplayNamePlaceholder: '我的本地模型',
     lmStudioModelNameRequired: '请填写模型名称',
     supportsImageInput: '支持图像输入',
+    modelNameHint: '自定义模型在列表中显示的名称',
+    modelIdHint: '模型的唯一标识符，将用于 API 调用',
+    supportsImageInputHint: '开启后可在对话中发送图片，实际是否支持取决于模型本身',
+    contextWindow: '上下文窗口',
+    contextWindowHint: '模型一次可处理的最大 token 数量，窗口越大可容纳越多对话历史与文档。较低的窗口大小可能无法体验完整功能，实际支持的窗口大小取决于模型本身。',
     imageInput: '图像',
     modelSuffixSecure: '（安全）',
     codingPlanSubscriptionBadge: '订阅套餐',
@@ -1512,6 +1517,41 @@ const translations: Record<LanguageType, Record<string, string>> = {
     scheduledTasks: '定时任务',
     scheduledTasksTitle: '定时任务',
     scheduledTasksNewTask: '新建任务',
+    scheduledTasksTemplateTitle: '定时任务模板',
+    scheduledTasksTemplateSubtitle: '选择一个常见办公自动化场景，系统会自动填好周期和提示词',
+    scheduledTasksTemplateUse: '使用模版',
+    scheduledTasksTemplateNew: '新建',
+    scheduledTasksTemplateEmpty: '暂无可用模板',
+    scheduledTasksTemplateTechBriefingTitle: '科技早报',
+    scheduledTasksTemplateTechBriefingDesc: '工作日早晨汇总科技、AI 和产品动态，筛出适合办公人群快速浏览的重点。',
+    scheduledTasksTemplateTechBriefingSchedule: '工作日 08:30',
+    scheduledTasksTemplateTechBriefingPrompt:
+      '请收集并总结过去 24 小时的科技、AI 与产品动态，筛选 5-8 条与办公、研发和产品人群相关的重点。每条包含事件、影响、可跟进行动，并在结尾列出今天值得关注的关键词。',
+    scheduledTasksTemplateWorkdayWrapTitle: '每日工作收尾',
+    scheduledTasksTemplateWorkdayWrapDesc: '下班前整理当天进展、风险和明日待办，适合个人复盘或团队同步。',
+    scheduledTasksTemplateWorkdayWrapSchedule: '工作日 18:00',
+    scheduledTasksTemplateWorkdayWrapPrompt:
+      '请整理今天的工作收尾摘要，按「已完成」「进行中」「遇到的问题」「明日待办」输出。内容要简洁、可执行，并提醒我哪些事项需要提前同步给同事。',
+    scheduledTasksTemplateMeetingPrepTitle: '会议准备',
+    scheduledTasksTemplateMeetingPrepDesc: '每天开始前梳理会议目标、待确认问题和需要提前准备的材料。',
+    scheduledTasksTemplateMeetingPrepSchedule: '工作日 08:45',
+    scheduledTasksTemplateMeetingPrepPrompt:
+      '请基于可访问的日程、待办或工作记录，为今天的会议和重点事项做准备。列出每个会议的目标、需要提前看的材料、待确认问题，以及会后应跟进的动作。',
+    scheduledTasksTemplateWeeklyReportTitle: '周报草稿',
+    scheduledTasksTemplateWeeklyReportDesc: '每周五生成一份结构化周报草稿，减少临下班补材料的成本。',
+    scheduledTasksTemplateWeeklyReportSchedule: '周五 17:30',
+    scheduledTasksTemplateWeeklyReportPrompt:
+      '请整理本周工作周报草稿，包含本周完成、关键进展、数据或结果、问题与风险、下周计划。请用适合直接发给主管或团队的语气输出。',
+    scheduledTasksTemplateProjectHealthTitle: '项目健康巡检',
+    scheduledTasksTemplateProjectHealthDesc: '定期检查项目状态、近期变更和潜在风险，适合研发或运营项目。',
+    scheduledTasksTemplateProjectHealthSchedule: '每天 10:00',
+    scheduledTasksTemplateProjectHealthPrompt:
+      '请检查当前项目的健康状态，关注最近变更、测试或构建状态、明显的 TODO/风险点和可改进项。请给出简短巡检报告，并把需要人工处理的事项列为清单。',
+    scheduledTasksTemplateMonthlyAdminTitle: '月度行政提醒',
+    scheduledTasksTemplateMonthlyAdminDesc: '月底前提醒整理发票、报销、续费、合同和常规行政待办。',
+    scheduledTasksTemplateMonthlyAdminSchedule: '每月 25 日 10:00',
+    scheduledTasksTemplateMonthlyAdminPrompt:
+      '请提醒我整理本月行政待办，包括发票、报销、订阅续费、合同、设备和其他月底前需要处理的事项。请输出一份可勾选清单，并标出建议优先级。',
     scheduledTasksEmptyState: '暂无定时任务',
     scheduledTasksEmptyHint: '创建定时任务，让 AI 按计划自动执行',
     scheduledTasksListColTitle: '标题',
@@ -1963,6 +2003,13 @@ const translations: Record<LanguageType, Record<string, string>> = {
     lmStudioDisplayNamePlaceholder: 'My Local Model',
     lmStudioModelNameRequired: 'Model name is required',
     supportsImageInput: 'Supports image input',
+    modelNameHint: 'Custom name displayed in the model list',
+    modelIdHint: 'Unique model identifier used for API calls',
+    supportsImageInputHint:
+      'Enables image sending in conversations. Actual support depends on the model',
+    contextWindow: 'Context Window',
+    contextWindowHint:
+      'Maximum tokens the model can process at once. A larger window fits more conversation history and documents. A smaller window may limit features. Actual supported size depends on the model itself.',
     imageInput: 'Image',
     modelSuffixSecure: '(Secure)',
     codingPlanSubscriptionBadge: 'Subscription',
@@ -3457,6 +3504,47 @@ const translations: Record<LanguageType, Record<string, string>> = {
     scheduledTasks: 'Scheduled Tasks',
     scheduledTasksTitle: 'Scheduled Tasks',
     scheduledTasksNewTask: 'New Task',
+    scheduledTasksTemplateTitle: 'Scheduled Task Templates',
+    scheduledTasksTemplateSubtitle: 'Pick a common office automation scenario to prefill the plan and prompt',
+    scheduledTasksTemplateUse: 'Use template',
+    scheduledTasksTemplateNew: 'New',
+    scheduledTasksTemplateEmpty: 'No templates available',
+    scheduledTasksTemplateTechBriefingTitle: 'Tech Morning Brief',
+    scheduledTasksTemplateTechBriefingDesc:
+      'Summarize technology, AI, and product updates on workday mornings for quick scanning.',
+    scheduledTasksTemplateTechBriefingSchedule: 'Weekdays 08:30',
+    scheduledTasksTemplateTechBriefingPrompt:
+      'Collect and summarize technology, AI, and product updates from the past 24 hours. Select 5-8 items relevant to office, engineering, and product teams. For each item, include what happened, why it matters, and a possible follow-up action. End with keywords worth watching today.',
+    scheduledTasksTemplateWorkdayWrapTitle: 'Workday Wrap-up',
+    scheduledTasksTemplateWorkdayWrapDesc:
+      'Review daily progress, risks, and tomorrow tasks before the end of each workday.',
+    scheduledTasksTemplateWorkdayWrapSchedule: 'Weekdays 18:00',
+    scheduledTasksTemplateWorkdayWrapPrompt:
+      'Prepare today\'s work wrap-up with sections for completed items, in-progress work, blockers, and tomorrow\'s to-do list. Keep it concise and actionable, and call out items that should be synced with teammates.',
+    scheduledTasksTemplateMeetingPrepTitle: 'Meeting Prep',
+    scheduledTasksTemplateMeetingPrepDesc:
+      'Prepare goals, open questions, and materials before the day starts.',
+    scheduledTasksTemplateMeetingPrepSchedule: 'Weekdays 08:45',
+    scheduledTasksTemplateMeetingPrepPrompt:
+      'Use accessible calendar, task, or work records to prepare for today\'s meetings and priorities. List each meeting\'s goal, materials to review, questions to confirm, and follow-up actions to track afterward.',
+    scheduledTasksTemplateWeeklyReportTitle: 'Weekly Report Draft',
+    scheduledTasksTemplateWeeklyReportDesc:
+      'Draft a structured weekly report every Friday before the end of the day.',
+    scheduledTasksTemplateWeeklyReportSchedule: 'Friday 17:30',
+    scheduledTasksTemplateWeeklyReportPrompt:
+      'Draft this week\'s work report with completed work, key progress, measurable outcomes, problems and risks, and next week\'s plan. Use a tone suitable for sending directly to a manager or team.',
+    scheduledTasksTemplateProjectHealthTitle: 'Project Health Check',
+    scheduledTasksTemplateProjectHealthDesc:
+      'Check project status, recent changes, and potential risks on a regular schedule.',
+    scheduledTasksTemplateProjectHealthSchedule: 'Daily 10:00',
+    scheduledTasksTemplateProjectHealthPrompt:
+      'Check the current project health. Focus on recent changes, test or build status, obvious TODOs or risks, and improvement opportunities. Provide a brief inspection report and list items that need human follow-up.',
+    scheduledTasksTemplateMonthlyAdminTitle: 'Monthly Admin Reminder',
+    scheduledTasksTemplateMonthlyAdminDesc:
+      'Remind me to handle invoices, expenses, renewals, contracts, and routine admin tasks.',
+    scheduledTasksTemplateMonthlyAdminSchedule: 'Monthly on the 25th at 10:00',
+    scheduledTasksTemplateMonthlyAdminPrompt:
+      'Remind me to organize this month\'s admin tasks, including invoices, expenses, subscription renewals, contracts, equipment, and other items that should be handled before month end. Output a checklist and mark suggested priority.',
     scheduledTasksEmptyState: 'No scheduled tasks',
     scheduledTasksEmptyHint: 'Create scheduled tasks to automate AI execution on a schedule',
     scheduledTasksListColTitle: 'Title',

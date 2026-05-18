@@ -1,4 +1,4 @@
-import type { DeliveryMode, SessionTarget, TaskStatus,WakeMode } from './constants';
+import type { DeliveryMode, SessionTarget, TaskStatus, WakeMode } from './constants';
 
 export interface ScheduleAt {
   kind: 'at';
@@ -137,5 +137,5 @@ export interface RunFilter {
   /** ISO date string (YYYY-MM-DD), inclusive upper bound for startedAt */
   endDate?: string;
   /** Filter by task run status */
-  status?: string;
+  status?: TaskStatus;
 }

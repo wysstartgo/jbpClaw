@@ -2,7 +2,13 @@ import { describe, expect, test } from 'vitest';
 
 import { DeliveryMode, PayloadKind, ScheduleKind, SessionTarget, WakeMode } from '../../../scheduledTask/constants';
 import type { ScheduledTask } from '../../../scheduledTask/types';
+import { i18nService } from '../../services/i18n';
 import { createScheduledTaskFormState } from './TaskForm';
+import {
+  SCHEDULED_TASK_TEMPLATES,
+  ScheduledTaskTemplateId,
+  ScheduledTaskTemplatePlanType,
+} from './taskTemplates';
 
 const fallbackModelRef = 'openai/gpt-5.5';
 
@@ -69,5 +75,23 @@ describe('createScheduledTaskFormState', () => {
 
     expect(form.payloadText).toBe('Reminder');
     expect(form.modelId).toBe('');
+  });
+
+  test('applies template defaults for new tasks', () => {
+    const template = SCHEDULED_TASK_TEMPLATES.find(
+      item => item.id === ScheduledTaskTemplateId.TechBriefing,
+    );
+
+    expect(template).toBeDefined();
+
+    const form = createScheduledTaskFormState(undefined, fallbackModelRef, template);
+
+    expect(form.name).toBe(i18nService.t(template!.titleKey));
+    expect(form.payloadText).toBe(i18nService.t(template!.promptKey));
+    expect(form.planType).toBe(ScheduledTaskTemplatePlanType.Weekly);
+    expect(form.hour).toBe(8);
+    expect(form.minute).toBe(30);
+    expect(form.weekdays).toEqual([1, 2, 3, 4, 5]);
+    expect(form.modelId).toBe(fallbackModelRef);
   });
 });

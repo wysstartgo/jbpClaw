@@ -34,7 +34,7 @@
       {
         "id": "moltbot-popo",
         "npm": "moltbot-popo",
-        "version": "2.1.1",
+        "version": "2.1.8",
         "registry": "https://npm.nie.netease.com",
         "optional": true
       },

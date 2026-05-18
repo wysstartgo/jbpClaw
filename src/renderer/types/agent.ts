@@ -27,6 +27,8 @@ export interface PresetAgent {
   icon: string;
   description: string;
   descriptionEn: string;
+  identity: string;
+  identityEn: string;
   systemPrompt: string;
   systemPromptEn: string;
   skillIds: string[];

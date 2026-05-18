@@ -12,9 +12,9 @@ const UserAvatarIcon: React.FC<{ className?: string }> = ({ className }) => {
       aria-hidden="true"
     >
       <g clipPath={`url(#${clipPathId})`}>
-        <circle cx="16" cy="16" r="16" fill="#030099" fillOpacity="0.07" />
-        <circle cx="16" cy="12" r="6" fill="white" opacity="0.8" />
-        <circle cx="16" cy="35" r="14" fill="white" opacity="0.8" />
+        <circle cx="16" cy="16" r="16" fill="currentColor" fillOpacity="0.12" />
+        <circle cx="16" cy="12" r="6" fill="currentColor" fillOpacity="0.64" />
+        <circle cx="16" cy="35" r="14" fill="currentColor" fillOpacity="0.64" />
       </g>
       <defs>
         <clipPath id={clipPathId}>

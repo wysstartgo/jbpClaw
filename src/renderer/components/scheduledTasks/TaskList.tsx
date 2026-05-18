@@ -14,6 +14,10 @@ import {
   getStatusTone,
 } from './utils';
 
+const listPageClass = 'px-6 py-4 sm:px-8 lg:px-10';
+const listContentClass = 'mx-auto w-full max-w-[760px]';
+const listGridClass = 'grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_112px_40px] items-center gap-3';
+
 interface TaskListItemProps {
   task: ScheduledTask;
   onRequestDelete: (taskId: string, taskName: string) => void;
@@ -41,7 +45,7 @@ const TaskListItem: React.FC<TaskListItemProps> = ({ task, onRequestDelete }) =>
 
   return (
     <div
-      className="grid grid-cols-[1.2fr_1fr_110px_40px] items-center gap-3 px-4 py-3 border-b border-border-subtle hover:bg-surface-raised/50 cursor-pointer transition-colors"
+      className={`${listGridClass} rounded-md px-3 py-3 hover:bg-surface-raised/60 cursor-pointer transition-colors`}
       onClick={() => dispatch(selectTask(task.id))}
     >
       <div className="min-w-0">
@@ -149,45 +153,53 @@ const TaskList: React.FC<TaskListProps> = ({ onRequestDelete }) => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="text-secondary">{i18nService.t('loading')}</div>
+      <div className={listPageClass}>
+        <div className={`${listContentClass} flex items-center justify-center py-16`}>
+          <div className="text-secondary">{i18nService.t('loading')}</div>
+        </div>
       </div>
     );
   }
 
   if (tasks.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 px-6">
-        <ClockIcon className="h-12 w-12 text-secondary/40 mb-4" />
-        <p className="text-sm font-medium text-secondary mb-1">
-          {i18nService.t('scheduledTasksEmptyState')}
-        </p>
-        <p className="text-xs text-secondary/70 text-center">
-          {i18nService.t('scheduledTasksEmptyHint')}
-        </p>
+      <div className={listPageClass}>
+        <div className={`${listContentClass} flex flex-col items-center justify-center rounded-lg border border-border px-6 py-16`}>
+          <ClockIcon className="h-12 w-12 text-secondary/40 mb-4" />
+          <p className="text-sm font-medium text-secondary mb-1">
+            {i18nService.t('scheduledTasksEmptyState')}
+          </p>
+          <p className="text-xs text-secondary/70 text-center">
+            {i18nService.t('scheduledTasksEmptyHint')}
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="grid grid-cols-[1.2fr_1fr_110px_40px] items-center gap-3 px-4 py-2 border-b border-border-subtle">
-        <div className="text-xs font-medium text-secondary">
-          {i18nService.t('scheduledTasksListColTitle')}
+    <div className={listPageClass}>
+      <div className={`${listContentClass} overflow-hidden rounded-lg border border-border/60 bg-background`}>
+        <div className={`${listGridClass} bg-surface/30 px-5 py-2.5`}>
+          <div className="text-xs font-medium text-secondary">
+            {i18nService.t('scheduledTasksListColTitle')}
+          </div>
+          <div className="text-xs font-medium text-secondary">
+            {i18nService.t('scheduledTasksListColSchedule')}
+          </div>
+          <div className="text-xs font-medium text-secondary">
+            {i18nService.t('scheduledTasksListColStatus')}
+          </div>
+          <div className="text-xs font-medium text-secondary text-center">
+            {i18nService.t('scheduledTasksListColMore')}
+          </div>
         </div>
-        <div className="text-xs font-medium text-secondary">
-          {i18nService.t('scheduledTasksListColSchedule')}
-        </div>
-        <div className="text-xs font-medium text-secondary">
-          {i18nService.t('scheduledTasksListColStatus')}
-        </div>
-        <div className="text-xs font-medium text-secondary text-center">
-          {i18nService.t('scheduledTasksListColMore')}
+        <div className="p-2">
+          {tasks.map(task => (
+            <TaskListItem key={task.id} task={task} onRequestDelete={onRequestDelete} />
+          ))}
         </div>
       </div>
-      {tasks.map(task => (
-        <TaskListItem key={task.id} task={task} onRequestDelete={onRequestDelete} />
-      ))}
     </div>
   );
 };

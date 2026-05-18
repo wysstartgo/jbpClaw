@@ -9,6 +9,7 @@ export interface ProviderConfig {
     id: string;
     name: string;
     supportsImage?: boolean;
+    contextWindow?: number;
   }>;
   displayName?: string;
   codingPlanEnabled?: boolean;
