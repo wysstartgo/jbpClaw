@@ -4,6 +4,7 @@ import {
   normalizeFilePathForDedup,
   parseFileLinksFromMessage,
   parseFilePathsFromText,
+  parseMediaTokensFromText,
   parseToolArtifact,
   stripFileLinksFromText,
 } from './artifactParser';
@@ -52,6 +53,39 @@ describe('parseFileLinksFromMessage', () => {
     const artifacts = parseFileLinksFromMessage(content, 'msg1', 'sess1');
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0].filePath).toBe('D:/my folder/文件.pptx');
+  });
+});
+
+describe('parseMediaTokensFromText', () => {
+  test('parses media token with macOS path containing spaces', () => {
+    const content = 'MEDIA: /Users/test/Library/Application Support/QingShuClaw/output.png';
+    const artifacts = parseMediaTokensFromText(content, 'msg1', 'sess1');
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]).toMatchObject({
+      type: 'image',
+      fileName: 'output.png',
+      filePath: '/Users/test/Library/Application Support/QingShuClaw/output.png',
+    });
+  });
+
+  test('parses backtick-wrapped and file-url media tokens', () => {
+    const content = [
+      'MEDIA: `/Users/test/Library/Application Support/output.png`',
+      'MEDIA: file:///D:/workspace/image.jpg',
+    ].join('\n');
+    const artifacts = parseMediaTokensFromText(content, 'msg1', 'sess1');
+
+    expect(artifacts.map((artifact) => artifact.filePath)).toEqual([
+      '/Users/test/Library/Application Support/output.png',
+      'D:/workspace/image.jpg',
+    ]);
+  });
+
+  test('ignores media tokens with unsupported extensions', () => {
+    const artifacts = parseMediaTokensFromText('MEDIA: /tmp/data.xyz', 'msg1', 'sess1');
+
+    expect(artifacts).toHaveLength(0);
   });
 });
 

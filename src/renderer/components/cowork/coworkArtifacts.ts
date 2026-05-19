@@ -3,6 +3,7 @@ import {
   parseCodeBlockArtifacts,
   parseFileLinksFromMessage,
   parseFilePathsFromText,
+  parseMediaTokensFromText,
   parseToolArtifact,
   stripFileLinksFromText,
 } from '../../services/artifactParser';
@@ -58,6 +59,10 @@ export const collectCoworkSessionArtifacts = (
         pushArtifact(artifact);
       }
 
+      for (const artifact of parseMediaTokensFromText(message.content, message.id, sessionId)) {
+        pushArtifact(artifact);
+      }
+
       const contentWithoutFileLinks = stripFileLinksFromText(message.content);
       for (const artifact of parseFilePathsFromText(contentWithoutFileLinks, message.id, sessionId)) {
         pushArtifact(artifact);
@@ -69,6 +74,9 @@ export const collectCoworkSessionArtifacts = (
         continue;
       }
       const displayText = getToolResultDisplay(message);
+      for (const artifact of parseMediaTokensFromText(displayText, message.id, sessionId)) {
+        pushArtifact(artifact);
+      }
       for (const artifact of parseFilePathsFromText(displayText, message.id, sessionId, 'artifact-toolresult')) {
         pushArtifact(artifact);
       }

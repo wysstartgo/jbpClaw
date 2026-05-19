@@ -52,6 +52,7 @@ const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 const BINARY_DOCUMENT_EXTENSIONS = new Set(['.docx', '.xlsx', '.pptx', '.pdf']);
 const FILE_LINK_RE = /\[([^\]]+)\]\(file:\/\/([^)]+)\)/g;
 const BARE_FILE_PATH_RE = /(?:^|[\s"'`(（，。；：、!?！？])(\/?(?:[^\s"'`()（）\[\]，。；：、!?！？]+\/)*[^\s"'`()（）\[\]，。；：、!?！？]+\.(?:html?|svg|png|jpe?g|gif|webp|mermaid|mmd|jsx|tsx|css|docx|xlsx|pptx|pdf|md|txt|log|csv|tsv|xls))(?=[\s"'`)，。；：、!?！？]|$)/gim;
+const MEDIA_TOKEN_RE = /\bMEDIA:\s*`?([^`\n]+?)`?\s*$/gim;
 const WRITE_TOOL_NAMES = new Set(['write', 'writefile', 'write_file']);
 
 export function getArtifactTypeFromLanguage(language: string): ArtifactType | null {
@@ -114,6 +115,49 @@ export function parseCodeBlockArtifacts(
 
 export function stripFileLinksFromText(text: string): string {
   return text.replace(FILE_LINK_RE, '');
+}
+
+export function parseMediaTokensFromText(
+  messageContent: string,
+  messageId: string,
+  sessionId: string,
+): Artifact[] {
+  if (!messageContent) return [];
+
+  const artifacts: Artifact[] = [];
+  const re = new RegExp(MEDIA_TOKEN_RE.source, 'gim');
+  let match: RegExpExecArray | null;
+  let index = 0;
+
+  while ((match = re.exec(messageContent)) !== null) {
+    let filePath = normalizeFileProtocolPath(match[1].trim());
+    if (!filePath) continue;
+    if (/^\/[A-Za-z]:/.test(filePath)) {
+      filePath = filePath.slice(1);
+    }
+
+    const ext = getFileExtension(filePath);
+    const artifactType = getArtifactTypeFromExtension(ext);
+    if (!artifactType) continue;
+
+    const fileName = getFileName(filePath);
+    artifacts.push({
+      id: `artifact-media-${messageId}-${index}`,
+      messageId,
+      sessionId,
+      type: artifactType,
+      title: fileName,
+      content: '',
+      fileName,
+      filePath,
+      source: 'tool',
+      createdAt: Date.now(),
+    });
+
+    index += 1;
+  }
+
+  return artifacts;
 }
 
 export function parseFilePathsFromText(
