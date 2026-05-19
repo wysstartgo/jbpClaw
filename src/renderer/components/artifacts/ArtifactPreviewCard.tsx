@@ -1,4 +1,4 @@
-import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
+import { ArrowTopRightOnSquareIcon, FolderOpenIcon } from '@heroicons/react/24/outline';
 import React from 'react';
 import { useDispatch } from 'react-redux';
 
@@ -95,6 +95,25 @@ interface ArtifactPreviewCardProps {
   artifact: Artifact;
 }
 
+function normalizeLocalFilePath(filePath: string): string {
+  let normalized = filePath;
+  if (normalized.startsWith('file:///')) {
+    normalized = normalized.slice(7);
+  } else if (normalized.startsWith('file://')) {
+    normalized = normalized.slice(7);
+  } else if (normalized.startsWith('file:/')) {
+    normalized = normalized.slice(5);
+  }
+  if (/^\/[A-Za-z]:/.test(normalized)) {
+    normalized = normalized.slice(1);
+  }
+  return normalized;
+}
+
+function showArtifactToast(message: string): void {
+  window.dispatchEvent(new CustomEvent('app:showToast', { detail: message }));
+}
+
 const ArtifactPreviewCard: React.FC<ArtifactPreviewCardProps> = ({ artifact }) => {
   const dispatch = useDispatch();
 
@@ -102,28 +121,84 @@ const ArtifactPreviewCard: React.FC<ArtifactPreviewCardProps> = ({ artifact }) =
     dispatch(selectArtifact(artifact.id));
   };
 
+  const handleOpenFile = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!artifact.filePath) {
+      handleClick();
+      return;
+    }
+
+    try {
+      const result = await window.electron?.shell?.openPath(normalizeLocalFilePath(artifact.filePath));
+      if (!result?.success) {
+        showArtifactToast(result?.error || t('artifactOpenFailed'));
+      }
+    } catch (error) {
+      console.error('Failed to open artifact file:', error);
+      showArtifactToast(t('artifactOpenFailed'));
+    }
+  };
+
+  const handleRevealInFolder = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!artifact.filePath) return;
+
+    try {
+      const result = await window.electron?.shell?.showItemInFolder(normalizeLocalFilePath(artifact.filePath));
+      if (!result?.success) {
+        showArtifactToast(result?.error || t('showInFolderFailed'));
+      }
+    } catch (error) {
+      console.error('Failed to reveal artifact file:', error);
+      showArtifactToast(t('showInFolderFailed'));
+    }
+  };
+
   const IconComponent = TYPE_ICON_MAP[artifact.type];
   const title = artifact.fileName || artifact.title;
   const subtitle = t(TYPE_LABEL_KEY[artifact.type]);
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-surface-raised hover:bg-surface-hover transition-colors cursor-pointer max-w-sm w-full text-left"
-    >
-      <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-        <IconComponent className="w-5 h-5 text-primary" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-foreground truncate">{title}</div>
-        <div className="text-xs text-secondary">{subtitle}</div>
-      </div>
-      <div className="flex-shrink-0 flex items-center gap-1 text-primary text-sm font-medium">
-        <ArrowTopRightOnSquareIcon className="w-4 h-4" />
-        <span>{t('artifactOpen')}</span>
-      </div>
-    </button>
+    <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-border bg-surface-raised hover:bg-surface-hover transition-colors max-w-sm w-full text-left">
+      <button
+        type="button"
+        onClick={handleClick}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
+        <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+          <IconComponent className="w-5 h-5 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium text-foreground truncate">{title}</div>
+          <div className="text-xs text-secondary">{subtitle}</div>
+        </div>
+        <div className="flex-shrink-0 flex items-center gap-1 text-primary text-sm font-medium">
+          <ArrowTopRightOnSquareIcon className="w-4 h-4" />
+          <span>{t('artifactView')}</span>
+        </div>
+      </button>
+
+      {artifact.filePath && (
+        <div className="flex shrink-0 items-center gap-1 border-l border-border/70 pl-2">
+          <button
+            type="button"
+            onClick={handleOpenFile}
+            title={t('artifactOpenWithApp')}
+            className="rounded-lg p-1.5 text-secondary transition-colors hover:bg-surface hover:text-primary"
+          >
+            <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleRevealInFolder}
+            title={t('artifactOpenFolder')}
+            className="rounded-lg p-1.5 text-secondary transition-colors hover:bg-surface hover:text-primary"
+          >
+            <FolderOpenIcon className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+    </div>
   );
 };
 
