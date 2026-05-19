@@ -2,6 +2,7 @@ import { CheckCircleIcon, ClockIcon, PlayCircleIcon, XCircleIcon, XMarkIcon } fr
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 
+import { TaskStatus } from '../../../scheduledTask/constants';
 import type { RunFilter, ScheduledTaskRunWithName } from '../../../scheduledTask/types';
 import { i18nService } from '../../services/i18n';
 import { scheduledTaskService } from '../../services/scheduledTask';
@@ -9,28 +10,33 @@ import { RootState } from '../../store';
 import RunSessionModal from './RunSessionModal';
 import { formatDateTime, formatDuration } from './utils';
 
-const STATUS_OPTIONS = ['success', 'error', 'skipped', 'running'] as const;
+const STATUS_OPTIONS = [
+  TaskStatus.Success,
+  TaskStatus.Error,
+  TaskStatus.Skipped,
+  TaskStatus.Running,
+] as const;
 
-const statusConfig: Record<string, { label: string; tone: string; badgeClass: string; icon: React.ReactNode }> = {
-  success: {
+const statusConfig: Record<TaskStatus, { label: string; tone: string; badgeClass: string; icon: React.ReactNode }> = {
+  [TaskStatus.Success]: {
     label: 'scheduledTasksStatusSuccess',
     tone: 'text-green-600 dark:text-green-500',
     badgeClass: 'bg-green-50 dark:bg-green-500/10',
     icon: <CheckCircleIcon className="h-5 w-5" />,
   },
-  error: {
+  [TaskStatus.Error]: {
     label: 'scheduledTasksStatusError',
     tone: 'text-red-500 dark:text-red-400',
     badgeClass: 'bg-red-50 dark:bg-red-500/10',
     icon: <XCircleIcon className="h-5 w-5" />,
   },
-  skipped: {
+  [TaskStatus.Skipped]: {
     label: 'scheduledTasksStatusSkipped',
     tone: 'text-yellow-600 dark:text-yellow-500',
     badgeClass: 'bg-yellow-50 dark:bg-yellow-500/10',
     icon: <PlayCircleIcon className="h-5 w-5" />,
   },
-  running: {
+  [TaskStatus.Running]: {
     label: 'scheduledTasksStatusRunning',
     tone: 'text-primary dark:text-primary-hover',
     badgeClass: 'bg-primary/10 dark:bg-primary/20',
@@ -79,7 +85,7 @@ const AllRunsHistory: React.FC = () => {
     scheduledTaskService.loadAllRuns(50, 0, nextFilter);
   };
 
-  const handleStatusToggle = (status: string) => {
+  const handleStatusToggle = (status: TaskStatus) => {
     updateFilter({
       ...filter,
       status: filter.status === status ? undefined : status,
