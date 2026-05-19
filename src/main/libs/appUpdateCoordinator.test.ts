@@ -29,6 +29,7 @@ vi.mock('electron', () => ({
 }));
 
 import { type AppUpdateInfo,AppUpdateSource, AppUpdateStatus } from '../../shared/appUpdate/constants';
+import { KeyfromStoreKey } from '../../shared/keyfrom';
 import { AppUpdateCoordinator } from './appUpdateCoordinator';
 
 const readyKey = (source: string) => `app_update_ready_file:${source}`;
@@ -190,6 +191,43 @@ describe('AppUpdateCoordinator manual check', () => {
     expect(requestedUrl).toContain('uuid=uuid-test');
     expect(requestedUrl).toContain('userId=user-1');
     expect(requestedUrl).toContain('version=2026.5.1');
+    expect(requestedUrl).toContain('firstKeyfrom=official');
+    expect(requestedUrl).toContain('latestKeyfrom=official');
+    expect(values.get(KeyfromStoreKey.Attribution)).toMatchObject({
+      firstKeyfrom: 'official',
+      latestKeyfrom: 'official',
+    });
+  });
+
+  test('manual check preserves first keyfrom and sends latest keyfrom', async () => {
+    mockElectronState.fetchImpl.mockResolvedValue(new Response(JSON.stringify({
+      code: 0,
+      data: {
+        value: {
+          version: '2026.5.2',
+          macArm: { url: 'https://example.com/QingShuClaw.dmg' },
+        },
+      },
+    }), { status: 200 }));
+    const { store, values } = createStore({
+      installation_uuid: 'uuid-test',
+      [KeyfromStoreKey.Attribution]: {
+        firstKeyfrom: 'partner_a',
+        latestKeyfrom: 'partner_b',
+        updatedAt: 1,
+      },
+    });
+    const coordinator = new AppUpdateCoordinator(store as never);
+
+    await coordinator.checkNow({ manual: true });
+
+    const requestedUrl = String(mockElectronState.fetchImpl.mock.calls[0][0]);
+    expect(requestedUrl).toContain('firstKeyfrom=partner_a');
+    expect(requestedUrl).toContain('latestKeyfrom=official');
+    expect(values.get(KeyfromStoreKey.Attribution)).toMatchObject({
+      firstKeyfrom: 'partner_a',
+      latestKeyfrom: 'official',
+    });
   });
 
   test('emits state changes to active windows', async () => {

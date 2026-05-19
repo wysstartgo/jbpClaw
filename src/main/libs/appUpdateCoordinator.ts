@@ -14,6 +14,7 @@ import {
 import type { SqliteStore } from '../sqliteStore';
 import { cancelActiveDownload, downloadUpdate, installUpdate } from './appUpdateInstaller';
 import { getFallbackDownloadUrl, getManualUpdateCheckUrl, getUpdateCheckUrl } from './endpoints';
+import { getKeyfromAttribution, initializeKeyfromAttribution } from './keyfromAttribution';
 
 const APP_UPDATE_READY_FILE_KEY_PREFIX = 'app_update_ready_file';
 const APP_UPDATE_TEST_CURRENT_VERSION_ENV = 'LOBSTERAI_UPDATE_CURRENT_VERSION';
@@ -86,6 +87,7 @@ export class AppUpdateCoordinator {
   ) {
     this.store = store;
     this.getCurrentVersion = () => options?.currentVersion ?? this.resolveCurrentVersion();
+    initializeKeyfromAttribution(store);
     this.restoreStoredReadyState();
   }
 
@@ -498,6 +500,9 @@ export class AppUpdateCoordinator {
     if (version) {
       params.append('version', version);
     }
+    const { firstKeyfrom, latestKeyfrom } = getKeyfromAttribution(this.store);
+    params.append('firstKeyfrom', firstKeyfrom);
+    params.append('latestKeyfrom', latestKeyfrom);
     return params.toString();
   }
 
