@@ -67,6 +67,7 @@ const DIRS_TO_DELETE = new Set([
 const BUNDLED_EXTENSIONS_TO_KEEP = new Set([
   'anthropic', 'deepseek', 'google', 'kimi-coding', 'minimax', 'moonshot',
   'ollama', 'openai', 'openrouter', 'qianfan', 'qwen', 'stepfun', 'volcengine',
+  'xiaomi',
   'telegram', 'discord', 'feishu', 'qqbot',
   'browser', 'memory-core', 'lobster', 'llm-task', 'zai',
   'image-generation-core', 'media-understanding-core', 'speech-core', 'talk-voice',

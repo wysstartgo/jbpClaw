@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
@@ -768,6 +769,7 @@ export const buildProviderSelection = (options: {
   codingPlanEnabled?: boolean;
   supportsImage?: boolean;
   modelName?: string;
+  contextWindow?: number;
 }): OpenClawProviderSelection => {
   const providerName = options.providerName ?? '';
   const descriptor = resolveDescriptor(providerName, !!options.codingPlanEnabled, options.authType);
@@ -846,8 +848,8 @@ export const buildProviderSelection = (options: {
           ...(descriptor.modelDefaults?.cost
             ? { cost: descriptor.modelDefaults.cost }
             : {}),
-          ...(descriptor.modelDefaults?.contextWindow
-            ? { contextWindow: descriptor.modelDefaults.contextWindow }
+          ...((options.contextWindow ?? descriptor.modelDefaults?.contextWindow) !== undefined
+            ? { contextWindow: options.contextWindow ?? descriptor.modelDefaults!.contextWindow }
             : {}),
           ...(descriptor.modelDefaults?.maxTokens
             ? { maxTokens: descriptor.modelDefaults.maxTokens }
@@ -880,6 +882,14 @@ function lowercaseHeaderKeys(headers: Record<string, string>): Record<string, st
   return result;
 }
 
+const MCP_NAME_NON_ASCII_RE = /[^\x00-\x7F]/;
+
+function safeServerKey(name: string): string {
+  if (!MCP_NAME_NON_ASCII_RE.test(name)) return name;
+  const hash = createHash('md5').update(name).digest('hex').slice(0, 8);
+  return `mcp-${hash}`;
+}
+
 export function buildOpenClawMcpServers(
   servers: ResolvedMcpServer[],
 ): Record<string, Record<string, unknown>> {
@@ -906,7 +916,7 @@ export function buildOpenClawMcpServers(
         entry.transport = 'streamable-http';
         break;
     }
-    result[server.name] = entry;
+    result[safeServerKey(server.name)] = entry;
   }
   return result;
 }
@@ -1169,6 +1179,7 @@ export class OpenClawConfigSync {
       codingPlanEnabled: apiResolution.providerMetadata?.codingPlanEnabled,
       supportsImage: apiResolution.providerMetadata?.supportsImage,
       modelName: apiResolution.providerMetadata?.modelName,
+      contextWindow: apiResolution.providerMetadata?.contextWindow,
     });
 
     const allProvidersMap: Record<string, OpenClawProviderSelection['providerConfig']> = {};
@@ -1185,6 +1196,7 @@ export class OpenClawConfigSync {
           codingPlanEnabled: p.codingPlanEnabled,
           supportsImage: m.supportsImage,
           modelName: m.name,
+          contextWindow: m.contextWindow,
         });
         if (!allProvidersMap[sel.providerId]) {
           allProvidersMap[sel.providerId] = { ...sel.providerConfig, models: [] };

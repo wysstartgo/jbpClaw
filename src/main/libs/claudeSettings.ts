@@ -39,6 +39,7 @@ export type ApiConfigResolution = {
     codingPlanEnabled: boolean;
     supportsImage?: boolean;
     modelName?: string;
+    contextWindow?: number;
   };
 };
 
@@ -169,6 +170,7 @@ type MatchedProvider = {
   baseURL: string;
   supportsImage?: boolean;
   modelName?: string;
+  contextWindow?: number;
 };
 
 function resolveProviderCredential(providerName: string, providerConfig: ProviderConfig): {
@@ -370,6 +372,7 @@ function resolveMatchedProvider(appConfig: AppConfig): { matched: MatchedProvide
       baseURL: credential.baseURLOverride ?? baseURL,
       supportsImage: matchedModel?.supportsImage,
       modelName: matchedModel?.name,
+      contextWindow: matchedModel?.contextWindow,
     },
   };
 }
@@ -506,6 +509,7 @@ export function resolveRawApiConfig(): ApiConfigResolution {
       codingPlanEnabled: !!matched.providerConfig.codingPlanEnabled,
       supportsImage: matched.supportsImage,
       modelName: matched.modelName,
+      contextWindow: matched.contextWindow,
     },
   };
 }

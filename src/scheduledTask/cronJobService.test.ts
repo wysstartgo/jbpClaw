@@ -322,7 +322,7 @@ describe('CronJobService gateway delivery', () => {
       payload: { kind: PayloadKind.AgentTurn, message: 'Send a summary' },
       delivery: {
         mode: DeliveryMode.Announce,
-        channel: 'dingtalk',
+        channel: 'dingtalk-connector',
         to: 'conversation-1',
         accountId: 'dingtalk',
       },
@@ -331,7 +331,7 @@ describe('CronJobService gateway delivery', () => {
     expect(request).toHaveBeenCalledWith('cron.add', expect.objectContaining({
       delivery: {
         mode: DeliveryMode.Announce,
-        channel: 'dingtalk',
+        channel: 'dingtalk-connector',
         to: 'conversation-1',
         accountId: 'dingtalk',
       },

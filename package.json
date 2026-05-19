@@ -6,7 +6,7 @@
     "email": "lobsterai.project@rd.netease.com"
   },
   "license": "MIT",
-  "version": "2026.5.12",
+  "version": "2026.5.18",
   "openclaw": {
     "version": "v2026.4.14",
     "repo": "https://github.com/openclaw/openclaw.git",
@@ -34,7 +34,7 @@
       {
         "id": "moltbot-popo",
         "npm": "moltbot-popo",
-        "version": "2.1.1",
+        "version": "2.1.8",
         "registry": "https://npm.nie.netease.com",
         "optional": true
       },

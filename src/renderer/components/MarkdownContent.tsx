@@ -125,6 +125,10 @@ const safeUrlTransform = (url: string): string => {
   const trimmed = url.trim();
   if (!trimmed) return trimmed;
 
+  if (/^[A-Za-z]:[\\/]/.test(trimmed)) {
+    return trimmed;
+  }
+
   const match = trimmed.match(/^([a-z][a-z0-9+.-]*):/i);
   if (!match) {
     return trimmed;
@@ -374,6 +378,67 @@ const toFileHref = (filePath: string): string => {
   return `file://${normalized}`;
 };
 
+const encodeLocalPathForUrl = (filePath: string): string => {
+  return filePath
+    .replace(/\\/g, '/')
+    .split('/')
+    .map((segment, index) => {
+      if (index === 0 && segment === '') return '';
+      if (/^[A-Za-z]:$/.test(segment)) return segment;
+      return encodeURIComponent(segment);
+    })
+    .join('/');
+};
+
+const toLocalFileSrc = (filePath: string): string => {
+  const normalized = stripFileProtocol(stripHashAndQuery(filePath.trim()));
+  const encoded = encodeLocalPathForUrl(normalized);
+  if (/^[A-Za-z]:/.test(normalized)) {
+    return `localfile:///${encoded}`;
+  }
+  if (encoded.startsWith('/')) {
+    return `localfile://${encoded}`;
+  }
+  return `localfile:///${encoded}`;
+};
+
+const isRemoteOrInlineImageSrc = (src: string): boolean => {
+  return /^(?:https?|data|blob):/i.test(src);
+};
+
+const resolveMarkdownImageSrc = (
+  src: unknown,
+  alt: unknown,
+  resolveLocalFilePath?: (href: string, text: string) => string | null
+): string | undefined => {
+  if (typeof src !== 'string') return undefined;
+
+  const srcValue = src.trim();
+  if (!srcValue || isRemoteOrInlineImageSrc(srcValue)) {
+    return srcValue || undefined;
+  }
+
+  const altText = typeof alt === 'string' ? alt : '';
+  const resolvedPath = resolveLocalFilePath ? resolveLocalFilePath(srcValue, altText) : null;
+  if (resolvedPath) {
+    return toLocalFileSrc(resolvedPath);
+  }
+
+  if (/^(?:file|localfile):\/\//i.test(srcValue)) {
+    return toLocalFileSrc(srcValue);
+  }
+
+  if (srcValue.startsWith('/') && !srcValue.startsWith('//')) {
+    return toLocalFileSrc(srcValue);
+  }
+
+  if (/^[A-Za-z]:[\\/]/.test(srcValue)) {
+    return toLocalFileSrc(srcValue);
+  }
+
+  return srcValue;
+};
+
 const getLocalPathFromLink = (
   href: string | null,
   text: string,
@@ -505,29 +570,12 @@ const createMarkdownComponents = (
       {children}
     </td>
   ),
-  img: ({ node, className, src, alt, ...props }: any) => {
-    let resolvedSrc = src;
-    let localImagePath: string | null = null;
-    if (typeof src === 'string') {
-      if (/^localfile:\/\//i.test(src)) {
-        resolvedSrc = src;
-        const rawPath = stripFileProtocol(stripHashAndQuery(src));
-        localImagePath = safeDecodeURIComponent(rawPath) || rawPath;
-      } else if (src.startsWith('file://')) {
-        resolvedSrc = src.replace(/^file:\/\//, 'localfile://');
-        const rawPath = stripFileProtocol(stripHashAndQuery(src));
-        localImagePath = safeDecodeURIComponent(rawPath) || rawPath;
-      } else if (src.startsWith('/') && !src.startsWith('//')) {
-        resolvedSrc = `localfile://${src}`;
-        localImagePath = src;
-      } else if (resolveLocalFilePath) {
-        localImagePath = resolveLocalFilePath(src, typeof alt === 'string' ? alt : '');
-        if (localImagePath) {
-          resolvedSrc = `localfile://${localImagePath}`;
-        }
-      }
-    }
-
+  img: ({ node: _node, className: _className, src, alt, ...props }: any) => {
+    const resolvedSrc = resolveMarkdownImageSrc(src, alt, resolveLocalFilePath);
+    const altText = typeof alt === 'string' ? alt : '';
+    const localImagePath = typeof src === 'string'
+      ? getLocalPathFromLink(src, altText, resolveLocalFilePath)
+      : null;
     const handleImageClick = async () => {
       if (localImagePath) {
         try {
@@ -552,7 +600,7 @@ const createMarkdownComponents = (
       <img
         className={`max-w-full max-h-96 object-contain rounded-xl my-4${(onImageClick || localImagePath) ? ' cursor-pointer hover:opacity-90 transition-opacity' : ''}`}
         src={resolvedSrc}
-        alt={alt}
+        alt={altText || undefined}
         onClick={(onImageClick || localImagePath) ? handleImageClick : undefined}
         {...props}
       />

@@ -24,12 +24,14 @@ import {
   scheduledTaskChannelOptionKey,
   scheduleToPlanInfo,
 } from './utils';
+import type { ScheduledTaskTemplate } from './taskTemplates';
 
 interface TaskFormProps {
   mode: 'create' | 'edit';
   task?: ScheduledTask;
+  initialTemplate?: ScheduledTaskTemplate | null;
   onCancel: () => void;
-  onSaved: () => void;
+  onSaved: (newTaskId?: string) => void;
   onDirtyChange?: (dirty: boolean) => void;
 }
 
@@ -125,6 +127,22 @@ function createFormState(task?: ScheduledTask): FormState {
   };
 }
 
+function applyScheduledTaskTemplate(form: FormState, template: ScheduledTaskTemplate): FormState {
+  const dateDefaults = nowDefaults();
+  return {
+    ...form,
+    ...dateDefaults,
+    name: i18nService.t(template.titleKey),
+    planType: template.schedule.planType,
+    hour: template.schedule.hour,
+    minute: template.schedule.minute,
+    second: 0,
+    weekdays: template.schedule.weekdays ? [...template.schedule.weekdays] : form.weekdays,
+    monthDay: template.schedule.monthDay ?? form.monthDay,
+    payloadText: i18nService.t(template.promptKey),
+  };
+}
+
 function buildScheduleInput(form: FormState): ScheduledTaskInput['schedule'] {
   if (form.planType === 'once') {
     const date = new Date(form.year, form.month - 1, form.day, form.hour, form.minute, form.second);
@@ -150,8 +168,13 @@ function buildScheduleInput(form: FormState): ScheduledTaskInput['schedule'] {
   return { kind: 'cron', expr: `${min} ${hr} ${form.monthDay} * *` };
 }
 
-const TaskForm: React.FC<TaskFormProps> = ({ mode, task, onCancel, onSaved, onDirtyChange }) => {
-  const [form, setForm] = useState<FormState>(() => createFormState(task));
+const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null, onCancel, onSaved, onDirtyChange }) => {
+  const [form, setForm] = useState<FormState>(() => {
+    const initialForm = createFormState(task);
+    return mode === 'create' && initialTemplate
+      ? applyScheduledTaskTemplate(initialForm, initialTemplate)
+      : initialForm;
+  });
   const initialFormRef = useRef(JSON.stringify(createFormState(task)));
   const availableModels = useSelector((state: RootState) => state.model.availableModels);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -183,10 +206,13 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, onCancel, onSaved, onDi
   ))?.filterAccountId;
 
   useEffect(() => {
-    const nextForm = createFormState(task);
-    initialFormRef.current = JSON.stringify(nextForm);
+    const cleanForm = createFormState(task);
+    const nextForm = mode === 'create' && initialTemplate
+      ? applyScheduledTaskTemplate(cleanForm, initialTemplate)
+      : cleanForm;
+    initialFormRef.current = JSON.stringify(cleanForm);
     setForm(nextForm);
-  }, [task]);
+  }, [task, initialTemplate, mode]);
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -307,7 +333,11 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, onCancel, onSaved, onDi
       };
 
       if (mode === 'create') {
-        await scheduledTaskService.createTask(input);
+        const newTaskId = await scheduledTaskService.createTask(input);
+        initialFormRef.current = JSON.stringify(form);
+        onDirtyChange?.(false);
+        onSaved(newTaskId ?? undefined);
+        return;
       } else if (task) {
         await scheduledTaskService.updateTaskById(task.id, input);
       }

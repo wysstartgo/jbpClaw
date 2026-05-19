@@ -11,9 +11,11 @@ import SidebarToggleIcon from '../icons/SidebarToggleIcon';
 import WindowTitleBar from '../window/WindowTitleBar';
 import AllRunsHistory from './AllRunsHistory';
 import DeleteConfirmModal from './DeleteConfirmModal';
+import ScheduledTaskTemplatePickerModal from './ScheduledTaskTemplatePickerModal';
 import TaskDetail from './TaskDetail';
 import TaskForm from './TaskForm';
 import TaskList from './TaskList';
+import { SCHEDULED_TASK_TEMPLATES, type ScheduledTaskTemplate } from './taskTemplates';
 
 interface ScheduledTasksViewProps {
   isSidebarCollapsed?: boolean;
@@ -41,6 +43,8 @@ const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
   const isFormDirtyRef = useRef(false);
   const pendingLeaveActionRef = useRef<(() => void) | null>(null);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<ScheduledTaskTemplate | null>(null);
 
   const handleFormDirtyChange = useCallback((dirty: boolean) => {
     isFormDirtyRef.current = dirty;
@@ -90,6 +94,18 @@ const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
       dispatch(selectTask(null));
       dispatch(setViewMode('list'));
     }
+  };
+
+  const handleCreateBlankTask = () => {
+    setSelectedTemplate(null);
+    setShowTemplatePicker(false);
+    dispatch(setViewMode('create'));
+  };
+
+  const handleSelectTemplate = (template: ScheduledTaskTemplate) => {
+    setSelectedTemplate(template);
+    setShowTemplatePicker(false);
+    dispatch(setViewMode('create'));
   };
 
   // Show tabs only in list view (not in create/edit/detail sub-views)
@@ -171,7 +187,7 @@ const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
           {activeTab === 'tasks' && (
             <button
               type="button"
-              onClick={() => dispatch(setViewMode('create'))}
+              onClick={() => setShowTemplatePicker(true)}
               className="px-4 py-1.5 text-sm font-semibold bg-primary text-white rounded-[10px] hover:bg-primary-hover transition-colors shadow-sm"
             >
               {i18nService.t('scheduledTasksNewTask')}
@@ -190,8 +206,17 @@ const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
             {viewMode === 'create' && (
               <TaskForm
                 mode="create"
+                initialTemplate={selectedTemplate}
                 onCancel={handleBackToList}
-                onSaved={handleBackToList}
+                onSaved={(newTaskId) => {
+                  setSelectedTemplate(null);
+                  if (newTaskId) {
+                    dispatch(selectTask(newTaskId));
+                    dispatch(setViewMode('detail'));
+                  } else {
+                    handleBackToList();
+                  }
+                }}
                 onDirtyChange={handleFormDirtyChange}
               />
             )}
@@ -217,6 +242,15 @@ const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
           taskName={deleteTaskInfo.name}
           onConfirm={handleConfirmDelete}
           onCancel={handleCancelDelete}
+        />
+      )}
+
+      {showTemplatePicker && (
+        <ScheduledTaskTemplatePickerModal
+          templates={SCHEDULED_TASK_TEMPLATES}
+          onClose={() => setShowTemplatePicker(false)}
+          onNew={handleCreateBlankTask}
+          onSelect={handleSelectTemplate}
         />
       )}
 

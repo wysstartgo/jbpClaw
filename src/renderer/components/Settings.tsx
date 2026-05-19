@@ -224,6 +224,36 @@ const MINIMAX_CODE_ENDPOINT_GLOBAL = 'https://api.minimax.io/oauth/code';
 const MINIMAX_TOKEN_ENDPOINT_CN = 'https://api.minimaxi.com/oauth/token';
 const MINIMAX_TOKEN_ENDPOINT_GLOBAL = 'https://api.minimax.io/oauth/token';
 
+const CW_MIN = 32000;
+const CW_MAX = 2_000_000;
+const CW_LOG_MIN = Math.log(CW_MIN);
+const CW_LOG_MAX = Math.log(CW_MAX);
+const CW_DEFAULT = 200_000;
+const CW_SCALE_EXP = 1.5;
+const CW_MARKER_STOPS = [
+  { label: '32K', value: CW_MIN },
+  { label: '64K', value: 64000 },
+  { label: '200K', value: 200000 },
+  { label: '1M', value: 1000000 },
+  { label: '2M', value: CW_MAX },
+].map(marker => ({
+  ...marker,
+  pos: Math.pow(
+    (Math.log(Math.max(CW_MIN, Math.min(CW_MAX, marker.value))) - CW_LOG_MIN) / (CW_LOG_MAX - CW_LOG_MIN),
+    CW_SCALE_EXP,
+  ),
+}));
+
+function contextWindowToSlider(value: number): number {
+  const normalized = (Math.log(Math.max(CW_MIN, Math.min(CW_MAX, value))) - CW_LOG_MIN) / (CW_LOG_MAX - CW_LOG_MIN);
+  return Math.pow(normalized, CW_SCALE_EXP);
+}
+
+function sliderToContextWindow(value: number): number {
+  const logValue = Math.pow(Math.max(0, Math.min(1, value)), 1 / CW_SCALE_EXP);
+  return Math.round(Math.exp(CW_LOG_MIN + logValue * (CW_LOG_MAX - CW_LOG_MIN)) / 1000) * 1000;
+}
+
 type MiniMaxRegion = 'cn' | 'global';
 type MiniMaxOAuthPhase =
   | { kind: 'idle' }
@@ -540,6 +570,7 @@ const Settings: React.FC<SettingsProps> = ({
   const [newModelName, setNewModelName] = useState('');
   const [newModelId, setNewModelId] = useState('');
   const [newModelSupportsImage, setNewModelSupportsImage] = useState(false);
+  const [newModelContextWindow, setNewModelContextWindow] = useState<number | undefined>(undefined);
   const [modelFormError, setModelFormError] = useState<string | null>(null);
 
   // About tab
@@ -2189,16 +2220,18 @@ const Settings: React.FC<SettingsProps> = ({
     setNewModelName('');
     setNewModelId('');
     setNewModelSupportsImage(false);
+    setNewModelContextWindow(undefined);
     setModelFormError(null);
   };
 
-  const handleEditModel = (modelId: string, modelName: string, supportsImage?: boolean) => {
+  const handleEditModel = (modelId: string, modelName: string, supportsImage?: boolean, contextWindow?: number) => {
     setIsAddingModel(false);
     setIsEditingModel(true);
     setEditingModelId(modelId);
     setNewModelName(modelName);
     setNewModelId(modelId);
     setNewModelSupportsImage(!!supportsImage);
+    setNewModelContextWindow(contextWindow);
     setModelFormError(null);
   };
 
@@ -2257,6 +2290,7 @@ const Settings: React.FC<SettingsProps> = ({
         modelId,
         newModelSupportsImage,
       ),
+      ...(newModelContextWindow !== undefined ? { contextWindow: newModelContextWindow } : {}),
     };
     const updatedModels = isEditingModel && editingModelId
       ? currentModels.map(model => (model.id === editingModelId ? nextModel : model))
@@ -2276,6 +2310,7 @@ const Settings: React.FC<SettingsProps> = ({
     setNewModelName('');
     setNewModelId('');
     setNewModelSupportsImage(false);
+    setNewModelContextWindow(undefined);
     setModelFormError(null);
   };
 
@@ -2286,6 +2321,7 @@ const Settings: React.FC<SettingsProps> = ({
     setNewModelName('');
     setNewModelId('');
     setNewModelSupportsImage(false);
+    setNewModelContextWindow(undefined);
     setModelFormError(null);
   };
 
@@ -4794,7 +4830,7 @@ const Settings: React.FC<SettingsProps> = ({
                           )}
                           <button
                             type="button"
-                            onClick={() => handleEditModel(model.id, model.name, model.supportsImage)}
+                            onClick={() => handleEditModel(model.id, model.name, model.supportsImage, model.contextWindow)}
                             className="p-0.5 text-secondary hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <PencilIcon className="h-3.5 w-3.5" />
@@ -5355,6 +5391,62 @@ const Settings: React.FC<SettingsProps> = ({
                     >
                       {i18nService.t('supportsImageInput')}
                     </label>
+                  </div>
+                  <div className="space-y-2 rounded-xl border border-border bg-surface/50 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <label className="text-xs font-medium text-secondary">
+                          {i18nService.t('contextWindow')}
+                        </label>
+                        <p className="mt-1 text-[11px] text-muted">
+                          {i18nService.t('contextWindowHint')}
+                        </p>
+                      </div>
+                      <input
+                        type="number"
+                        min={CW_MIN}
+                        max={CW_MAX}
+                        step={1000}
+                        value={newModelContextWindow ?? CW_DEFAULT}
+                        onChange={(e) => {
+                          const nextValue = Number.parseInt(e.target.value, 10);
+                          if (!Number.isNaN(nextValue)) {
+                            setNewModelContextWindow(Math.max(CW_MIN, Math.min(CW_MAX, nextValue)));
+                          }
+                        }}
+                        className="w-24 rounded-lg bg-surface-inset border-border border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-2.5 py-1 text-xs text-center tabular-nums"
+                      />
+                    </div>
+                    <div className="relative h-3">
+                      <div className="absolute top-1/2 left-0 right-0 h-[3px] -translate-y-1/2 rounded-full bg-border" />
+                      {CW_MARKER_STOPS.map((marker) => (
+                        <div
+                          key={marker.label}
+                          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[7px] h-[7px] rounded-full bg-white border-[1.5px] border-border z-[1]"
+                          style={{ left: `${marker.pos * 100}%` }}
+                        />
+                      ))}
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.001}
+                        value={contextWindowToSlider(newModelContextWindow ?? CW_DEFAULT)}
+                        onChange={(e) => setNewModelContextWindow(sliderToContextWindow(Number(e.target.value)))}
+                        className="absolute inset-0 w-full h-full appearance-none cursor-pointer bg-transparent z-[2] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_1px_3px_rgba(0,0,0,0.2)] [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-runnable-track]:bg-transparent"
+                      />
+                    </div>
+                    <div className="relative h-4">
+                      {CW_MARKER_STOPS.map((marker) => (
+                        <span
+                          key={marker.label}
+                          className="absolute text-[9px] text-muted select-none -translate-x-1/2"
+                          style={{ left: `${marker.pos * 100}%` }}
+                        >
+                          {marker.label}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
