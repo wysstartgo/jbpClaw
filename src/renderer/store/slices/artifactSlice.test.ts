@@ -3,8 +3,13 @@ import { describe, expect, test } from 'vitest';
 import type { Artifact } from '../../types/artifact';
 import reducer, {
   addArtifact,
+  closeArtifactPreviewTab,
   clearSessionArtifacts,
+  openArtifactPreviewTab,
+  selectActivePreviewTab,
   selectArtifact,
+  selectPreviewTabs,
+  setActiveTab,
   setPanelWidth,
 } from './artifactSlice';
 
@@ -99,12 +104,110 @@ describe('artifactSlice', () => {
   });
 
   test('selecting an artifact opens preview panel state', () => {
-    const next = reducer(undefined, selectArtifact('artifact-1'));
+    const withArtifact = reducer(undefined, addArtifact({
+      sessionId: 'session-1',
+      artifact: makeArtifact(),
+    }));
+    const next = reducer(withArtifact, selectArtifact('artifact-1'));
 
     expect(next.selectedArtifactId).toBe('artifact-1');
     expect(next.isPanelOpen).toBe(true);
     expect(next.panelView).toBe('preview');
     expect(next.activeTab).toBe('preview');
+  });
+
+  test('opens preview tabs per session and keeps active content view in sync', () => {
+    const withFirst = reducer(undefined, addArtifact({
+      sessionId: 'session-1',
+      artifact: makeArtifact({ id: 'artifact-1', filePath: 'D:\\workspace\\one.pdf' }),
+    }));
+    const withSecond = reducer(withFirst, addArtifact({
+      sessionId: 'session-1',
+      artifact: makeArtifact({ id: 'artifact-2', filePath: 'D:\\workspace\\two.md', type: 'markdown' }),
+    }));
+
+    const openedFirst = reducer(withSecond, openArtifactPreviewTab({
+      sessionId: 'session-1',
+      artifactId: 'artifact-1',
+    }));
+    const openedSecond = reducer(openedFirst, openArtifactPreviewTab({
+      sessionId: 'session-1',
+      artifactId: 'artifact-2',
+    }));
+    const codeView = reducer(openedSecond, setActiveTab('code'));
+
+    const rootState = { artifact: codeView } as any;
+    expect(selectPreviewTabs(rootState, 'session-1').map((tab) => tab.artifactId)).toEqual([
+      'artifact-1',
+      'artifact-2',
+    ]);
+    expect(selectActivePreviewTab(rootState, 'session-1')).toMatchObject({
+      artifactId: 'artifact-2',
+      contentView: 'code',
+    });
+    expect(codeView.selectedArtifactId).toBe('artifact-2');
+  });
+
+  test('closing the active preview tab activates the nearest remaining tab', () => {
+    const withFirst = reducer(undefined, addArtifact({
+      sessionId: 'session-1',
+      artifact: makeArtifact({ id: 'artifact-1', filePath: 'D:\\workspace\\one.pdf' }),
+    }));
+    const withSecond = reducer(withFirst, addArtifact({
+      sessionId: 'session-1',
+      artifact: makeArtifact({ id: 'artifact-2', filePath: 'D:\\workspace\\two.pdf' }),
+    }));
+    const openedFirst = reducer(withSecond, openArtifactPreviewTab({
+      sessionId: 'session-1',
+      artifactId: 'artifact-1',
+    }));
+    const openedSecond = reducer(openedFirst, openArtifactPreviewTab({
+      sessionId: 'session-1',
+      artifactId: 'artifact-2',
+    }));
+    const closedSecond = reducer(openedSecond, closeArtifactPreviewTab({
+      sessionId: 'session-1',
+      tabId: 'artifact:artifact-2',
+    }));
+
+    const rootState = { artifact: closedSecond } as any;
+    expect(selectPreviewTabs(rootState, 'session-1')).toHaveLength(1);
+    expect(selectActivePreviewTab(rootState, 'session-1')).toMatchObject({
+      artifactId: 'artifact-1',
+    });
+    expect(closedSecond.selectedArtifactId).toBe('artifact-1');
+  });
+
+  test('updates preview tab artifact id when duplicate file artifact is replaced', () => {
+    const first = reducer(undefined, addArtifact({
+      sessionId: 'session-1',
+      artifact: makeArtifact({
+        id: 'link-artifact',
+        content: '',
+        filePath: '/D:/workspace/report.md',
+      }),
+    }));
+    const opened = reducer(first, openArtifactPreviewTab({
+      sessionId: 'session-1',
+      artifactId: 'link-artifact',
+    }));
+    const replaced = reducer(opened, addArtifact({
+      sessionId: 'session-1',
+      artifact: makeArtifact({
+        id: 'tool-artifact',
+        content: '# Report',
+        filePath: 'D:\\workspace\\report.md',
+      }),
+    }));
+
+    const rootState = { artifact: replaced } as any;
+    expect(selectPreviewTabs(rootState, 'session-1')).toEqual([
+      expect.objectContaining({
+        id: 'artifact:tool-artifact',
+        artifactId: 'tool-artifact',
+      }),
+    ]);
+    expect(replaced.selectedArtifactId).toBe('tool-artifact');
   });
 
   test('panel width is clamped', () => {
