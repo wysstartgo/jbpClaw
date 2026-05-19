@@ -1,4 +1,5 @@
 import type { PermissionResult } from '@anthropic-ai/claude-agent-sdk';
+import crypto from 'crypto';
 import type { WebContents } from 'electron';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, powerSaveBlocker, protocol, screen, session, shell, systemPreferences } from 'electron';
 import fs from 'fs';
@@ -74,7 +75,7 @@ import {
 } from './im/imPairingStore';
 import { resolveIMScheduledTaskAgentId } from './im/imScheduledTaskAgent';
 import { pollNimQrLogin, startNimQrLogin } from './im/nimQrLoginService';
-import type { Platform } from './im/types';
+import type { DiscordInstanceConfig, Platform, TelegramInstanceConfig } from './im/types';
 import { registerNimQrLoginHandlers } from './ipcHandlers/nimQrLogin';
 import {
   getCronJobService,
@@ -113,7 +114,6 @@ import { exportLogsZip } from './libs/logExport';
 import { broadcastSpeechState,MacSpeechService } from './libs/macSpeechService';
 import { broadcastTtsState,MacTtsService } from './libs/macTtsService';
 import { McpBridgeServer } from './libs/mcpBridgeServer';
-import { PluginManager, type PluginInstallParams } from './libs/pluginManager';
 import { parsePrimaryModelRef } from './libs/openclawAgentModels';
 import {
   buildManagedSessionKey,
@@ -137,6 +137,7 @@ import {
 } from './libs/openclawMemoryFile';
 import { startOpenClawTokenProxy, stopOpenClawTokenProxy } from './libs/openclawTokenProxy';
 import { migrateMainAgentWorkspace } from './libs/openclawWorkspaceMigration';
+import { type PluginInstallParams,PluginManager } from './libs/pluginManager';
 import { ensurePythonRuntimeReady } from './libs/pythonRuntime';
 import { resolveStdioCommand } from './libs/resolveStdioCommand';
 import { serializeForLog } from './libs/sanitizeForLog';
@@ -163,7 +164,6 @@ import { PetStore } from './pet/petStore';
 import { PetWindowController } from './pet/petWindowController';
 import { QingShuManagedCatalogService } from './qingshuManaged/catalogService';
 import { QingShuManagedMcpServer } from './qingshuManaged/managedMcpServer';
-import { getAppsForFile, openFileWithApp } from './shellApps';
 import {
   createQingShuAuthFetchProvider,
   createQingShuExtensionHost,
@@ -175,6 +175,7 @@ import type {
   QingShuGovernanceService,
   QingShuModuleFlagConfig,
 } from './qingshuModules/types';
+import { getAppsForFile, openFileWithApp } from './shellApps';
 import { SkillManager } from './skillManager';
 import { getSkillServiceManager } from './skillServices';
 import { SqliteStore } from './sqliteStore';
@@ -1320,6 +1321,13 @@ const getOpenClawConfigSync = (): OpenClawConfigSync => {
           return null;
         }
       },
+      getTelegramInstances: () => {
+        try {
+          return getIMGatewayManager().getIMStore().getTelegramInstances();
+        } catch {
+          return [];
+        }
+      },
       getDingTalkInstances: () => {
         try {
           return getIMGatewayManager().getIMStore().getDingTalkInstances();
@@ -1409,6 +1417,13 @@ const getOpenClawConfigSync = (): OpenClawConfigSync => {
           return getIMGatewayManager()?.getConfig()?.discord ?? null;
         } catch {
           return null;
+        }
+      },
+      getDiscordInstances: () => {
+        try {
+          return getIMGatewayManager().getIMStore().getDiscordInstances();
+        } catch {
+          return [];
         }
       },
       getMcpBridgeSecret: () => mcpBridgeSecret,
@@ -5500,6 +5515,104 @@ if (!gotTheLock) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to set Feishu instance config',
+      };
+    }
+  });
+
+  ipcMain.handle('im:telegram:instance:add', async (_event, name: string) => {
+    try {
+      const { DEFAULT_TELEGRAM_OPENCLAW_CONFIG } = await import('./im/types');
+      const instanceId = crypto.randomUUID();
+      const instance: TelegramInstanceConfig = {
+        ...DEFAULT_TELEGRAM_OPENCLAW_CONFIG,
+        instanceId,
+        instanceName: name || 'Telegram Bot',
+      };
+      getIMGatewayManager().getIMStore().setTelegramInstanceConfig(instanceId, instance);
+      return { success: true, instance };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to add Telegram instance',
+      };
+    }
+  });
+
+  ipcMain.handle('im:telegram:instance:delete', async (_event, instanceId: string) => {
+    try {
+      getIMGatewayManager().getIMStore().deleteTelegramInstance(instanceId);
+      if (getOpenClawEngineManager().getStatus().phase === 'running') {
+        scheduleImConfigSync();
+      }
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete Telegram instance',
+      };
+    }
+  });
+
+  ipcMain.handle('im:telegram:instance:config:set', async (_event, instanceId: string, config: Partial<TelegramInstanceConfig>, options?: { syncGateway?: boolean }) => {
+    try {
+      getIMGatewayManager().getIMStore().setTelegramInstanceConfig(instanceId, config);
+      if (options?.syncGateway && getOpenClawEngineManager().getStatus().phase === 'running') {
+        scheduleImConfigSync();
+      }
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to set Telegram instance config',
+      };
+    }
+  });
+
+  ipcMain.handle('im:discord:instance:add', async (_event, name: string) => {
+    try {
+      const { DEFAULT_DISCORD_OPENCLAW_CONFIG } = await import('./im/types');
+      const instanceId = crypto.randomUUID();
+      const instance: DiscordInstanceConfig = {
+        ...DEFAULT_DISCORD_OPENCLAW_CONFIG,
+        instanceId,
+        instanceName: name || 'Discord Bot',
+      };
+      getIMGatewayManager().getIMStore().setDiscordInstanceConfig(instanceId, instance);
+      return { success: true, instance };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to add Discord instance',
+      };
+    }
+  });
+
+  ipcMain.handle('im:discord:instance:delete', async (_event, instanceId: string) => {
+    try {
+      getIMGatewayManager().getIMStore().deleteDiscordInstance(instanceId);
+      if (getOpenClawEngineManager().getStatus().phase === 'running') {
+        scheduleImConfigSync();
+      }
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete Discord instance',
+      };
+    }
+  });
+
+  ipcMain.handle('im:discord:instance:config:set', async (_event, instanceId: string, config: Partial<DiscordInstanceConfig>, options?: { syncGateway?: boolean }) => {
+    try {
+      getIMGatewayManager().getIMStore().setDiscordInstanceConfig(instanceId, config);
+      if (options?.syncGateway && getOpenClawEngineManager().getStatus().phase === 'running') {
+        scheduleImConfigSync();
+      }
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to set Discord instance config',
       };
     }
   });

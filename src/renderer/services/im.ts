@@ -9,21 +9,26 @@ import { PlatformRegistry } from '@shared/platform';
 import { store } from '../store';
 import {
   addDingTalkInstance,
+  addDiscordInstance,
   addEmailInstance,
   addFeishuInstance,
   addNimInstance,
   addPopoInstance,
   addQQInstance,
+  addTelegramInstance,
   addWecomInstance,
   removeDingTalkInstance,
+  removeDiscordInstance,
   removeEmailInstance,
   removeFeishuInstance,
   removeNimInstance,
   removePopoInstance,
   removeQQInstance,
+  removeTelegramInstance,
   removeWecomInstance,
   setConfig,
   setDingTalkInstanceConfig,
+  setDiscordInstanceConfig,
   setEmailInstanceConfig,
   setError,
   setFeishuInstanceConfig,
@@ -32,10 +37,12 @@ import {
   setPopoInstanceConfig,
   setQQInstanceConfig,
   setStatus,
+  setTelegramInstanceConfig,
   setWecomInstanceConfig,
 } from '../store/slices/imSlice';
 import type {
   DingTalkInstanceConfig,
+  DiscordInstanceConfig,
   EmailInstanceConfig,
   FeishuInstanceConfig,
   IMConfigResult,
@@ -48,6 +55,7 @@ import type {
   NimInstanceConfig,
   PopoInstanceConfig,
   QQInstanceConfig,
+  TelegramInstanceConfig,
   WecomInstanceConfig,
 } from '../types/im';
 
@@ -300,6 +308,12 @@ class IMService {
       if (platform === 'email') {
         return status.email.instances.some((item) => item.connected);
       }
+      if (platform === 'telegram') {
+        return status.telegram.instances?.some((item) => item.connected) ?? status.telegram.connected;
+      }
+      if (platform === 'discord') {
+        return status.discord.instances?.some((item) => item.connected) ?? status.discord.connected;
+      }
       return Boolean(status[platform]?.connected);
     });
   }
@@ -416,6 +430,100 @@ class IMService {
       return true;
     }
     store.dispatch(setError(result.error || 'Failed to delete Feishu instance'));
+    return false;
+  }
+
+  async addTelegramInstance(name: string): Promise<TelegramInstanceConfig | null> {
+    const result = await window.electron.im.addTelegramInstance(name);
+    if (result.success && result.instance) {
+      store.dispatch(addTelegramInstance(result.instance));
+      return result.instance;
+    }
+    store.dispatch(setError(result.error || 'Failed to add Telegram instance'));
+    return null;
+  }
+
+  async updateTelegramInstanceConfig(
+    instanceId: string,
+    config: Partial<TelegramInstanceConfig>,
+    options?: { syncGateway?: boolean }
+  ): Promise<boolean> {
+    const syncGateway = options?.syncGateway ?? true;
+    const result = await window.electron.im.setTelegramInstanceConfig(instanceId, config, { syncGateway });
+    if (result.success) {
+      if (syncGateway) {
+        await this.loadConfig();
+        await this.loadStatus();
+      } else {
+        store.dispatch(setTelegramInstanceConfig({ instanceId, config }));
+      }
+      return true;
+    }
+    store.dispatch(setError(result.error || 'Failed to update Telegram instance'));
+    return false;
+  }
+
+  async persistTelegramInstanceConfig(
+    instanceId: string,
+    config: Partial<TelegramInstanceConfig>
+  ): Promise<boolean> {
+    return this.updateTelegramInstanceConfig(instanceId, config, { syncGateway: false });
+  }
+
+  async deleteTelegramInstance(instanceId: string): Promise<boolean> {
+    const result = await window.electron.im.deleteTelegramInstance(instanceId);
+    if (result.success) {
+      store.dispatch(removeTelegramInstance(instanceId));
+      return true;
+    }
+    store.dispatch(setError(result.error || 'Failed to delete Telegram instance'));
+    return false;
+  }
+
+  async addDiscordInstance(name: string): Promise<DiscordInstanceConfig | null> {
+    const result = await window.electron.im.addDiscordInstance(name);
+    if (result.success && result.instance) {
+      store.dispatch(addDiscordInstance(result.instance));
+      return result.instance;
+    }
+    store.dispatch(setError(result.error || 'Failed to add Discord instance'));
+    return null;
+  }
+
+  async updateDiscordInstanceConfig(
+    instanceId: string,
+    config: Partial<DiscordInstanceConfig>,
+    options?: { syncGateway?: boolean }
+  ): Promise<boolean> {
+    const syncGateway = options?.syncGateway ?? true;
+    const result = await window.electron.im.setDiscordInstanceConfig(instanceId, config, { syncGateway });
+    if (result.success) {
+      if (syncGateway) {
+        await this.loadConfig();
+        await this.loadStatus();
+      } else {
+        store.dispatch(setDiscordInstanceConfig({ instanceId, config }));
+      }
+      return true;
+    }
+    store.dispatch(setError(result.error || 'Failed to update Discord instance'));
+    return false;
+  }
+
+  async persistDiscordInstanceConfig(
+    instanceId: string,
+    config: Partial<DiscordInstanceConfig>
+  ): Promise<boolean> {
+    return this.updateDiscordInstanceConfig(instanceId, config, { syncGateway: false });
+  }
+
+  async deleteDiscordInstance(instanceId: string): Promise<boolean> {
+    const result = await window.electron.im.deleteDiscordInstance(instanceId);
+    if (result.success) {
+      store.dispatch(removeDiscordInstance(instanceId));
+      return true;
+    }
+    store.dispatch(setError(result.error || 'Failed to delete Discord instance'));
     return false;
   }
 

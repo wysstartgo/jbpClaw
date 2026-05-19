@@ -161,6 +161,31 @@ export interface TelegramOpenClawConfig {
   debug: boolean;
 }
 
+// ==================== Telegram Multi-Instance Types ====================
+
+export const MAX_TELEGRAM_INSTANCES = 5;
+
+export interface TelegramInstanceConfig extends TelegramOpenClawConfig {
+  instanceId: string;
+  instanceName: string;
+}
+
+export interface TelegramInstanceStatus extends TelegramGatewayStatus {
+  instanceId: string;
+  instanceName: string;
+}
+
+export interface TelegramMultiInstanceConfig {
+  instances: TelegramInstanceConfig[];
+}
+
+export interface TelegramMultiInstanceStatus {
+  instances: TelegramInstanceStatus[];
+}
+
+export type TelegramGatewayConfig = TelegramOpenClawConfig & TelegramMultiInstanceConfig;
+export type TelegramGatewayStatusCompat = TelegramGatewayStatus & Partial<TelegramMultiInstanceStatus>;
+
 // ==================== Discord Types ====================
 
 export interface DiscordOpenClawGuildConfig {
@@ -193,6 +218,29 @@ export interface DiscordGatewayStatus {
   lastInboundAt: number | null;
   lastOutboundAt: number | null;
 }
+
+export const MAX_DISCORD_INSTANCES = 5;
+
+export interface DiscordInstanceConfig extends DiscordOpenClawConfig {
+  instanceId: string;
+  instanceName: string;
+}
+
+export interface DiscordInstanceStatus extends DiscordGatewayStatus {
+  instanceId: string;
+  instanceName: string;
+}
+
+export interface DiscordMultiInstanceConfig {
+  instances: DiscordInstanceConfig[];
+}
+
+export interface DiscordMultiInstanceStatus {
+  instances: DiscordInstanceStatus[];
+}
+
+export type DiscordGatewayConfig = DiscordOpenClawConfig & DiscordMultiInstanceConfig;
+export type DiscordGatewayStatusCompat = DiscordGatewayStatus & Partial<DiscordMultiInstanceStatus>;
 
 // ==================== NIM (NetEase IM) Types ====================
 
@@ -499,9 +547,9 @@ export type IMPlatform = keyof Omit<IMGatewayConfig, 'settings'> | 'xiaomifeng';
 export interface IMGatewayConfig {
   dingtalk: DingTalkMultiInstanceConfig;
   feishu: FeishuMultiInstanceConfig;
-  telegram: TelegramOpenClawConfig;
+  telegram: TelegramGatewayConfig;
   qq: QQMultiInstanceConfig;
-  discord: DiscordOpenClawConfig;
+  discord: DiscordGatewayConfig;
   nim: NimMultiInstanceConfig;
   'netease-bee': NeteaseBeeChanConfig;
   wecom: WecomMultiInstanceConfig;
@@ -522,8 +570,8 @@ export interface IMGatewayStatus {
   dingtalk: DingTalkMultiInstanceStatus;
   feishu: FeishuMultiInstanceStatus;
   qq: QQMultiInstanceStatus;
-  telegram: TelegramGatewayStatus;
-  discord: DiscordGatewayStatus;
+  telegram: TelegramGatewayStatusCompat;
+  discord: DiscordGatewayStatusCompat;
   nim: NimGatewayStatus;
   'netease-bee': NeteaseBeeChanGatewayStatus;
   wecom: WecomMultiInstanceStatus;
@@ -735,6 +783,10 @@ export const DEFAULT_TELEGRAM_OPENCLAW_CONFIG: TelegramOpenClawConfig = {
   debug: false,
 };
 
+export const DEFAULT_TELEGRAM_MULTI_INSTANCE_CONFIG: TelegramMultiInstanceConfig = {
+  instances: [],
+};
+
 export const DEFAULT_QQ_CONFIG: QQOpenClawConfig = {
   enabled: false,
   appId: '',
@@ -810,9 +862,15 @@ export const DEFAULT_IM_SETTINGS: IMSettings = {
 export const DEFAULT_IM_CONFIG: IMGatewayConfig = {
   dingtalk: DEFAULT_DINGTALK_MULTI_INSTANCE_CONFIG,
   feishu: DEFAULT_FEISHU_MULTI_INSTANCE_CONFIG,
-  telegram: DEFAULT_TELEGRAM_OPENCLAW_CONFIG,
+  telegram: {
+    ...DEFAULT_TELEGRAM_OPENCLAW_CONFIG,
+    ...DEFAULT_TELEGRAM_MULTI_INSTANCE_CONFIG,
+  },
   qq: DEFAULT_QQ_MULTI_INSTANCE_CONFIG,
-  discord: DEFAULT_DISCORD_OPENCLAW_CONFIG,
+  discord: {
+    ...DEFAULT_DISCORD_OPENCLAW_CONFIG,
+    instances: [],
+  },
   nim: DEFAULT_NIM_MULTI_INSTANCE_CONFIG,
   'netease-bee': DEFAULT_NETEASE_BEE_CONFIG,
   wecom: DEFAULT_WECOM_MULTI_INSTANCE_CONFIG,
@@ -831,6 +889,7 @@ export const DEFAULT_IM_STATUS: IMGatewayStatus = {
   },
   telegram: {
     connected: false,
+    instances: [],
     startedAt: null,
     lastError: null,
     botUsername: null,
@@ -839,6 +898,7 @@ export const DEFAULT_IM_STATUS: IMGatewayStatus = {
   },
   discord: {
     connected: false,
+    instances: [],
     starting: false,
     startedAt: null,
     lastError: null,

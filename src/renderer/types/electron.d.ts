@@ -845,6 +845,12 @@ interface IElectronAPI {
     addFeishuInstance: (name: string) => Promise<{ success: boolean; instance?: FeishuInstanceConfig; error?: string }>;
     deleteFeishuInstance: (instanceId: string) => Promise<{ success: boolean; error?: string }>;
     setFeishuInstanceConfig: (instanceId: string, config: Partial<FeishuInstanceConfig>, options?: { syncGateway?: boolean }) => Promise<{ success: boolean; error?: string }>;
+    addTelegramInstance: (name: string) => Promise<{ success: boolean; instance?: TelegramInstanceConfig; error?: string }>;
+    deleteTelegramInstance: (instanceId: string) => Promise<{ success: boolean; error?: string }>;
+    setTelegramInstanceConfig: (instanceId: string, config: Partial<TelegramInstanceConfig>, options?: { syncGateway?: boolean }) => Promise<{ success: boolean; error?: string }>;
+    addDiscordInstance: (name: string) => Promise<{ success: boolean; instance?: DiscordInstanceConfig; error?: string }>;
+    deleteDiscordInstance: (instanceId: string) => Promise<{ success: boolean; error?: string }>;
+    setDiscordInstanceConfig: (instanceId: string, config: Partial<DiscordInstanceConfig>, options?: { syncGateway?: boolean }) => Promise<{ success: boolean; error?: string }>;
     addQQInstance: (name: string) => Promise<{ success: boolean; instance?: QQInstanceConfig; error?: string }>;
     deleteQQInstance: (instanceId: string) => Promise<{ success: boolean; error?: string }>;
     setQQInstanceConfig: (instanceId: string, config: Partial<QQInstanceConfig>, options?: { syncGateway?: boolean }) => Promise<{ success: boolean; error?: string }>;
@@ -1062,9 +1068,9 @@ interface EmailMultiInstanceStatus {
 interface IMGatewayConfig {
   dingtalk: DingTalkMultiInstanceConfig;
   feishu: FeishuMultiInstanceConfig;
-  telegram: TelegramOpenClawConfig;
+  telegram: TelegramGatewayConfig;
   qq: QQMultiInstanceConfig;
-  discord: DiscordOpenClawConfig;
+  discord: DiscordGatewayConfig;
   nim: NimMultiInstanceConfig;
   'netease-bee': NeteaseBeeChanConfig;
   wecom: WecomMultiInstanceConfig;
@@ -1162,6 +1168,17 @@ interface TelegramOpenClawConfig {
   debug: boolean;
 }
 
+interface TelegramInstanceConfig extends TelegramOpenClawConfig {
+  instanceId: string;
+  instanceName: string;
+}
+
+interface TelegramMultiInstanceConfig {
+  instances: TelegramInstanceConfig[];
+}
+
+type TelegramGatewayConfig = TelegramOpenClawConfig & TelegramMultiInstanceConfig;
+
 interface DiscordOpenClawGuildConfig {
   requireMention?: boolean;
   allowFrom?: string[];
@@ -1182,6 +1199,17 @@ interface DiscordOpenClawConfig {
   proxy: string;
   debug: boolean;
 }
+
+interface DiscordInstanceConfig extends DiscordOpenClawConfig {
+  instanceId: string;
+  instanceName: string;
+}
+
+interface DiscordMultiInstanceConfig {
+  instances: DiscordInstanceConfig[];
+}
+
+type DiscordGatewayConfig = DiscordOpenClawConfig & DiscordMultiInstanceConfig;
 
 interface NimP2pConfig {
   policy: 'open' | 'allowlist' | 'disabled';
@@ -1332,8 +1360,8 @@ interface IMGatewayStatus {
   dingtalk: DingTalkMultiInstanceStatus;
   feishu: FeishuMultiInstanceStatus;
   qq: QQMultiInstanceStatus;
-  telegram: TelegramGatewayStatus;
-  discord: DiscordGatewayStatus;
+  telegram: TelegramGatewayStatusCompat;
+  discord: DiscordGatewayStatusCompat;
   nim: NimGatewayStatus;
   'netease-bee': NeteaseBeeChanGatewayStatus;
   wecom: WecomMultiInstanceStatus;
@@ -1419,6 +1447,17 @@ interface TelegramGatewayStatus {
   lastOutboundAt: number | null;
 }
 
+interface TelegramInstanceStatus extends TelegramGatewayStatus {
+  instanceId: string;
+  instanceName: string;
+}
+
+interface TelegramMultiInstanceStatus {
+  instances: TelegramInstanceStatus[];
+}
+
+type TelegramGatewayStatusCompat = TelegramGatewayStatus & Partial<TelegramMultiInstanceStatus>;
+
 interface DiscordGatewayStatus {
   connected: boolean;
   starting: boolean;
@@ -1428,6 +1467,17 @@ interface DiscordGatewayStatus {
   lastInboundAt: number | null;
   lastOutboundAt: number | null;
 }
+
+interface DiscordInstanceStatus extends DiscordGatewayStatus {
+  instanceId: string;
+  instanceName: string;
+}
+
+interface DiscordMultiInstanceStatus {
+  instances: DiscordInstanceStatus[];
+}
+
+type DiscordGatewayStatusCompat = DiscordGatewayStatus & Partial<DiscordMultiInstanceStatus>;
 
 interface NimGatewayStatus {
   connected: boolean;

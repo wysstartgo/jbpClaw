@@ -15,6 +15,7 @@ import type {
 } from '../renderer/types/cowork';
 import type {
   DingTalkInstanceConfig,
+  DiscordInstanceConfig,
   EmailInstanceConfig,
   FeishuInstanceConfig,
   IMGatewayConfig,
@@ -23,6 +24,7 @@ import type {
   NimInstanceConfig,
   PopoInstanceConfig,
   QQInstanceConfig,
+  TelegramInstanceConfig,
   WecomInstanceConfig,
 } from '../renderer/types/im';
 import type { McpServerFormData } from '../renderer/types/mcp';
@@ -600,6 +602,18 @@ contextBridge.exposeInMainWorld('electron', {
     deleteFeishuInstance: (instanceId: string) => ipcRenderer.invoke('im:feishu:instance:delete', instanceId),
     setFeishuInstanceConfig: (instanceId: string, config: Partial<FeishuInstanceConfig>, options?: { syncGateway?: boolean }) =>
       ipcRenderer.invoke('im:feishu:instance:config:set', instanceId, config, options),
+
+    // Telegram Multi-Instance
+    addTelegramInstance: (name: string) => ipcRenderer.invoke('im:telegram:instance:add', name),
+    deleteTelegramInstance: (instanceId: string) => ipcRenderer.invoke('im:telegram:instance:delete', instanceId),
+    setTelegramInstanceConfig: (instanceId: string, config: Partial<TelegramInstanceConfig>, options?: { syncGateway?: boolean }) =>
+      ipcRenderer.invoke('im:telegram:instance:config:set', instanceId, config, options),
+
+    // Discord Multi-Instance
+    addDiscordInstance: (name: string) => ipcRenderer.invoke('im:discord:instance:add', name),
+    deleteDiscordInstance: (instanceId: string) => ipcRenderer.invoke('im:discord:instance:delete', instanceId),
+    setDiscordInstanceConfig: (instanceId: string, config: Partial<DiscordInstanceConfig>, options?: { syncGateway?: boolean }) =>
+      ipcRenderer.invoke('im:discord:instance:config:set', instanceId, config, options),
 
     // QQ Multi-Instance
     addQQInstance: (name: string) => ipcRenderer.invoke('im:qq:instance:add', name),

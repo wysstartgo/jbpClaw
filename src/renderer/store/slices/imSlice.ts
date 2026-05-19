@@ -9,6 +9,8 @@ import type {
   DingTalkInstanceConfig,
   DingTalkMultiInstanceConfig,
   DingTalkOpenClawConfig,
+  DiscordInstanceConfig,
+  DiscordMultiInstanceConfig,
   DiscordOpenClawConfig,
   EmailInstanceConfig,
   EmailMultiInstanceConfig,
@@ -28,6 +30,8 @@ import type {
   QQInstanceConfig,
   QQMultiInstanceConfig,
   QQOpenClawConfig,
+  TelegramInstanceConfig,
+  TelegramMultiInstanceConfig,
   TelegramOpenClawConfig,
   WecomInstanceConfig,
   WecomMultiInstanceConfig,
@@ -55,7 +59,7 @@ const initialState: IMState = {
 
 const removeStaleInstanceBindings = (
   settings: IMSettings,
-  platform: 'dingtalk' | 'email' | 'feishu' | 'nim' | 'popo' | 'qq' | 'wecom',
+  platform: 'dingtalk' | 'discord' | 'email' | 'feishu' | 'nim' | 'popo' | 'qq' | 'telegram' | 'wecom',
   instances: readonly { instanceId: string }[],
 ): void => {
   const bindings = settings.platformAgentBindings;
@@ -82,6 +86,8 @@ const removeAllStaleMultiInstanceBindings = (config: IMGatewayConfig): void => {
   removeStaleInstanceBindings(config.settings, 'nim', config.nim.instances ?? []);
   removeStaleInstanceBindings(config.settings, 'popo', config.popo.instances ?? []);
   removeStaleInstanceBindings(config.settings, 'qq', config.qq.instances);
+  removeStaleInstanceBindings(config.settings, 'telegram', config.telegram.instances ?? []);
+  removeStaleInstanceBindings(config.settings, 'discord', config.discord.instances ?? []);
   removeStaleInstanceBindings(config.settings, 'wecom', config.wecom.instances);
 };
 
@@ -161,6 +167,32 @@ const imSlice = createSlice({
         ...state.config.telegram,
         ...action.payload,
       };
+      const first = state.config.telegram.instances[0];
+      if (first) Object.assign(first, action.payload);
+    },
+    setTelegramInstances: (state, action: PayloadAction<TelegramInstanceConfig[]>) => {
+      state.config.telegram = { ...state.config.telegram, instances: action.payload };
+      removeStaleInstanceBindings(state.config.settings, 'telegram', action.payload);
+    },
+    setTelegramMultiInstanceConfig: (state, action: PayloadAction<TelegramMultiInstanceConfig>) => {
+      state.config.telegram = { ...state.config.telegram, ...action.payload };
+      removeStaleInstanceBindings(state.config.settings, 'telegram', action.payload.instances);
+    },
+    setTelegramInstanceConfig: (state, action: PayloadAction<{ instanceId: string; config: Partial<TelegramInstanceConfig> }>) => {
+      const inst = state.config.telegram.instances.find((item) => item.instanceId === action.payload.instanceId);
+      if (inst) Object.assign(inst, action.payload.config);
+      if (state.config.telegram.instances[0]?.instanceId === action.payload.instanceId) {
+        state.config.telegram = { ...state.config.telegram, ...action.payload.config };
+      }
+    },
+    addTelegramInstance: (state, action: PayloadAction<TelegramInstanceConfig>) => {
+      state.config.telegram.instances.push(action.payload);
+    },
+    removeTelegramInstance: (state, action: PayloadAction<string>) => {
+      state.config.telegram.instances = state.config.telegram.instances.filter(
+        (item) => item.instanceId !== action.payload
+      );
+      delete state.config.settings.platformAgentBindings?.[`telegram:${action.payload}`];
     },
     setQQInstances: (state, action: PayloadAction<QQInstanceConfig[]>) => {
       state.config.qq = { instances: action.payload };
@@ -185,6 +217,32 @@ const imSlice = createSlice({
     },
     setDiscordConfig: (state, action: PayloadAction<Partial<DiscordOpenClawConfig>>) => {
       state.config.discord = { ...state.config.discord, ...action.payload };
+      const first = state.config.discord.instances[0];
+      if (first) Object.assign(first, action.payload);
+    },
+    setDiscordInstances: (state, action: PayloadAction<DiscordInstanceConfig[]>) => {
+      state.config.discord = { ...state.config.discord, instances: action.payload };
+      removeStaleInstanceBindings(state.config.settings, 'discord', action.payload);
+    },
+    setDiscordMultiInstanceConfig: (state, action: PayloadAction<DiscordMultiInstanceConfig>) => {
+      state.config.discord = { ...state.config.discord, ...action.payload };
+      removeStaleInstanceBindings(state.config.settings, 'discord', action.payload.instances);
+    },
+    setDiscordInstanceConfig: (state, action: PayloadAction<{ instanceId: string; config: Partial<DiscordInstanceConfig> }>) => {
+      const inst = state.config.discord.instances.find((item) => item.instanceId === action.payload.instanceId);
+      if (inst) Object.assign(inst, action.payload.config);
+      if (state.config.discord.instances[0]?.instanceId === action.payload.instanceId) {
+        state.config.discord = { ...state.config.discord, ...action.payload.config };
+      }
+    },
+    addDiscordInstance: (state, action: PayloadAction<DiscordInstanceConfig>) => {
+      state.config.discord.instances.push(action.payload);
+    },
+    removeDiscordInstance: (state, action: PayloadAction<string>) => {
+      state.config.discord.instances = state.config.discord.instances.filter(
+        (item) => item.instanceId !== action.payload
+      );
+      delete state.config.settings.platformAgentBindings?.[`discord:${action.payload}`];
     },
     setNimConfig: (state, action: PayloadAction<Partial<NimConfig>>) => {
       const first = state.config.nim.instances[0];
@@ -305,12 +363,22 @@ export const {
   addFeishuInstance,
   removeFeishuInstance,
   setTelegramOpenClawConfig,
+  setTelegramInstances,
+  setTelegramMultiInstanceConfig,
+  setTelegramInstanceConfig,
+  addTelegramInstance,
+  removeTelegramInstance,
   setQQInstances,
   setQQMultiInstanceConfig,
   setQQInstanceConfig,
   addQQInstance,
   removeQQInstance,
   setDiscordConfig,
+  setDiscordInstances,
+  setDiscordMultiInstanceConfig,
+  setDiscordInstanceConfig,
+  addDiscordInstance,
+  removeDiscordInstance,
   setNimConfig,
   setNimInstances,
   setNimMultiInstanceConfig,
