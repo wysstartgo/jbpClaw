@@ -242,6 +242,28 @@ export function formatDuration(ms: number | null): string {
   return `${Math.round(ms / 60_000)}m`;
 }
 
+export function formatNextRunRelative(nextRunAtMs: number | null, nowMs = Date.now()): string | null {
+  if (nextRunAtMs === null) return null;
+  const diffMs = nextRunAtMs - nowMs;
+  if (diffMs <= 0) return null;
+
+  if (diffMs < 60_000) {
+    return i18nService.t('scheduledTasksNextRunRelativeLessThanMinute');
+  }
+
+  const minutes = Math.round(diffMs / 60_000);
+  const hours = Math.round(diffMs / 3_600_000);
+  const days = Math.round(diffMs / 86_400_000);
+
+  if (diffMs < 3_600_000) {
+    return tpl(i18nService.t('scheduledTasksNextRunRelativeMinutes'), { n: String(minutes) });
+  }
+  if (diffMs < 86_400_000) {
+    return tpl(i18nService.t('scheduledTasksNextRunRelativeHours'), { n: String(hours) });
+  }
+  return tpl(i18nService.t('scheduledTasksNextRunRelativeDays'), { n: String(days) });
+}
+
 export function formatPayloadLabel(payload: ScheduledTaskPayload): string {
   if (payload.kind === 'systemEvent') {
     return `${i18nService.t('scheduledTasksFormPayloadKindSystemEvent')} · ${payload.text}`;

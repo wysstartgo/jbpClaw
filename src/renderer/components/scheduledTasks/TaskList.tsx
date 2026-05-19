@@ -13,7 +13,7 @@ import { i18nService } from '../../services/i18n';
 import { scheduledTaskService } from '../../services/scheduledTask';
 import { RootState } from '../../store';
 import { selectTask, setViewMode } from '../../store/slices/scheduledTaskSlice';
-import { formatDateTime, formatScheduleLabel, getStatusLabelKey, getStatusTone } from './utils';
+import { formatDateTime, formatNextRunRelative, formatScheduleLabel, getStatusLabelKey, getStatusTone } from './utils';
 
 interface TaskListItemProps {
   task: ScheduledTask;
@@ -44,6 +44,7 @@ const TaskListItem: React.FC<TaskListItemProps> = ({ task, onRequestDelete }) =>
   const statusBadgeClass = effectiveStatus === 'running'
     ? 'bg-primary/12 text-primary'
     : 'bg-surface-raised text-secondary';
+  const nextRunRelative = task.enabled ? formatNextRunRelative(task.state.nextRunAtMs) : null;
 
   return (
     <div
@@ -93,9 +94,21 @@ const TaskListItem: React.FC<TaskListItemProps> = ({ task, onRequestDelete }) =>
                         task.state.lastRunAtMs
                           ? formatDateTime(new Date(task.state.lastRunAtMs))
                           : '-'
-                      )}
+                    )}
                   </span>
                 </span>
+                {task.enabled && task.state.nextRunAtMs !== null && (
+                  <>
+                    <span className="text-border/60">|</span>
+                    <span>
+                      {i18nService.t('scheduledTasksNextRun')}:&nbsp;
+                      <span className="text-secondary">
+                        {formatDateTime(new Date(task.state.nextRunAtMs))}
+                        {nextRunRelative ? ` (${nextRunRelative})` : ''}
+                      </span>
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>

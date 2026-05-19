@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import type { Schedule, ScheduledTaskChannelOption } from '../../../scheduledTask/types';
 import {
+  formatNextRunRelative,
   formatScheduleLabel,
   isSavedOnlyScheduledTaskChannelOption,
   mergeScheduledTaskChannelOptions,
@@ -88,5 +89,14 @@ describe('scheduled task utils', () => {
     ]);
     expect(isSavedOnlyScheduledTaskChannelOption(merged[0], available)).toBe(false);
     expect(isSavedOnlyScheduledTaskChannelOption(merged[1], available)).toBe(true);
+  });
+
+  test('formats next run relative labels', () => {
+    const now = new Date('2026-05-19T00:00:00.000Z').getTime();
+
+    expect(formatNextRunRelative(now + 30_000, now)).toBe('不到 1 分钟后');
+    expect(formatNextRunRelative(now + 5 * 60_000, now)).toBe('5 分钟后');
+    expect(formatNextRunRelative(now + 2 * 3_600_000, now)).toBe('2 小时后');
+    expect(formatNextRunRelative(now - 1, now)).toBeNull();
   });
 });
