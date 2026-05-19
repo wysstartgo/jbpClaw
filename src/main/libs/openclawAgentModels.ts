@@ -1,5 +1,6 @@
 import path from 'node:path';
 
+import { isDesignedAgentAvatarIcon } from '../../shared/agent/avatar';
 import type { Agent } from '../coworkStore';
 
 type BuildManagedAgentEntriesInput = {
@@ -10,7 +11,6 @@ type BuildManagedAgentEntriesInput = {
 };
 
 type ProviderModelCatalog = Record<string, { models: Array<{ id: string }> }>;
-const DESIGNED_AGENT_AVATAR_ICON_PREFIX = 'agent-avatar-svg:';
 
 export type ManagedSessionModelTarget = {
   providerId: string;
@@ -172,10 +172,6 @@ export function resolveQualifiedAgentModelRef(options: {
     modelId: explicitModel,
   };
 }
-
-const isDesignedAgentAvatarIcon = (value: string): boolean => (
-  value.trim().startsWith(DESIGNED_AGENT_AVATAR_ICON_PREFIX)
-);
 
 export function buildAgentEntry(
   agent: Agent,

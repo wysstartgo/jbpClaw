@@ -253,6 +253,7 @@ export class PluginManager {
       return { ok: false, error: `OpenClaw CLI not found at ${openclawMjs}` };
     }
 
+    let stagingDir: string | null = null;
     try {
       let installSpec: string;
       switch (params.source) {
@@ -272,7 +273,7 @@ export class PluginManager {
           break;
       }
 
-      const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lobsterai-plugin-stage-'));
+      stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lobsterai-plugin-stage-'));
       onLog?.(`Installing plugin from ${installSpec}...\n`);
       const installEnv: NodeJS.ProcessEnv = {
         ...process.env,
@@ -313,8 +314,6 @@ export class PluginManager {
         await fs.promises.rm(targetPluginDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 });
       }
       await fs.promises.cp(stagedPluginDir, targetPluginDir, { recursive: true, force: true });
-      fs.promises.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
-
       const version = readPluginVersion(targetPluginDir) || params.version;
       this.store.addUserPlugin({
         pluginId,
@@ -331,6 +330,10 @@ export class PluginManager {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, error: message };
+    } finally {
+      if (stagingDir) {
+        fs.promises.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+      }
     }
   }
 

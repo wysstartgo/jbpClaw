@@ -1,4 +1,7 @@
 import EventEmitter from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import { expect, test } from 'vitest';
 
@@ -58,6 +61,7 @@ class FakeCoworkStore {
     messages: Array<Record<string, unknown>>;
     agentId: string;
   }>();
+  private readonly agents = new Map<string, { workingDirectory?: string }>();
   private sessionCounter = 0;
 
   getConfig() {
@@ -95,6 +99,14 @@ class FakeCoworkStore {
 
   getSession(sessionId: string) {
     return this.sessions.get(sessionId) ?? null;
+  }
+
+  getAgent(agentId: string) {
+    return this.agents.get(agentId) ?? null;
+  }
+
+  setAgent(agentId: string, agent: { workingDirectory?: string }): void {
+    this.agents.set(agentId, agent);
   }
 
   updateSession(sessionId: string, updates: Record<string, unknown>): void {
@@ -232,4 +244,37 @@ test('native IM cowork mapping stores the platform-bound agent id', async () => 
   expect(coworkStore.getSession(mapping!.coworkSessionId)?.agentId).toBe('qingshu-nim-agent');
 
   handler.destroy();
+});
+
+test('native IM cowork session uses the bound agent working directory when available', async () => {
+  const agentWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'qingshu-im-agent-workspace-'));
+  const runtime = new FakeRuntime();
+  const coworkStore = new FakeCoworkStore();
+  coworkStore.setAgent('qingshu-nim-agent', { workingDirectory: agentWorkspace });
+  const imStore = new FakeIMStore({ nim: 'qingshu-nim-agent' });
+
+  const handler = new IMCoworkHandler({
+    coworkRuntime: runtime,
+    coworkStore: coworkStore as never,
+    imStore: imStore as never,
+  });
+
+  try {
+    await handler.processMessage({
+      platform: 'nim',
+      messageId: 'im-msg-agent-workspace',
+      conversationId: 'conv-agent-workspace',
+      senderId: 'user-1',
+      senderName: 'Tester',
+      content: '请在绑定 agent 的工作目录里处理',
+      chatType: 'direct',
+      timestamp: Date.now(),
+    });
+
+    const mapping = imStore.getSessionMapping('conv-agent-workspace', 'nim');
+    expect(coworkStore.getSession(mapping!.coworkSessionId)?.cwd).toBe(agentWorkspace);
+  } finally {
+    handler.destroy();
+    fs.rmSync(agentWorkspace, { recursive: true, force: true });
+  }
 });
