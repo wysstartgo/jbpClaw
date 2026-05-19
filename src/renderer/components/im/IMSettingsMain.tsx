@@ -24,6 +24,7 @@ import { getVisibleIMPlatforms } from '../../utils/regionFilter';
 import Modal from '../common/Modal';
 import DingTalkInstanceSettings from './DingTalkInstanceSettings';
 import FeishuInstanceSettings from './FeishuInstanceSettings';
+import { nimFallbackInstanceSchema, nimFallbackUiHints } from './nimSchemaFallback';
 import QQInstanceSettings from './QQInstanceSettings';
 import type { UiHint } from './SchemaForm';
 import { SchemaForm } from './SchemaForm';
@@ -344,12 +345,21 @@ function translateIMError(error: string | null): string {
 }
 
 // Helper function to deep-set a value in nested object by dot path
+const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function deepSet(obj: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
   const keys = path.split('.');
+  if (keys.some((key) => UNSAFE_OBJECT_KEYS.has(key))) {
+    return obj;
+  }
   const result = { ...obj };
   let current: Record<string, unknown> = result;
   for (let i = 0; i < keys.length - 1; i++) {
-    current[keys[i]] = { ...(current[keys[i]] as Record<string, unknown> || {}) };
+    const nextValue = current[keys[i]];
+    const nextObject = nextValue && typeof nextValue === 'object' && !Array.isArray(nextValue)
+      ? nextValue as Record<string, unknown>
+      : {};
+    current[keys[i]] = { ...nextObject };
     current = current[keys[i]] as Record<string, unknown>;
   }
   current[keys[keys.length - 1]] = value;
@@ -513,27 +523,61 @@ const IMSettings: React.FC = () => {
 
   // Extract NIM channel schema and hints from the full OpenClaw config schema
   const nimSchemaData = useMemo(() => {
-    if (!openclawSchema) return null;
+    if (!openclawSchema) {
+      return { schema: nimFallbackInstanceSchema, hints: nimFallbackUiHints };
+    }
     const { schema, uiHints } = openclawSchema;
 
     // Find the NIM channel key — could be 'nim' or 'openclaw-nim'
-    const channelsProps = (schema as any)?.properties?.channels?.properties ?? {};
+    const rootProperties = (schema.properties ?? {}) as Record<string, unknown>;
+    const channelsSchema = rootProperties.channels as { properties?: Record<string, unknown> } | undefined;
+    const channelsProps = channelsSchema?.properties ?? {};
     const channelKey = channelsProps['openclaw-nim'] ? 'openclaw-nim' : channelsProps['nim'] ? 'nim' : null;
-    if (!channelKey) return null;
-
-    const channelSchema = channelsProps[channelKey] as Record<string, unknown>;
-    if (!channelSchema) return null;
-
-    // Filter and strip prefix from uiHints
-    const prefix = `channels.${channelKey}.`;
-    const hints: Record<string, UiHint> = {};
-    for (const [key, value] of Object.entries(uiHints)) {
-      if (key.startsWith(prefix)) {
-        hints[key.slice(prefix.length)] = value as unknown as UiHint;
-      }
+    if (!channelKey) {
+      return { schema: nimFallbackInstanceSchema, hints: nimFallbackUiHints };
     }
 
-    return { schema: channelSchema, hints };
+    const channelSchema = channelsProps[channelKey] as { properties?: Record<string, unknown> } | undefined;
+    const channelProperties = channelSchema?.properties;
+    const accountsSchema = channelProperties?.accounts as { additionalProperties?: Record<string, unknown> } | undefined;
+    const instancesSchema = channelProperties?.instances as { items?: Record<string, unknown> } | undefined;
+    const instanceSchema =
+      accountsSchema?.additionalProperties
+      || instancesSchema?.items;
+    if (!instanceSchema) {
+      return { schema: nimFallbackInstanceSchema, hints: nimFallbackUiHints };
+    }
+
+    const hints: Record<string, UiHint> = {};
+    const accountHintPrefix = `channels.${channelKey}.accounts.`;
+    const instanceHintPrefix = `channels.${channelKey}.instances.items.`;
+    const directHintPrefix = `channels.${channelKey}.`;
+    for (const [key, value] of Object.entries(uiHints)) {
+      let relativeKey: string | null = null;
+      if (key.startsWith(accountHintPrefix)) {
+        relativeKey = key.slice(accountHintPrefix.length);
+      } else if (key.startsWith(instanceHintPrefix)) {
+        relativeKey = key.slice(instanceHintPrefix.length);
+      } else if (key.startsWith(directHintPrefix)) {
+        const directKey = key.slice(directHintPrefix.length);
+        if (!directKey.startsWith('accounts.') && !directKey.startsWith('instances.')) {
+          relativeKey = directKey;
+        }
+      }
+      if (!relativeKey || relativeKey === 'nimToken') {
+        continue;
+      }
+      const nextHint = { ...(value as unknown as UiHint) };
+      if (nextHint.order === undefined) {
+        nextHint.order = Object.keys(hints).length + 1;
+      }
+      hints[relativeKey] = nextHint;
+    }
+
+    return {
+      schema: instanceSchema,
+      hints: Object.keys(hints).length > 0 ? hints : nimFallbackUiHints,
+    };
   }, [openclawSchema]);
 
   // Handle DingTalk multi-instance config
