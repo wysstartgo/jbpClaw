@@ -3,7 +3,7 @@ import React from 'react';
 import { useDispatch } from 'react-redux';
 
 import { i18nService } from '@/services/i18n';
-import { selectArtifact } from '@/store/slices/artifactSlice';
+import { openArtifactPreviewTab, selectArtifact } from '@/store/slices/artifactSlice';
 import type { Artifact, ArtifactType } from '@/types/artifact';
 
 const t = (key: string) => i18nService.t(key);
@@ -118,6 +118,10 @@ const ArtifactPreviewCard: React.FC<ArtifactPreviewCardProps> = ({ artifact }) =
   const dispatch = useDispatch();
 
   const handleClick = () => {
+    if (artifact.sessionId) {
+      dispatch(openArtifactPreviewTab({ sessionId: artifact.sessionId, artifactId: artifact.id }));
+      return;
+    }
     dispatch(selectArtifact(artifact.id));
   };
 

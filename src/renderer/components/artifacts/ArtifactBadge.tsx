@@ -2,7 +2,7 @@ import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import { i18nService } from '@/services/i18n';
-import { selectArtifact, selectSelectedArtifact } from '@/store/slices/artifactSlice';
+import { openArtifactPreviewTab, selectArtifact, selectSelectedArtifact } from '@/store/slices/artifactSlice';
 import type { Artifact, ArtifactType } from '@/types/artifact';
 
 const t = (key: string) => i18nService.t(key);
@@ -29,6 +29,10 @@ const ArtifactBadge: React.FC<ArtifactBadgeProps> = ({ artifact }) => {
   const isSelected = selected?.id === artifact.id;
 
   const handleClick = () => {
+    if (artifact.sessionId) {
+      dispatch(openArtifactPreviewTab({ sessionId: artifact.sessionId, artifactId: artifact.id }));
+      return;
+    }
     dispatch(selectArtifact(artifact.id));
   };
 
