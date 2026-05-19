@@ -1,19 +1,26 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import { i18nService } from '@/services/i18n';
 import type { RootState } from '@/store';
 import {
   addArtifact,
+  ArtifactContentView,
+  activateArtifactPreviewTab,
+  closeArtifactPreviewTab,
   closePanel,
   MAX_PANEL_WIDTH,
   MIN_PANEL_WIDTH,
+  openArtifactPreviewTab,
+  selectActivePreviewTab,
   selectActiveTab,
   selectArtifact,
   selectPanelWidth,
+  selectPreviewTabs,
   selectSelectedArtifact,
   setActiveTab,
   setPanelWidth,
+  setPreviewTabContentView,
 } from '@/store/slices/artifactSlice';
 import type { ArtifactType } from '@/types/artifact';
 import type { Artifact } from '@/types/artifact';
@@ -86,26 +93,45 @@ const showArtifactToast = (message: string): void => {
 };
 
 interface ArtifactPanelProps {
+  sessionId?: string;
   artifacts: Artifact[];
   minPanelWidth?: number;
   maxPanelWidth?: number;
 }
 
 const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
+  sessionId,
   artifacts,
   minPanelWidth = MIN_PANEL_WIDTH,
   maxPanelWidth = MAX_PANEL_WIDTH,
 }) => {
   const dispatch = useDispatch();
-  const selectedArtifact = useSelector(selectSelectedArtifact);
+  const effectiveSessionId = useMemo(() => (
+    sessionId
+    ?? artifacts.find((artifact) => artifact.sessionId)?.sessionId
+    ?? artifacts.find((artifact) => artifact.conversationId)?.conversationId
+    ?? null
+  ), [artifacts, sessionId]);
+  const activePreviewTab = useSelector((state: RootState) => (
+    effectiveSessionId ? selectActivePreviewTab(state, effectiveSessionId) : null
+  ));
+  const previewTabs = useSelector((state: RootState) => (
+    effectiveSessionId ? selectPreviewTabs(state, effectiveSessionId) : []
+  ));
+  const selectedArtifactFallback = useSelector(selectSelectedArtifact);
   const panelWidth = useSelector(selectPanelWidth);
-  const activeTab = useSelector(selectActiveTab);
-  const selectedArtifactId = useSelector((state: RootState) => state.artifact.selectedArtifactId);
+  const legacyActiveTab = useSelector(selectActiveTab);
   const [showFileList, setShowFileList] = useState(false);
   const fileListRef = useRef<HTMLDivElement>(null);
   const toggleBtnRef = useRef<HTMLButtonElement>(null);
 
   const previewableArtifacts = artifacts.filter(a => PREVIEWABLE_ARTIFACT_TYPES.has(a.type));
+  const artifactsById = useMemo(() => new Map(artifacts.map((artifact) => [artifact.id, artifact])), [artifacts]);
+  const selectedArtifact = activePreviewTab
+    ? artifactsById.get(activePreviewTab.artifactId) ?? selectedArtifactFallback
+    : selectedArtifactFallback;
+  const selectedArtifactId = selectedArtifact?.id ?? null;
+  const activeTab = activePreviewTab?.contentView ?? legacyActiveTab;
 
   const isResizing = useRef(false);
   const startX = useRef(0);
@@ -194,9 +220,37 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
 
   const handleClose = useCallback(() => dispatch(closePanel()), [dispatch]);
   const handleSelectArtifact = useCallback((id: string) => {
+    if (effectiveSessionId) {
+      dispatch(openArtifactPreviewTab({ sessionId: effectiveSessionId, artifactId: id }));
+      setShowFileList(false);
+      return;
+    }
     dispatch(selectArtifact(id));
     setShowFileList(false);
-  }, [dispatch]);
+  }, [dispatch, effectiveSessionId]);
+
+  const handleActivatePreviewTab = useCallback((tabId: string) => {
+    if (!effectiveSessionId) return;
+    dispatch(activateArtifactPreviewTab({ sessionId: effectiveSessionId, tabId }));
+  }, [dispatch, effectiveSessionId]);
+
+  const handleClosePreviewTab = useCallback((event: React.MouseEvent, tabId: string) => {
+    event.stopPropagation();
+    if (!effectiveSessionId) return;
+    dispatch(closeArtifactPreviewTab({ sessionId: effectiveSessionId, tabId }));
+  }, [dispatch, effectiveSessionId]);
+
+  const handleSetContentView = useCallback((contentView: ArtifactContentView) => {
+    if (effectiveSessionId && activePreviewTab) {
+      dispatch(setPreviewTabContentView({
+        sessionId: effectiveSessionId,
+        tabId: activePreviewTab.id,
+        contentView,
+      }));
+      return;
+    }
+    dispatch(setActiveTab(contentView));
+  }, [activePreviewTab, dispatch, effectiveSessionId]);
 
   const handleCopy = useCallback(async () => {
     if (!selectedArtifact) return;
@@ -336,6 +390,46 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
 
         {selectedArtifact ? (
           <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+            {previewTabs.length > 0 && (
+              <div className="flex h-9 shrink-0 items-end gap-1 overflow-x-auto border-b border-border bg-surface/60 px-2 pt-1">
+                {previewTabs.map((tab) => {
+                  const artifact = artifactsById.get(tab.artifactId);
+                  const title = artifact?.fileName || artifact?.title || tab.artifactId;
+                  const active = activePreviewTab?.id === tab.id;
+                  return (
+                    <div
+                      key={tab.id}
+                      className={`group flex h-8 min-w-0 max-w-[180px] items-center gap-1 rounded-t-lg border text-xs transition-colors ${
+                        active
+                          ? 'border-border border-b-background bg-background text-foreground'
+                          : 'border-transparent text-secondary hover:bg-surface-raised hover:text-foreground'
+                      }`}
+                      title={title}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleActivatePreviewTab(tab.id)}
+                        className="min-w-0 flex-1 truncate px-2 py-1 text-left"
+                      >
+                        {title}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => handleClosePreviewTab(event, tab.id)}
+                        className={`mr-1 rounded px-1 text-sm leading-none transition-colors ${
+                          active
+                            ? 'text-secondary hover:bg-surface-raised hover:text-foreground'
+                            : 'text-secondary/70 hover:bg-surface hover:text-foreground'
+                        }`}
+                        aria-label={t('close')}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             {/* Header: file list toggle + filename + type + actions */}
             <div className="h-10 flex items-center gap-2 px-3 border-b border-border shrink-0">
               <span className="text-sm font-medium truncate">{selectedArtifact.fileName || selectedArtifact.title}</span>
@@ -402,9 +496,9 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
             {/* Preview/Code tabs */}
             <div className="flex border-b border-border shrink-0">
               <button
-                onClick={() => dispatch(setActiveTab('preview'))}
+                onClick={() => handleSetContentView(ArtifactContentView.Preview)}
                 className={`px-3 py-1.5 text-xs font-medium transition-colors border-b-2 ${
-                  activeTab === 'preview'
+                  activeTab === ArtifactContentView.Preview
                     ? 'border-primary text-primary'
                     : 'border-transparent text-secondary hover:text-foreground'
                 }`}
@@ -413,9 +507,9 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
               </button>
               {!NON_CODE_TYPES.has(selectedArtifact.type) && (
                 <button
-                  onClick={() => dispatch(setActiveTab('code'))}
+                  onClick={() => handleSetContentView(ArtifactContentView.Code)}
                   className={`px-3 py-1.5 text-xs font-medium transition-colors border-b-2 ${
-                    activeTab === 'code'
+                    activeTab === ArtifactContentView.Code
                       ? 'border-primary text-primary'
                       : 'border-transparent text-secondary hover:text-foreground'
                   }`}
@@ -427,7 +521,7 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
 
             {/* Render area */}
             <div className="flex-1 min-h-0 overflow-hidden">
-              {activeTab === 'preview' ? (
+              {activeTab === ArtifactContentView.Preview ? (
                 <ArtifactRenderer artifact={selectedArtifact} sessionArtifacts={artifacts} />
               ) : (
                 <CodeRenderer artifact={selectedArtifact} />
