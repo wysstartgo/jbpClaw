@@ -17,9 +17,9 @@ import { i18nService } from '../../services/i18n';
 import { imService } from '../../services/im';
 import { NimQrLoginErrorCode, NimQrLoginStatus, pollQrLogin, startQrLogin } from '../../services/nimQrLogin';
 import { RootState } from '../../store';
-import { clearError, setDingTalkInstanceConfig, setDiscordConfig, setEmailInstanceConfig, setFeishuInstanceConfig, setNeteaseBeeChanConfig, setNimInstanceConfig, setPopoInstanceConfig, setQQInstanceConfig, setTelegramOpenClawConfig, setWecomInstanceConfig, setWeixinConfig } from '../../store/slices/imSlice';
-import type { DiscordOpenClawConfig, EmailInstanceConfig, IMConnectivityCheck, IMConnectivityTestResult, IMGatewayConfig, NimInstanceConfig, PopoInstanceConfig, PopoOpenClawConfig,TelegramOpenClawConfig, WeixinOpenClawConfig } from '../../types/im';
-import { DEFAULT_EMAIL_INSTANCE_CONFIG, DEFAULT_NIM_CONFIG, DEFAULT_POPO_CONFIG, MAX_DINGTALK_INSTANCES, MAX_EMAIL_INSTANCES, MAX_FEISHU_INSTANCES, MAX_NIM_INSTANCES, MAX_POPO_INSTANCES, MAX_QQ_INSTANCES, MAX_WECOM_INSTANCES } from '../../types/im';
+import { clearError, setDingTalkInstanceConfig, setDiscordConfig, setDiscordInstanceConfig, setEmailInstanceConfig, setFeishuInstanceConfig, setNeteaseBeeChanConfig, setNimInstanceConfig, setPopoInstanceConfig, setQQInstanceConfig, setTelegramInstanceConfig, setTelegramOpenClawConfig, setWecomInstanceConfig, setWeixinConfig } from '../../store/slices/imSlice';
+import type { DiscordInstanceConfig, DiscordInstanceStatus, DiscordOpenClawConfig, EmailInstanceConfig, IMConnectivityCheck, IMConnectivityTestResult, IMGatewayConfig, NimInstanceConfig, PopoInstanceConfig, PopoOpenClawConfig,TelegramInstanceConfig, TelegramInstanceStatus, TelegramOpenClawConfig, WeixinOpenClawConfig } from '../../types/im';
+import { DEFAULT_EMAIL_INSTANCE_CONFIG, DEFAULT_NIM_CONFIG, DEFAULT_POPO_CONFIG, MAX_DINGTALK_INSTANCES, MAX_DISCORD_INSTANCES, MAX_EMAIL_INSTANCES, MAX_FEISHU_INSTANCES, MAX_NIM_INSTANCES, MAX_POPO_INSTANCES, MAX_QQ_INSTANCES, MAX_TELEGRAM_INSTANCES, MAX_WECOM_INSTANCES } from '../../types/im';
 import { getVisibleIMPlatforms } from '../../utils/regionFilter';
 import Modal from '../common/Modal';
 import DingTalkInstanceSettings from './DingTalkInstanceSettings';
@@ -374,6 +374,10 @@ const IMSettings: React.FC = () => {
   const [qqExpanded, setQqExpanded] = useState(false);
   const [activeFeishuInstanceId, setActiveFeishuInstanceId] = useState<string | null>(null);
   const [feishuExpanded, setFeishuExpanded] = useState(false);
+  const [activeTelegramInstanceId, setActiveTelegramInstanceId] = useState<string | null>(null);
+  const [telegramExpanded, setTelegramExpanded] = useState(false);
+  const [activeDiscordInstanceId, setActiveDiscordInstanceId] = useState<string | null>(null);
+  const [discordExpanded, setDiscordExpanded] = useState(false);
   const [activeDingTalkInstanceId, setActiveDingTalkInstanceId] = useState<string | null>(null);
   const [dingtalkExpanded, setDingtalkExpanded] = useState(false);
   const [activeNimInstanceId, setActiveNimInstanceId] = useState<string | null>(null);
@@ -600,8 +604,22 @@ const IMSettings: React.FC = () => {
     }
   };
   // Handle Telegram OpenClaw config change
-  const tgOpenClawConfig = config.telegram;
+  const telegramInstances = useMemo(() => config.telegram.instances ?? [], [config.telegram.instances]);
+  useEffect(() => {
+    if (telegramInstances.length > 0 && !telegramInstances.some((instance) => instance.instanceId === activeTelegramInstanceId)) {
+      setActiveTelegramInstanceId(telegramInstances[0].instanceId);
+    }
+  }, [activeTelegramInstanceId, telegramInstances]);
+  const activeTelegramInstance = (
+    telegramInstances.find((instance) => instance.instanceId === activeTelegramInstanceId)
+    ?? telegramInstances[0]
+  ) as TelegramInstanceConfig | undefined;
+  const tgOpenClawConfig: TelegramInstanceConfig | typeof config.telegram = activeTelegramInstance ?? config.telegram;
   const handleTelegramOpenClawChange = (update: Partial<TelegramOpenClawConfig>) => {
+    if (activeTelegramInstance) {
+      dispatch(setTelegramInstanceConfig({ instanceId: activeTelegramInstance.instanceId, config: update }));
+      return;
+    }
     dispatch(setTelegramOpenClawConfig(update));
   };
   const handleSaveTelegramOpenClawConfig = async (override?: Partial<TelegramOpenClawConfig>) => {
@@ -609,14 +627,36 @@ const IMSettings: React.FC = () => {
     const configToSave = override
       ? { ...tgOpenClawConfig, ...override }
       : tgOpenClawConfig;
-    await imService.persistConfig({ telegram: configToSave });
+    if (activeTelegramInstance) {
+      if (activeTelegramInstance.enabled) {
+        await imService.updateTelegramInstanceConfig(activeTelegramInstance.instanceId, configToSave);
+      } else {
+        await imService.persistTelegramInstanceConfig(activeTelegramInstance.instanceId, configToSave);
+      }
+      return;
+    }
+    await imService.persistConfig({ telegram: { ...config.telegram, ...configToSave } });
   };
 
   const qqMultiConfig = config.qq;
 
   // Handle Discord OpenClaw config change
-  const dcOpenClawConfig = config.discord;
+  const discordInstances = useMemo(() => config.discord.instances ?? [], [config.discord.instances]);
+  useEffect(() => {
+    if (discordInstances.length > 0 && !discordInstances.some((instance) => instance.instanceId === activeDiscordInstanceId)) {
+      setActiveDiscordInstanceId(discordInstances[0].instanceId);
+    }
+  }, [activeDiscordInstanceId, discordInstances]);
+  const activeDiscordInstance = (
+    discordInstances.find((instance) => instance.instanceId === activeDiscordInstanceId)
+    ?? discordInstances[0]
+  ) as DiscordInstanceConfig | undefined;
+  const dcOpenClawConfig: DiscordInstanceConfig | typeof config.discord = activeDiscordInstance ?? config.discord;
   const handleDiscordOpenClawChange = (update: Partial<DiscordOpenClawConfig>) => {
+    if (activeDiscordInstance) {
+      dispatch(setDiscordInstanceConfig({ instanceId: activeDiscordInstance.instanceId, config: update }));
+      return;
+    }
     dispatch(setDiscordConfig(update));
   };
   const handleSaveDiscordOpenClawConfig = async (override?: Partial<DiscordOpenClawConfig>) => {
@@ -624,7 +664,15 @@ const IMSettings: React.FC = () => {
     const configToSave = override
       ? { ...dcOpenClawConfig, ...override }
       : dcOpenClawConfig;
-    await imService.persistConfig({ discord: configToSave });
+    if (activeDiscordInstance) {
+      if (activeDiscordInstance.enabled) {
+        await imService.updateDiscordInstanceConfig(activeDiscordInstance.instanceId, configToSave);
+      } else {
+        await imService.persistDiscordInstanceConfig(activeDiscordInstance.instanceId, configToSave);
+      }
+      return;
+    }
+    await imService.persistConfig({ discord: { ...config.discord, ...configToSave } });
   };
 
   // State for Discord allow-from inputs
@@ -994,13 +1042,13 @@ const IMSettings: React.FC = () => {
 
     // For Telegram, save telegram config directly
     if (activePlatform === 'telegram') {
-      await imService.persistConfig({ telegram: tgOpenClawConfig });
+      await handleSaveTelegramOpenClawConfig();
       return;
     }
 
     // For Discord, save discord config directly
     if (activePlatform === 'discord') {
-      await imService.persistConfig({ discord: dcOpenClawConfig });
+      await handleSaveDiscordOpenClawConfig();
       return;
     }
 
@@ -1107,13 +1155,7 @@ const IMSettings: React.FC = () => {
       // This prevents UI/backend state divergence when rapidly toggling, since the
       // backend debounces syncOpenClawConfig calls with a 600ms window.
       if (platform === 'telegram') {
-        const newEnabled = !tgOpenClawConfig.enabled;
-        const success = await imService.updateConfig({ telegram: { ...tgOpenClawConfig, enabled: newEnabled } });
-        if (success) {
-          dispatch(setTelegramOpenClawConfig({ enabled: newEnabled }));
-          if (newEnabled) dispatch(clearError());
-          await imService.loadStatus();
-        }
+        // Telegram multi-instance is toggled from the selected instance panel.
         return;
       }
 
@@ -1128,13 +1170,7 @@ const IMSettings: React.FC = () => {
       }
 
       if (platform === 'discord') {
-        const newEnabled = !dcOpenClawConfig.enabled;
-        const success = await imService.updateConfig({ discord: { ...dcOpenClawConfig, enabled: newEnabled } });
-        if (success) {
-          dispatch(setDiscordConfig({ enabled: newEnabled }));
-          if (newEnabled) dispatch(clearError());
-          await imService.loadStatus();
-        }
+        // Discord multi-instance is toggled from the selected instance panel.
         return;
       }
 
@@ -1228,8 +1264,8 @@ const IMSettings: React.FC = () => {
 
   const dingtalkConnected = status.dingtalk?.instances?.some(i => i.connected) ?? false;
   const feishuConnected = status.feishu?.instances?.some(i => i.connected) ?? false;
-  const telegramConnected = status.telegram.connected;
-  const discordConnected = status.discord.connected;
+  const telegramConnected = status.telegram.instances?.some(i => i.connected) ?? status.telegram.connected;
+  const discordConnected = status.discord.instances?.some(i => i.connected) ?? status.discord.connected;
   const nimConnected = status.nim.connected;
   const neteaseBeeChanConnected = status['netease-bee']?.connected ?? false;
   const qqConnected = status.qq?.instances?.some(i => i.connected) ?? false;
@@ -1257,10 +1293,10 @@ const IMSettings: React.FC = () => {
       return config.dingtalk.instances.some(i => !!(i.clientId && i.clientSecret));
     }
     if (platform === 'telegram') {
-      return !!tgOpenClawConfig.botToken;
+      return telegramInstances.some(i => !!i.botToken) || !!tgOpenClawConfig.botToken;
     }
     if (platform === 'discord') {
-      return !!config.discord.botToken;
+      return discordInstances.some(i => !!i.botToken) || !!dcOpenClawConfig.botToken;
     }
     if (platform === 'nim') {
       return !!(
@@ -1306,6 +1342,12 @@ const IMSettings: React.FC = () => {
     if (platform === 'feishu') {
       return config.feishu.instances?.some(i => i.enabled);
     }
+    if (platform === 'telegram') {
+      return telegramInstances.some(i => i.enabled) || config.telegram.enabled;
+    }
+    if (platform === 'discord') {
+      return discordInstances.some(i => i.enabled) || config.discord.enabled;
+    }
     if (platform === 'wecom') {
       return config.wecom.instances?.some(i => i.enabled);
     }
@@ -1345,7 +1387,11 @@ const IMSettings: React.FC = () => {
 
     // For Telegram, persist telegram config and test
     if (platform === 'telegram') {
-      await imService.persistConfig({ telegram: tgOpenClawConfig });
+      if (activeTelegramInstance) {
+        await imService.persistTelegramInstanceConfig(activeTelegramInstance.instanceId, tgOpenClawConfig);
+      } else {
+        await imService.persistConfig({ telegram: { ...config.telegram, ...tgOpenClawConfig } });
+      }
       const result = await runConnectivityTest(platform, {
         telegram: tgOpenClawConfig,
       } as Partial<IMGatewayConfig>);
@@ -1353,7 +1399,12 @@ const IMSettings: React.FC = () => {
       if (!tgOpenClawConfig.enabled && result) {
         const authCheck = result.checks.find((c) => c.code === 'auth_check');
         if (authCheck && authCheck.level === 'pass') {
-          toggleGateway(platform);
+          if (activeTelegramInstance) {
+            dispatch(setTelegramInstanceConfig({ instanceId: activeTelegramInstance.instanceId, config: { enabled: true } }));
+            await imService.updateTelegramInstanceConfig(activeTelegramInstance.instanceId, { enabled: true });
+          } else {
+            await toggleGateway(platform);
+          }
         }
       }
       return;
@@ -1414,6 +1465,30 @@ const IMSettings: React.FC = () => {
           if (authCheck && authCheck.level === 'pass') {
             dispatch(setWecomInstanceConfig({ instanceId: activeWecomInstanceId, config: { enabled: true } }));
             await imService.updateWecomInstanceConfig(activeWecomInstanceId, { enabled: true });
+          }
+        }
+      }
+      return;
+    }
+
+    // For Discord, persist discord config and test (OpenClaw mode)
+    if (platform === 'discord') {
+      if (activeDiscordInstance) {
+        await imService.persistDiscordInstanceConfig(activeDiscordInstance.instanceId, dcOpenClawConfig);
+      } else {
+        await imService.persistConfig({ discord: { ...config.discord, ...dcOpenClawConfig } });
+      }
+      const result = await runConnectivityTest(platform, {
+        discord: dcOpenClawConfig,
+      } as Partial<IMGatewayConfig>);
+      if (!dcOpenClawConfig.enabled && result) {
+        const authCheck = result.checks.find((c) => c.code === 'auth_check');
+        if (authCheck && authCheck.level === 'pass') {
+          if (activeDiscordInstance) {
+            dispatch(setDiscordInstanceConfig({ instanceId: activeDiscordInstance.instanceId, config: { enabled: true } }));
+            await imService.updateDiscordInstanceConfig(activeDiscordInstance.instanceId, { enabled: true });
+          } else {
+            await toggleGateway(platform);
           }
         }
       }
@@ -1697,6 +1772,102 @@ const IMSettings: React.FC = () => {
                             isSelected
                               ? 'bg-primary/10 dark:bg-primary/20'
                               : 'hover:bg-surface-raised'
+                          }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${dotColor} mr-2 flex-shrink-0`} />
+                          <span className={`truncate flex-1 ${isSelected ? 'text-primary font-medium' : 'text-foreground'}`}>
+                            {inst.instanceName}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          if (platform === 'telegram') {
+            return (
+              <div key="telegram">
+                <div
+                  onClick={() => { setActivePlatform('telegram'); setActiveTelegramInstanceId(null); setTelegramExpanded(!telegramExpanded); }}
+                  className={`flex items-center p-2 rounded-xl cursor-pointer transition-colors ${
+                    activePlatform === 'telegram'
+                      ? 'bg-primary-muted border border-primary shadow-subtle'
+                      : 'bg-surface hover:bg-surface-raised border border-transparent'
+                  }`}
+                >
+                  <div className="flex flex-1 items-center">
+                    <div className="mr-2 flex h-7 w-7 items-center justify-center">
+                      <img src={PlatformRegistry.logo('telegram')} alt="Telegram" className="w-6 h-6 object-contain rounded-md" />
+                    </div>
+                    <span className={`text-sm font-medium truncate ${activePlatform === 'telegram' ? 'text-primary' : 'text-foreground'}`}>
+                      {i18nService.t('telegram')}
+                    </span>
+                  </div>
+                  <span className="text-xs opacity-50">{telegramExpanded ? '\u25BC' : '\u25B6'}</span>
+                </div>
+                {telegramExpanded && (
+                  <div className="ml-5 mt-1 space-y-1">
+                    {telegramInstances.map((inst) => {
+                      const instStatus = status.telegram?.instances?.find(s => s.instanceId === inst.instanceId);
+                      const isSelected = activePlatform === 'telegram' && activeTelegramInstanceId === inst.instanceId;
+                      const dotColor = !inst.enabled ? 'bg-gray-400' : (instStatus?.connected ? 'bg-green-500' : 'bg-yellow-500');
+                      return (
+                        <div
+                          key={inst.instanceId}
+                          onClick={() => { setActivePlatform('telegram'); setActiveTelegramInstanceId(inst.instanceId); }}
+                          className={`flex items-center p-1.5 pl-2 rounded-lg cursor-pointer transition-colors text-sm ${
+                            isSelected ? 'bg-primary/10 dark:bg-primary/20' : 'hover:bg-surface-raised'
+                          }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${dotColor} mr-2 flex-shrink-0`} />
+                          <span className={`truncate flex-1 ${isSelected ? 'text-primary font-medium' : 'text-foreground'}`}>
+                            {inst.instanceName}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          if (platform === 'discord') {
+            return (
+              <div key="discord">
+                <div
+                  onClick={() => { setActivePlatform('discord'); setActiveDiscordInstanceId(null); setDiscordExpanded(!discordExpanded); }}
+                  className={`flex items-center p-2 rounded-xl cursor-pointer transition-colors ${
+                    activePlatform === 'discord'
+                      ? 'bg-primary-muted border border-primary shadow-subtle'
+                      : 'bg-surface hover:bg-surface-raised border border-transparent'
+                  }`}
+                >
+                  <div className="flex flex-1 items-center">
+                    <div className="mr-2 flex h-7 w-7 items-center justify-center">
+                      <img src={PlatformRegistry.logo('discord')} alt="Discord" className="w-6 h-6 object-contain rounded-md" />
+                    </div>
+                    <span className={`text-sm font-medium truncate ${activePlatform === 'discord' ? 'text-primary' : 'text-foreground'}`}>
+                      {i18nService.t('discord')}
+                    </span>
+                  </div>
+                  <span className="text-xs opacity-50">{discordExpanded ? '\u25BC' : '\u25B6'}</span>
+                </div>
+                {discordExpanded && (
+                  <div className="ml-5 mt-1 space-y-1">
+                    {discordInstances.map((inst) => {
+                      const instStatus = status.discord?.instances?.find(s => s.instanceId === inst.instanceId);
+                      const isSelected = activePlatform === 'discord' && activeDiscordInstanceId === inst.instanceId;
+                      const dotColor = !inst.enabled ? 'bg-gray-400' : (instStatus?.connected ? 'bg-green-500' : 'bg-yellow-500');
+                      return (
+                        <div
+                          key={inst.instanceId}
+                          onClick={() => { setActivePlatform('discord'); setActiveDiscordInstanceId(inst.instanceId); }}
+                          className={`flex items-center p-1.5 pl-2 rounded-lg cursor-pointer transition-colors text-sm ${
+                            isSelected ? 'bg-primary/10 dark:bg-primary/20' : 'hover:bg-surface-raised'
                           }`}
                         >
                           <span className={`w-2 h-2 rounded-full ${dotColor} mr-2 flex-shrink-0`} />
@@ -2474,8 +2645,84 @@ const IMSettings: React.FC = () => {
         })()}
 
         {/* Telegram Settings */}
-        {activePlatform === 'telegram' && (
+        {activePlatform === 'telegram' && !activeTelegramInstanceId && (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <img src={PlatformRegistry.logo('telegram')} alt="Telegram" className="w-12 h-12 object-contain rounded-md mb-4 opacity-50" />
+            <p className="text-sm text-secondary mb-4">
+              {telegramInstances.length === 0
+                ? (language === 'zh' ? '尚未添加 Telegram 实例，点击下方按钮添加' : 'No Telegram instances yet. Click below to add one.')
+                : (language === 'zh' ? '请在左侧选择一个 Telegram 实例' : 'Select a Telegram instance from the sidebar.')}
+            </p>
+            {telegramInstances.length < MAX_TELEGRAM_INSTANCES && (
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const inst = await imService.addTelegramInstance(`Telegram Bot ${telegramInstances.length + 1}`);
+                  if (inst) { setActiveTelegramInstanceId(inst.instanceId); setTelegramExpanded(true); }
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+              >
+                + {language === 'zh' ? '添加 Telegram 实例' : 'Add Telegram Instance'}
+              </button>
+            )}
+          </div>
+        )}
+        {activePlatform === 'telegram' && activeTelegramInstanceId && (
           <div className="space-y-3">
+            <div className="flex items-center gap-3 pb-3 border-b border-border-subtle">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-surface border border-border-subtle p-1">
+                  <img src={PlatformRegistry.logo('telegram')} alt="Telegram" className="w-4 h-4 object-contain rounded" />
+                </div>
+                <span className="text-sm font-medium text-foreground truncate">
+                  {activeTelegramInstance?.instanceName ?? 'Telegram Bot'}
+                </span>
+              </div>
+              <div className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
+                (status.telegram?.instances?.find((item) => item.instanceId === activeTelegramInstanceId) as TelegramInstanceStatus | undefined)?.connected
+                  ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+                  : 'bg-gray-500/15 text-gray-500 dark:text-gray-400'
+              }`}>
+                {(status.telegram?.instances?.find((item) => item.instanceId === activeTelegramInstanceId) as TelegramInstanceStatus | undefined)?.connected
+                  ? i18nService.t('connected')
+                  : i18nService.t('disconnected')}
+              </div>
+              <button
+                type="button"
+                disabled={!tgOpenClawConfig.enabled && !tgOpenClawConfig.botToken}
+                onClick={async () => {
+                  if (!activeTelegramInstance) return;
+                  const newEnabled = !activeTelegramInstance.enabled;
+                  if (newEnabled && !activeTelegramInstance.botToken) return;
+                  const success = await imService.updateTelegramInstanceConfig(activeTelegramInstance.instanceId, { enabled: newEnabled });
+                  if (success) {
+                    dispatch(setTelegramInstanceConfig({ instanceId: activeTelegramInstance.instanceId, config: { enabled: newEnabled } }));
+                    if (newEnabled) dispatch(clearError());
+                    await imService.loadStatus();
+                  }
+                }}
+                className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                  tgOpenClawConfig.enabled ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-600'
+                } ${!tgOpenClawConfig.enabled && !tgOpenClawConfig.botToken ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  tgOpenClawConfig.enabled ? 'translate-x-4' : 'translate-x-0'
+                }`} />
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!activeTelegramInstance) return;
+                  await imService.deleteTelegramInstance(activeTelegramInstance.instanceId);
+                  const remaining = telegramInstances.filter(i => i.instanceId !== activeTelegramInstance.instanceId);
+                  setActiveTelegramInstanceId(remaining.length > 0 ? remaining[0].instanceId : null);
+                }}
+                className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-500/10 rounded-lg transition-colors flex-shrink-0"
+              >
+                {language === 'zh' ? '删除' : 'Delete'}
+              </button>
+            </div>
             <PlatformGuide
               steps={[
                 i18nService.t('imTelegramGuideStep1'),
@@ -2503,7 +2750,7 @@ const IMSettings: React.FC = () => {
                   {tgOpenClawConfig.botToken && (
                     <button
                       type="button"
-                      onClick={() => { handleTelegramOpenClawChange({ botToken: '' }); void imService.persistConfig({ telegram: { ...tgOpenClawConfig, botToken: '' } }); }}
+                      onClick={() => { handleTelegramOpenClawChange({ botToken: '' }); void handleSaveTelegramOpenClawConfig({ botToken: '' }); }}
                       className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
                       title={i18nService.t('clear') || 'Clear'}
                     >
@@ -2573,7 +2820,7 @@ const IMSettings: React.FC = () => {
                             const newIds = [...tgOpenClawConfig.allowFrom, id];
                             handleTelegramOpenClawChange({ allowFrom: newIds });
                             setAllowedUserIdInput('');
-                            void imService.persistConfig({ telegram: { ...tgOpenClawConfig, allowFrom: newIds } });
+                            void handleSaveTelegramOpenClawConfig({ allowFrom: newIds });
                           }
                         }
                       }}
@@ -2588,7 +2835,7 @@ const IMSettings: React.FC = () => {
                           const newIds = [...tgOpenClawConfig.allowFrom, id];
                           handleTelegramOpenClawChange({ allowFrom: newIds });
                           setAllowedUserIdInput('');
-                          void imService.persistConfig({ telegram: { ...tgOpenClawConfig, allowFrom: newIds } });
+                          void handleSaveTelegramOpenClawConfig({ allowFrom: newIds });
                         }
                       }}
                       className="px-3 py-2 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
@@ -2609,7 +2856,7 @@ const IMSettings: React.FC = () => {
                             onClick={() => {
                               const newIds = tgOpenClawConfig.allowFrom.filter((uid) => uid !== id);
                               handleTelegramOpenClawChange({ allowFrom: newIds });
-                              void imService.persistConfig({ telegram: { ...tgOpenClawConfig, allowFrom: newIds } });
+                              void handleSaveTelegramOpenClawConfig({ allowFrom: newIds });
                             }}
                             className="text-secondary hover:text-red-500 dark:hover:text-red-400 transition-colors"
                           >
@@ -2792,8 +3039,84 @@ const IMSettings: React.FC = () => {
         )}
 
         {/* Discord Settings */}
-        {activePlatform === 'discord' && (
+        {activePlatform === 'discord' && !activeDiscordInstanceId && (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <img src={PlatformRegistry.logo('discord')} alt="Discord" className="w-12 h-12 object-contain rounded-md mb-4 opacity-50" />
+            <p className="text-sm text-secondary mb-4">
+              {discordInstances.length === 0
+                ? (language === 'zh' ? '尚未添加 Discord 实例，点击下方按钮添加' : 'No Discord instances yet. Click below to add one.')
+                : (language === 'zh' ? '请在左侧选择一个 Discord 实例' : 'Select a Discord instance from the sidebar.')}
+            </p>
+            {discordInstances.length < MAX_DISCORD_INSTANCES && (
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const inst = await imService.addDiscordInstance(`Discord Bot ${discordInstances.length + 1}`);
+                  if (inst) { setActiveDiscordInstanceId(inst.instanceId); setDiscordExpanded(true); }
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+              >
+                + {language === 'zh' ? '添加 Discord 实例' : 'Add Discord Instance'}
+              </button>
+            )}
+          </div>
+        )}
+        {activePlatform === 'discord' && activeDiscordInstanceId && (
           <div className="space-y-3">
+            <div className="flex items-center gap-3 pb-3 border-b border-border-subtle">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-surface border border-border-subtle p-1">
+                  <img src={PlatformRegistry.logo('discord')} alt="Discord" className="w-4 h-4 object-contain rounded" />
+                </div>
+                <span className="text-sm font-medium text-foreground truncate">
+                  {activeDiscordInstance?.instanceName ?? 'Discord Bot'}
+                </span>
+              </div>
+              <div className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
+                (status.discord?.instances?.find((item) => item.instanceId === activeDiscordInstanceId) as DiscordInstanceStatus | undefined)?.connected
+                  ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+                  : 'bg-gray-500/15 text-gray-500 dark:text-gray-400'
+              }`}>
+                {(status.discord?.instances?.find((item) => item.instanceId === activeDiscordInstanceId) as DiscordInstanceStatus | undefined)?.connected
+                  ? i18nService.t('connected')
+                  : i18nService.t('disconnected')}
+              </div>
+              <button
+                type="button"
+                disabled={!dcOpenClawConfig.enabled && !dcOpenClawConfig.botToken}
+                onClick={async () => {
+                  if (!activeDiscordInstance) return;
+                  const newEnabled = !activeDiscordInstance.enabled;
+                  if (newEnabled && !activeDiscordInstance.botToken) return;
+                  const success = await imService.updateDiscordInstanceConfig(activeDiscordInstance.instanceId, { enabled: newEnabled });
+                  if (success) {
+                    dispatch(setDiscordInstanceConfig({ instanceId: activeDiscordInstance.instanceId, config: { enabled: newEnabled } }));
+                    if (newEnabled) dispatch(clearError());
+                    await imService.loadStatus();
+                  }
+                }}
+                className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                  dcOpenClawConfig.enabled ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-600'
+                } ${!dcOpenClawConfig.enabled && !dcOpenClawConfig.botToken ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  dcOpenClawConfig.enabled ? 'translate-x-4' : 'translate-x-0'
+                }`} />
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!activeDiscordInstance) return;
+                  await imService.deleteDiscordInstance(activeDiscordInstance.instanceId);
+                  const remaining = discordInstances.filter(i => i.instanceId !== activeDiscordInstance.instanceId);
+                  setActiveDiscordInstanceId(remaining.length > 0 ? remaining[0].instanceId : null);
+                }}
+                className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-500/10 rounded-lg transition-colors flex-shrink-0"
+              >
+                {language === 'zh' ? '删除' : 'Delete'}
+              </button>
+            </div>
             <PlatformGuide
               steps={[
                 i18nService.t('imDiscordGuideStep1'),
@@ -2823,7 +3146,7 @@ const IMSettings: React.FC = () => {
                   {dcOpenClawConfig.botToken && (
                     <button
                       type="button"
-                      onClick={() => { handleDiscordOpenClawChange({ botToken: '' }); void imService.persistConfig({ discord: { ...dcOpenClawConfig, botToken: '' } }); }}
+                      onClick={() => { handleDiscordOpenClawChange({ botToken: '' }); void handleSaveDiscordOpenClawConfig({ botToken: '' }); }}
                       className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
                       title={i18nService.t('clear') || 'Clear'}
                     >
@@ -2893,7 +3216,7 @@ const IMSettings: React.FC = () => {
                             const newIds = [...dcOpenClawConfig.allowFrom, id];
                             handleDiscordOpenClawChange({ allowFrom: newIds });
                             setDiscordAllowedUserIdInput('');
-                            void imService.persistConfig({ discord: { ...dcOpenClawConfig, allowFrom: newIds } });
+                            void handleSaveDiscordOpenClawConfig({ allowFrom: newIds });
                           }
                         }
                       }}
@@ -2908,7 +3231,7 @@ const IMSettings: React.FC = () => {
                           const newIds = [...dcOpenClawConfig.allowFrom, id];
                           handleDiscordOpenClawChange({ allowFrom: newIds });
                           setDiscordAllowedUserIdInput('');
-                          void imService.persistConfig({ discord: { ...dcOpenClawConfig, allowFrom: newIds } });
+                          void handleSaveDiscordOpenClawConfig({ allowFrom: newIds });
                         }
                       }}
                       className="px-3 py-2 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
@@ -2929,7 +3252,7 @@ const IMSettings: React.FC = () => {
                             onClick={() => {
                               const newIds = dcOpenClawConfig.allowFrom.filter((uid) => uid !== id);
                               handleDiscordOpenClawChange({ allowFrom: newIds });
-                              void imService.persistConfig({ discord: { ...dcOpenClawConfig, allowFrom: newIds } });
+                              void handleSaveDiscordOpenClawConfig({ allowFrom: newIds });
                             }}
                             className="text-secondary hover:text-red-500 transition-colors"
                           >
@@ -3015,7 +3338,7 @@ const IMSettings: React.FC = () => {
                             const newIds = [...dcOpenClawConfig.groupAllowFrom, id];
                             handleDiscordOpenClawChange({ groupAllowFrom: newIds });
                             setDiscordServerAllowIdInput('');
-                            void imService.persistConfig({ discord: { ...dcOpenClawConfig, groupAllowFrom: newIds } });
+                            void handleSaveDiscordOpenClawConfig({ groupAllowFrom: newIds });
                           }
                         }
                       }}
@@ -3029,8 +3352,8 @@ const IMSettings: React.FC = () => {
                         if (id && !dcOpenClawConfig.groupAllowFrom.includes(id)) {
                           const newIds = [...dcOpenClawConfig.groupAllowFrom, id];
                           handleDiscordOpenClawChange({ groupAllowFrom: newIds });
-                          setDiscordServerAllowIdInput('');
-                          void imService.persistConfig({ discord: { ...dcOpenClawConfig, groupAllowFrom: newIds } });
+                            setDiscordServerAllowIdInput('');
+                            void handleSaveDiscordOpenClawConfig({ groupAllowFrom: newIds });
                         }
                       }}
                       className="px-3 py-2 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
@@ -3051,7 +3374,7 @@ const IMSettings: React.FC = () => {
                             onClick={() => {
                               const newIds = dcOpenClawConfig.groupAllowFrom.filter((gid) => gid !== id);
                               handleDiscordOpenClawChange({ groupAllowFrom: newIds });
-                              void imService.persistConfig({ discord: { ...dcOpenClawConfig, groupAllowFrom: newIds } });
+                              void handleSaveDiscordOpenClawConfig({ groupAllowFrom: newIds });
                             }}
                             className="text-secondary hover:text-red-500 transition-colors"
                           >
