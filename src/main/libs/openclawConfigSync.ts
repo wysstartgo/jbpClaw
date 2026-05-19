@@ -1179,10 +1179,12 @@ export class OpenClawConfigSync {
           if (!alreadyHas && sel.providerConfig.models.length > 0) {
             existing.models.push(...sel.providerConfig.models);
           }
-          // Collect per-model custom params for agents.defaults.models
+          // Collect per-model custom params for agents.defaults.models.
+          // Wrap in extra_body so OpenClaw's streamWithPayloadPatch merges them
+          // directly into the outgoing API request body, bypassing the whitelist.
           if (m.customParams && Object.keys(m.customParams).length > 0) {
             const modelKey = `${sel.providerId}/${sel.sessionModelId}`;
-            perModelCustomParams[modelKey] = { params: { ...m.customParams } };
+            perModelCustomParams[modelKey] = { params: { extra_body: { ...m.customParams } } };
           }
         }
       }

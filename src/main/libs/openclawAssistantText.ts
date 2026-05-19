@@ -29,6 +29,13 @@ const collectTextChunks = (value: unknown): string[] => {
       chunks.push(text);
     }
   }
+  // Include thinking block content for display
+  if (value.type === 'thinking' && typeof value.thinking === 'string') {
+    const thinking = value.thinking.trim();
+    if (thinking) {
+      chunks.push(`[Thinking]\n${thinking}\n[/Thinking]`);
+    }
+  }
 
   if (value.content !== undefined) {
     chunks.push(...collectTextChunks(value.content));

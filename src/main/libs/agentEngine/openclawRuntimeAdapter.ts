@@ -612,6 +612,7 @@ const extractTextBlocksAndSignals = (
   let sawNonTextContentBlocks = false;
   for (const block of content) {
     if (!isRecord(block)) continue;
+    console.log('[Debug:extractBlocks] block:', JSON.stringify(block).slice(0, 800));
     if (block.type === 'text' && typeof block.text === 'string') {
       const text = block.text.trim();
       if (text) {
@@ -619,7 +620,14 @@ const extractTextBlocksAndSignals = (
       }
       continue;
     }
-    if (typeof block.type === 'string' && block.type !== 'thinking') {
+    if (block.type === 'thinking' && typeof block.thinking === 'string') {
+      const thinkingText = block.thinking.trim();
+      if (thinkingText) {
+        textBlocks.push(`[Thinking]\n${thinkingText}\n[/Thinking]`);
+      }
+      continue;
+    }
+    if (typeof block.type === 'string') {
       sawNonTextContentBlocks = true;
       console.log('[Debug:extractBlocks] non-text block type:', block.type, 'content:', JSON.stringify(block).slice(0, 500));
     }
@@ -2929,6 +2937,11 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     if (event.event === 'cron') {
       console.debug('[OpenClawRuntime] received cron event:', JSON.stringify(event));
     }
+
+    // Log unhandled event types for debugging custom params / thinking passthrough
+    if (!['tick', 'chat', 'agent', 'exec.approval.requested', 'exec.approval.resolved', 'cron'].includes(event.event)) {
+      console.log('[Debug:unhandledEvent]', `event=${event.event}`, JSON.stringify(event.payload).slice(0, 500));
+    }
   }
 
   private handleAgentEvent(payload: unknown, seq?: number): void {
@@ -3670,6 +3683,13 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       `message=${summarizeGatewayMessageShape(chatPayload.message)}`
     );
 
+    // Debug: dump full message content structure to inspect thinking blocks
+    if (isRecord(chatPayload.message) && Array.isArray((chatPayload.message as Record<string, unknown>).content)) {
+      const content = (chatPayload.message as Record<string, unknown>).content as unknown[];
+      const types = content.map((b: unknown) => isRecord(b) ? (b as Record<string, unknown>).type : typeof b);
+      console.log('[Debug:chatEvent]', `state=${state}`, `blockTypes=${JSON.stringify(types)}`, `fullMessage=${JSON.stringify(chatPayload.message).slice(0, 1500)}`);
+    }
+
     if (runId && this.isRecentlyClosedRunId(runId)) {
       console.debug('[OpenClawRuntime] dropped late chat event for a closed run.');
       return;
@@ -3858,6 +3878,10 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     if (p.stream !== 'assistant') return;
 
     const dataField = isRecord(p.data) ? p.data as Record<string, unknown> : p;
+
+    // Debug: log raw agent assistant stream payload to inspect thinking content
+    console.log('[Debug:agentAssistant]', `dataKeys=${Object.keys(dataField).join(',')}`, `data=${JSON.stringify(dataField).slice(0, 1000)}`);
+
     const text = extractOpenClawAssistantStreamText(dataField) || extractOpenClawAssistantStreamText(p);
 
     const runId = typeof p.runId === 'string' ? p.runId.trim() : '';
