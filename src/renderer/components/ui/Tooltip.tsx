@@ -1,10 +1,26 @@
-import React, { useState, useRef, useCallback, useLayoutEffect, useEffect } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+
+export const TooltipPosition = {
+  Top: 'top',
+  Bottom: 'bottom',
+  Left: 'left',
+  Right: 'right',
+} as const;
+export type TooltipPosition = typeof TooltipPosition[keyof typeof TooltipPosition];
+
+export const TooltipAlign = {
+  Start: 'start',
+  Center: 'center',
+  End: 'end',
+} as const;
+export type TooltipAlign = typeof TooltipAlign[keyof typeof TooltipAlign];
 
 interface TooltipProps {
   content: React.ReactNode;
   children: React.ReactNode;
   className?: string;
-  position?: 'top' | 'bottom' | 'left' | 'right';
+  position?: TooltipPosition;
+  align?: TooltipAlign;
   delay?: number;
   maxWidth?: string;
   disabled?: boolean;
@@ -14,7 +30,8 @@ const Tooltip: React.FC<TooltipProps> = ({
   content,
   children,
   className = '',
-  position = 'top',
+  position = TooltipPosition.Top,
+  align = TooltipAlign.Center,
   delay = 300,
   maxWidth = '280px',
   disabled = false,
@@ -47,23 +64,34 @@ const Tooltip: React.FC<TooltipProps> = ({
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     const margin = 8;
-    type TooltipPosition = 'top' | 'bottom' | 'left' | 'right';
+
+    const getAlignedLeft = () => {
+      if (align === TooltipAlign.Start) return anchorRect.left;
+      if (align === TooltipAlign.End) return anchorRect.right - tooltipRect.width;
+      return anchorRect.left + anchorRect.width / 2 - tooltipRect.width / 2;
+    };
+
+    const getAlignedTop = () => {
+      if (align === TooltipAlign.Start) return anchorRect.top;
+      if (align === TooltipAlign.End) return anchorRect.bottom - tooltipRect.height;
+      return anchorRect.top + anchorRect.height / 2 - tooltipRect.height / 2;
+    };
 
     const positions = {
       top: {
         top: anchorRect.top - tooltipRect.height - margin,
-        left: anchorRect.left + anchorRect.width / 2 - tooltipRect.width / 2,
+        left: getAlignedLeft(),
       },
       bottom: {
         top: anchorRect.bottom + margin,
-        left: anchorRect.left + anchorRect.width / 2 - tooltipRect.width / 2,
+        left: getAlignedLeft(),
       },
       left: {
-        top: anchorRect.top + anchorRect.height / 2 - tooltipRect.height / 2,
+        top: getAlignedTop(),
         left: anchorRect.left - tooltipRect.width - margin,
       },
       right: {
-        top: anchorRect.top + anchorRect.height / 2 - tooltipRect.height / 2,
+        top: getAlignedTop(),
         left: anchorRect.right + margin,
       },
     };
@@ -109,7 +137,7 @@ const Tooltip: React.FC<TooltipProps> = ({
       whiteSpace: 'pre-wrap',
       wordBreak: 'break-word',
     });
-  }, [maxWidth, position]);
+  }, [align, maxWidth, position]);
 
   useLayoutEffect(() => {
     if (!isVisible) return;
