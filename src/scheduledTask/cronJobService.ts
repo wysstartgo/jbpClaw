@@ -11,6 +11,7 @@ import type {
 import {
   DeliveryMode,
   GatewayStatus,
+  InternalTaskMarker,
   IpcChannel,
   PayloadKind,
   ScheduleKind,
@@ -130,6 +131,35 @@ interface CronJobServiceDeps {
   ensureGatewayReady: () => Promise<void>;
 }
 
+type InternalScheduledTaskCandidate = {
+  description?: string | null;
+  payload?: {
+    kind?: string;
+    message?: string;
+    text?: string;
+  } | null;
+};
+
+export function isInternalScheduledTaskJob(job: InternalScheduledTaskCandidate): boolean {
+  const description = job.description?.trim() ?? '';
+  if (description.startsWith(InternalTaskMarker.MemoryCoreManagedDescriptionPrefix)) {
+    return true;
+  }
+
+  const payload = job.payload;
+  let payloadText: string | undefined;
+  if (payload?.kind === PayloadKind.SystemEvent) {
+    payloadText = payload.text;
+  } else if (payload?.kind === PayloadKind.AgentTurn) {
+    payloadText = payload.message;
+  }
+
+  return (
+    typeof payloadText === 'string' &&
+    payloadText.trim().startsWith(InternalTaskMarker.MemoryCorePayloadPrefix)
+  );
+}
+
 function safeFiniteNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   return fallback;
@@ -147,6 +177,11 @@ function mapGatewayResultStatus(
   if (status === GatewayStatus.Error) return TaskStatus.Error;
   if (status === GatewayStatus.Skipped) return TaskStatus.Skipped;
   return null;
+}
+
+function matchesRunFilter(run: ScheduledTaskRun, filter?: RunFilter): boolean {
+  if (filter?.status && run.status !== filter.status) return false;
+  return true;
 }
 
 /**
@@ -444,6 +479,16 @@ export class CronJobService {
     return client;
   }
 
+  private async listGatewayJobs(params: Record<string, unknown> = {}): Promise<GatewayJob[]> {
+    const client = await this.client();
+    const result = await client.request<{ jobs?: GatewayJob[] }>('cron.list', {
+      includeDisabled: true,
+      limit: 200,
+      ...params,
+    });
+    return Array.isArray(result.jobs) ? result.jobs : [];
+  }
+
   async addJob(input: ScheduledTaskInput): Promise<ScheduledTask> {
     const client = await this.client();
     const gatewayDelivery = toGatewayDelivery(input.delivery);
@@ -494,12 +539,8 @@ export class CronJobService {
   }
 
   async listJobs(): Promise<ScheduledTask[]> {
-    const client = await this.client();
-    const result = await client.request<{ jobs?: GatewayJob[] }>('cron.list', {
-      includeDisabled: true,
-      limit: 200,
-    });
-    return Array.isArray(result.jobs) ? result.jobs.map(mapGatewayJob) : [];
+    const jobs = await this.listGatewayJobs();
+    return jobs.filter((job) => !isInternalScheduledTaskJob(job)).map(mapGatewayJob);
   }
 
   async getJob(id: string): Promise<ScheduledTask | null> {
@@ -534,17 +575,19 @@ export class CronJobService {
 
   async listRuns(jobId: string, limit = 20, offset = 0, filter?: RunFilter): Promise<ScheduledTaskRun[]> {
     const client = await this.client();
+    const fetchLimit = filter?.status ? Math.max(limit + offset, limit * 3) : limit;
     const result = await client.request<{ entries?: GatewayRunLogEntry[] }>('cron.runs', {
       scope: 'job',
       id: jobId,
-      limit,
-      offset,
+      limit: fetchLimit,
+      offset: filter?.status ? 0 : offset,
       sortDir: 'desc',
       ...(filter?.startDate && { startMs: new Date(`${filter.startDate}T00:00:00`).getTime() }),
       ...(filter?.endDate && { endMs: new Date(`${filter.endDate}T23:59:59`).getTime() }),
-      ...(filter?.status && { status: filter.status }),
     });
-    return Array.isArray(result.entries) ? result.entries.map(mapGatewayRun) : [];
+    const runs = Array.isArray(result.entries) ? result.entries.map(mapGatewayRun) : [];
+    const filteredRuns = filter?.status ? runs.filter((run) => matchesRunFilter(run, filter)) : runs;
+    return filteredRuns.slice(filter?.status ? offset : 0, (filter?.status ? offset : 0) + limit);
   }
 
   async countRuns(jobId: string): Promise<number> {
@@ -559,14 +602,19 @@ export class CronJobService {
 
   async listAllRuns(limit = 20, offset = 0, filter?: RunFilter): Promise<ScheduledTaskRunWithName[]> {
     const client = await this.client();
+    const jobs = await this.listGatewayJobs();
+    const visibleJobs = jobs.filter((job) => !isInternalScheduledTaskJob(job));
+    const visibleJobIds = new Set(visibleJobs.map((job) => job.id));
+    const nameMap = new Map(visibleJobs.map((job) => [job.id, job.name]));
+    const shouldFilterInApp = Boolean(filter?.status) || visibleJobIds.size !== jobs.length;
+    const fetchLimit = shouldFilterInApp ? Math.max(limit + offset, limit * 3) : limit;
     const result = await client.request<{ entries?: GatewayRunLogEntry[] }>('cron.runs', {
       scope: 'all',
-      limit,
-      offset,
+      limit: fetchLimit,
+      offset: shouldFilterInApp ? 0 : offset,
       sortDir: 'desc',
       ...(filter?.startDate && { startMs: new Date(`${filter.startDate}T00:00:00`).getTime() }),
       ...(filter?.endDate && { endMs: new Date(`${filter.endDate}T23:59:59`).getTime() }),
-      ...(filter?.status && { status: filter.status }),
     });
     if (!Array.isArray(result.entries) || result.entries.length === 0) return [];
 
@@ -574,11 +622,9 @@ export class CronJobService {
     const missingIds = new Set(
       result.entries.filter((e) => !e.jobName && !e.summary).map((e) => e.jobId),
     );
-    const nameMap = new Map<string, string>();
     if (missingIds.size > 0) {
       try {
-        const jobs = await this.listJobs();
-        for (const job of jobs) {
+        for (const job of visibleJobs.map(mapGatewayJob)) {
           if (missingIds.has(job.id)) {
             nameMap.set(job.id, job.name);
           }
@@ -588,13 +634,17 @@ export class CronJobService {
       }
     }
 
-    return result.entries.map((entry) => ({
-      ...mapGatewayRun(entry),
-      taskName: entry.jobName
-        || nameMap.get(entry.jobId)
-        || extractRunTitle(entry.summary)
-        || entry.jobId,
-    }));
+    const mappedRuns = result.entries
+      .filter((entry) => visibleJobIds.has(entry.jobId))
+      .map((entry) => ({
+        ...mapGatewayRun(entry),
+        taskName: entry.jobName
+          || nameMap.get(entry.jobId)
+          || extractRunTitle(entry.summary)
+          || entry.jobId,
+      }))
+      .filter((run) => matchesRunFilter(run, filter));
+    return mappedRuns.slice(shouldFilterInApp ? offset : 0, (shouldFilterInApp ? offset : 0) + limit);
   }
 
   startPolling(): void {
@@ -630,7 +680,8 @@ export class CronJobService {
         includeDisabled: true,
         limit: 200,
       });
-      const jobs = Array.isArray(result.jobs) ? result.jobs : [];
+      const jobs = (Array.isArray(result.jobs) ? result.jobs : [])
+        .filter((job) => !isInternalScheduledTaskJob(job));
 
       // Refresh jobId → name cache for synchronous lookups (used by session naming).
       this.jobNameCache.clear();
