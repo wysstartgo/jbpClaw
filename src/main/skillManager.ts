@@ -1552,6 +1552,28 @@ export class SkillManager {
     }
   }
 
+  private getSkillPackageContentVersion(skillDir: string): string {
+    const skillVersion = this.getSkillVersion(skillDir);
+    if (skillVersion) {
+      return skillVersion;
+    }
+
+    try {
+      const manifestPath = path.join(skillDir, 'manifest.json');
+      if (!fs.existsSync(manifestPath)) {
+        return '';
+      }
+      const raw = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as unknown;
+      if (!isRecord(raw)) {
+        return '';
+      }
+      const version = raw.version;
+      return typeof version === 'string' ? version : typeof version === 'number' ? String(version) : '';
+    } catch {
+      return '';
+    }
+  }
+
   private mergeSkillsConfig(bundledPath: string, targetPath: string): void {
     try {
       const bundled = JSON.parse(fs.readFileSync(bundledPath, 'utf-8'));
@@ -2226,7 +2248,20 @@ export class SkillManager {
     }
 
     const targetSkillDir = path.dirname(existingSkill.skillPath);
-    this.writeSkillMeta(targetSkillDir, this.buildManagedSkillMeta(descriptor));
+    this.writeSkillMeta(targetSkillDir, {
+      sourceType: QingShuObjectSourceType.QingShuManaged,
+      readOnly: true,
+      backendSkillId: descriptor.skillId,
+      backendAgentIds: descriptor.backendAgentIds ?? [],
+      installedBy: QingShuManagedInstaller.QingShuSync,
+      toolRefs: descriptor.toolRefs ?? [],
+      policyNote: descriptor.policyNote,
+      allowed: descriptor.allowed,
+      packageUrl: existingSkill.packageUrl,
+      version: existingSkill.version,
+      packageChecksum: existingSkill.packageChecksum,
+      catalogVersion: existingSkill.catalogVersion,
+    });
     this.setSkillEnabledState(
       descriptor.skillId,
       descriptor.allowed === true && descriptor.enabled === true,
@@ -2258,6 +2293,12 @@ export class SkillManager {
       const tempRoot = fs.mkdtempSync(path.join(app.getPath('temp'), 'lobsterai-managed-skill-'));
       cleanupPath = tempRoot;
 
+      console.log(
+        '[skills] Managed skill package sync started, skillId=%s, version=%s, checksum=%s',
+        descriptor.skillId,
+        descriptor.version,
+        descriptor.packageChecksum || 'none',
+      );
       const localSource = await downloadZipUrl(
         descriptor.packageUrl,
         tempRoot,
@@ -2280,16 +2321,20 @@ export class SkillManager {
       let action: ManagedSkillSyncResult['action'] = 'installed';
       if (existingSkill) {
         const currentVersion = existingSkill.version || '0.0.0';
+        const currentContentVersion = this.getSkillPackageContentVersion(targetSkillDir);
         const currentPackageChecksum = existingSkill.packageChecksum?.trim();
         const currentCatalogVersion = existingSkill.catalogVersion?.trim();
         const shouldUpgrade = compareVersions(sourceVersion, currentVersion) > 0
+          || (!!currentContentVersion && compareVersions(sourceVersion, currentContentVersion) > 0)
           || (!!sourcePackageChecksum && sourcePackageChecksum !== currentPackageChecksum)
           || (!!sourceCatalogVersion && sourceCatalogVersion !== currentCatalogVersion);
         if (shouldUpgrade) {
           this.performSkillUpgrade(matchingSkillDir, targetSkillDir);
           action = 'upgraded';
+          this.writeSkillMeta(targetSkillDir, this.buildManagedSkillMeta(descriptor));
         } else {
           action = 'unchanged';
+          this.applyManagedSkillAccess(descriptor);
         }
       } else {
         if (fs.existsSync(targetDir)) {
@@ -2306,14 +2351,19 @@ export class SkillManager {
           console.warn('[skills] install normalization failed for "%s" at %s: %s', descriptor.skillId, targetDir, normalizeResult.detail || 'unknown');
         }
         action = 'installed';
+        this.writeSkillMeta(targetSkillDir, this.buildManagedSkillMeta(descriptor));
       }
 
-      this.writeSkillMeta(targetSkillDir, this.buildManagedSkillMeta(descriptor));
       this.setSkillEnabledState(descriptor.skillId, descriptor.enabled);
       cleanupPathSafely(cleanupPath);
       cleanupPath = null;
       this.startWatching();
       this.notifySkillsChanged();
+      console.log(
+        '[skills] Managed skill package sync completed, skillId=%s, action=%s',
+        descriptor.skillId,
+        action,
+      );
 
       return {
         success: true,
@@ -2322,6 +2372,11 @@ export class SkillManager {
       };
     } catch (error) {
       cleanupPathSafely(cleanupPath);
+      console.warn(
+        '[skills] Managed skill package sync failed, skillId=%s',
+        descriptor.skillId,
+        error,
+      );
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to sync managed skill package',

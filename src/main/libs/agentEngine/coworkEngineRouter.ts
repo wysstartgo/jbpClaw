@@ -86,6 +86,12 @@ export class CoworkEngineRouter extends EventEmitter implements CoworkRuntime {
     await runtime.patchSession(sessionId, patch);
   }
 
+  async resetSessionHistory(sessionId: string): Promise<void> {
+    const engine = this.sessionEngine.get(sessionId) ?? this.safeResolveEngine();
+    const runtime = this.runtimeByEngine[engine];
+    await runtime.resetSessionHistory?.(sessionId);
+  }
+
   stopSession(sessionId: string): void {
     const engine = this.sessionEngine.get(sessionId);
     if (engine) {

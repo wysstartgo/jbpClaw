@@ -2,6 +2,8 @@ import { ShieldCheckIcon } from '@heroicons/react/24/outline';
 import React, { useCallback, useEffect, useRef,useState } from 'react';
 import { useDispatch,useSelector } from 'react-redux';
 
+import type { CoworkRuntimeImageAttachment } from '../../../common/coworkImageAttachments';
+import { stripCoworkImageAttachmentPayloads } from '../../../common/coworkImageAttachments';
 import { buildSessionTitleFromInput } from '../../../common/sessionTitle';
 import { PetAnchor } from '../../../shared/pet/constants';
 import { AppCustomEvent } from '../../constants/app';
@@ -16,7 +18,7 @@ import { addMessage, clearCurrentSession, dequeueCoworkInput, requeueCoworkInput
 import { selectAgentSelectedModel, setSelectedModel } from '../../store/slices/modelSlice';
 import { clearSelection,selectAction, setActions } from '../../store/slices/quickActionSlice';
 import { clearActiveSkills, setActiveSkillIds } from '../../store/slices/skillSlice';
-import type { CoworkImageAttachment, CoworkSession, OpenClawEngineStatus } from '../../types/cowork';
+import type { CoworkImageAttachment, CoworkImageAttachmentPreview, CoworkMessage, CoworkMessageMetadata, CoworkSession, OpenClawEngineStatus } from '../../types/cowork';
 import { toOpenClawModelRef } from '../../utils/openclawModelRef';
 import ComposeIcon from '../icons/ComposeIcon';
 import SidebarToggleIcon from '../icons/SidebarToggleIcon';
@@ -27,6 +29,11 @@ import WindowTitleBar from '../window/WindowTitleBar';
 import CoworkPromptInput, { type CoworkPromptInputRef } from './CoworkPromptInput';
 import CoworkSessionDetail from './CoworkSessionDetail';
 import { buildCoworkContinuationSystemPrompt, buildCoworkSystemPrompt } from './skillSystemPrompt';
+
+const hasInlineImagePayload = (attachment: CoworkImageAttachmentPreview): attachment is CoworkRuntimeImageAttachment => (
+  typeof (attachment as CoworkRuntimeImageAttachment).base64Data === 'string'
+  && (attachment as CoworkRuntimeImageAttachment).base64Data.length > 0
+);
 
 export interface CoworkViewProps {
   onRequestAppSettings?: (options?: SettingsOpenOptions) => void;
@@ -257,7 +264,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
             metadata: (sessionSkillIds.length > 0 || (imageAttachments && imageAttachments.length > 0))
               ? {
                 ...(sessionSkillIds.length > 0 ? { skillIds: sessionSkillIds } : {}),
-                ...(imageAttachments && imageAttachments.length > 0 ? { imageAttachments } : {}),
+                ...stripCoworkImageAttachmentPayloads({ imageAttachments }),
               }
               : undefined,
           },
@@ -332,6 +339,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     skillPrompt?: string,
     imageAttachments?: CoworkImageAttachment[],
     queuedSkillIds?: string[],
+    skipInitialUserMessage?: boolean,
   ): Promise<boolean | void> => {
     if (!session) return;
     if (isContinuingRef.current) return;
@@ -346,7 +354,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         hasImageAttachments: !!imageAttachments,
         imageAttachmentsCount: imageAttachments?.length ?? 0,
         imageAttachmentsNames: imageAttachments?.map(a => a.name),
-        imageAttachmentsBase64Lengths: imageAttachments?.map(a => a.base64Data.length),
+        imageAttachmentsSources: imageAttachments?.map(a => ('path' in a ? 'path' : 'base64')),
       });
 
       // Capture active skill IDs before clearing
@@ -375,6 +383,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         systemPrompt: combinedSystemPrompt,
         activeSkillIds: sessionSkillIds.length > 0 ? sessionSkillIds : undefined,
         imageAttachments,
+        skipInitialUserMessage,
       });
     } finally {
       isContinuingRef.current = false;
@@ -385,6 +394,39 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     if (!currentSession) return;
     return continueSessionById(currentSession, prompt, skillPrompt, imageAttachments);
   };
+
+  const handleEditUserMessage = useCallback(async (message: CoworkMessage, content: string): Promise<boolean> => {
+    if (!currentSession || isStreaming) return false;
+    const metadata = message.metadata;
+    const editedSession = await coworkService.editUserMessage({
+      sessionId: currentSession.id,
+      messageId: message.id,
+      content,
+      metadata,
+    });
+    if (!editedSession) return false;
+
+    const skillIds = Array.isArray(metadata?.skillIds)
+      ? metadata.skillIds.filter((id): id is string => typeof id === 'string')
+      : undefined;
+    const imageAttachments = (((metadata as CoworkMessageMetadata | undefined)?.imageAttachments ?? []) as CoworkImageAttachmentPreview[])
+      .filter(hasInlineImagePayload)
+      .map((attachment) => ({
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        base64Data: attachment.base64Data,
+      }));
+    const normalizedImageAttachments = imageAttachments.length > 0 ? imageAttachments : undefined;
+    const success = await continueSessionById(
+      editedSession,
+      content,
+      undefined,
+      normalizedImageAttachments,
+      skillIds,
+      true,
+    );
+    return success !== false;
+  }, [continueSessionById, currentSession, isStreaming]);
 
   useEffect(() => {
     if (!currentSession || isStreaming || isContinuingRef.current) return;
@@ -604,6 +646,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
           updateBadge={updateBadge}
           queuedCount={currentSession ? queuedInputsBySessionId[currentSession.id]?.length ?? 0 : 0}
           queuedInputs={currentSession ? queuedInputsBySessionId[currentSession.id] ?? [] : []}
+          onEditUserMessage={handleEditUserMessage}
         />
         {petState && petState.config.anchor === PetAnchor.AppBottom && (
           <div className="pointer-events-none absolute bottom-4 right-5 z-30 hidden lg:block">

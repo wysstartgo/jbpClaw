@@ -5,6 +5,7 @@ import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { stripCoworkImageAttachmentPayloads } from '../../../common/coworkImageAttachments';
 import type { OpenClawSessionPatch } from '../../../common/openclawSession';
 import type {
   CoworkConversationReplacementEntry,
@@ -1466,7 +1467,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
 
   async continueSession(sessionId: string, prompt: string, options: CoworkContinueOptions = {}): Promise<void> {
     await this.runTurn(sessionId, prompt, {
-      skipInitialUserMessage: false,
+      skipInitialUserMessage: options.skipInitialUserMessage ?? false,
       systemPrompt: options.systemPrompt,
       skillIds: options.skillIds,
       imageAttachments: options.imageAttachments,
@@ -1553,6 +1554,32 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     activeSessionIds.forEach((sessionId) => {
       this.stopSession(sessionId);
     });
+  }
+
+  async resetSessionHistory(sessionId: string): Promise<void> {
+    const session = this.store.getSession(sessionId);
+    if (!session) return;
+    const sessionKey = this.toSessionKey(sessionId, session.agentId);
+    if (this.activeTurns.has(sessionId)) {
+      throw new Error(`Session ${sessionId} is still running.`);
+    }
+
+    this.bridgedSessions.delete(sessionId);
+    this.lastSystemPromptBySession.delete(sessionId);
+    this.lastPatchedModelBySession.delete(sessionId);
+    this.sessionContextTokensCache.delete(sessionKey);
+
+    const client = this.gatewayClient;
+    if (!client) return;
+
+    try {
+      await client.request('sessions.reset', {
+        key: sessionKey,
+        reason: 'reset',
+      }, { timeoutMs: 10_000 });
+    } catch (error) {
+      console.warn('[OpenClawRuntime] failed to reset gateway session history after message edit:', error);
+    }
   }
 
   respondToPermission(requestId: string, result: PermissionResult): void {
@@ -1709,7 +1736,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       const metadata = (effectiveSkillIds.length || options.imageAttachments?.length)
         ? {
           ...(effectiveSkillIds.length ? { skillIds: effectiveSkillIds } : {}),
-          ...(options.imageAttachments?.length ? { imageAttachments: options.imageAttachments } : {}),
+          ...stripCoworkImageAttachmentPayloads({ imageAttachments: options.imageAttachments }),
         }
         : undefined;
       const userMessage = this.store.addMessage(sessionId, {

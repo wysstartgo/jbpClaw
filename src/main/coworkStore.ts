@@ -1336,6 +1336,80 @@ export class CoworkStore {
     this.saveDb();
   }
 
+  editUserMessageAndTruncateAfter(
+    sessionId: string,
+    messageId: string,
+    updates: { content: string; metadata?: CoworkMessageMetadata },
+  ): CoworkSession | null {
+    interface TargetMessageRow {
+      id: string;
+      type: string;
+      metadata: string | null;
+      sequence: number | null;
+    }
+
+    const edit = this.db.transaction(() => {
+      const target = this.getOne<TargetMessageRow>(
+        `
+        SELECT id, type, metadata, COALESCE(sequence, created_at) as sequence
+        FROM cowork_messages
+        WHERE id = ? AND session_id = ?
+      `,
+        [messageId, sessionId],
+      );
+      if (!target || target.type !== 'user') {
+        return null;
+      }
+
+      let existingMetadata: CoworkMessageMetadata = {};
+      if (target.metadata) {
+        try {
+          existingMetadata = JSON.parse(target.metadata) as CoworkMessageMetadata;
+        } catch {
+          existingMetadata = {};
+        }
+      }
+      const nextMetadata = updates.metadata !== undefined
+        ? updates.metadata
+        : existingMetadata;
+      const now = Date.now();
+
+      this.run(
+        `
+        UPDATE cowork_messages
+        SET content = ?, metadata = ?
+        WHERE id = ? AND session_id = ?
+      `,
+        [
+          updates.content,
+          Object.keys(nextMetadata).length > 0 ? JSON.stringify(nextMetadata) : null,
+          messageId,
+          sessionId,
+        ],
+      );
+      this.run(
+        `
+        DELETE FROM cowork_messages
+        WHERE session_id = ?
+          AND COALESCE(sequence, created_at) > ?
+      `,
+        [sessionId, target.sequence],
+      );
+      this.run(
+        "UPDATE cowork_sessions SET status = 'idle', updated_at = ?, claude_session_id = NULL WHERE id = ?",
+        [now, sessionId],
+      );
+      return sessionId;
+    });
+    const editedSessionId = edit();
+
+    if (!editedSessionId) {
+      return null;
+    }
+    this.saveDb();
+    return this.getSession(editedSessionId);
+  }
+
   // Config operations
   getConfig(): CoworkConfig {
     interface ConfigRow {

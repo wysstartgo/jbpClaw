@@ -1,21 +1,23 @@
-import { EventEmitter } from 'events';
+import type { PermissionResult } from '@anthropic-ai/claude-agent-sdk';
 import { spawn, spawnSync } from 'child_process';
 import { app } from 'electron';
+import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import type { PermissionResult } from '@anthropic-ai/claude-agent-sdk';
-import type { CoworkStore, CoworkMessage, CoworkExecutionMode } from '../coworkStore';
-import { getClaudeCodePath, getCurrentApiConfig } from './claudeSettings';
-import { loadClaudeSdk } from './claudeSdk';
-import { getElectronNodeRuntimePath, getEnhancedEnv, getEnhancedEnvWithTmpdir, getSkillsRoot } from './coworkUtil';
-import { coworkLog, getCoworkLogPath } from './coworkLogger';
-import { ensurePythonPipReady, ensurePythonRuntimeReady } from './pythonRuntime';
-import { isDeleteCommand, isDangerousCommand } from './commandSafety';
-import { isQuestionLikeMemoryText, type CoworkMemoryGuardLevel } from './coworkMemoryExtractor';
-import { setCoworkProxySessionId } from './coworkOpenAICompatProxy';
-import { SCHEDULED_TASK_SWITCH_MESSAGE } from '../../scheduledTask/enginePrompt';
 import { z } from 'zod';
+
+import { stripCoworkImageAttachmentPayloads } from '../../common/coworkImageAttachments';
+import { SCHEDULED_TASK_SWITCH_MESSAGE } from '../../scheduledTask/enginePrompt';
+import type { CoworkExecutionMode, CoworkMessage, CoworkStore } from '../coworkStore';
+import { loadClaudeSdk } from './claudeSdk';
+import { getClaudeCodePath, getCurrentApiConfig } from './claudeSettings';
+import { isDangerousCommand, isDeleteCommand } from './commandSafety';
+import { coworkLog, getCoworkLogPath } from './coworkLogger';
+import { type CoworkMemoryGuardLevel, isQuestionLikeMemoryText } from './coworkMemoryExtractor';
+import { setCoworkProxySessionId } from './coworkOpenAICompatProxy';
+import { getElectronNodeRuntimePath, getEnhancedEnv, getEnhancedEnvWithTmpdir, getSkillsRoot } from './coworkUtil';
+import { ensurePythonPipReady, ensurePythonRuntimeReady } from './pythonRuntime';
 
 const ATTACHMENT_LINE_RE = /^\s*(?:[-*]\s*)?(输入文件|input\s*file)\s*[:：]\s*(.+?)\s*$/i;
 const INFERRED_FILE_REFERENCE_RE = /([^\s"'`，。！？：:；;（）()\[\]{}<>《》【】]+?\.[A-Za-z][A-Za-z0-9]{0,7})/g;
@@ -1450,8 +1452,11 @@ export class CoworkRunner extends EventEmitter {
       if (options.skillIds?.length) {
         messageMetadata.skillIds = options.skillIds;
       }
-      if (options.imageAttachments?.length) {
-        messageMetadata.imageAttachments = options.imageAttachments;
+      const imageAttachmentMetadata = stripCoworkImageAttachmentPayloads({
+        imageAttachments: options.imageAttachments,
+      })?.imageAttachments;
+      if (imageAttachmentMetadata) {
+        messageMetadata.imageAttachments = imageAttachmentMetadata;
       }
       const userMessage = this.store.addMessage(sessionId, {
         type: 'user',
@@ -1525,7 +1530,7 @@ export class CoworkRunner extends EventEmitter {
     }
   }
 
-  async continueSession(sessionId: string, prompt: string, options: { systemPrompt?: string; skillIds?: string[]; imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }> } = {}): Promise<void> {
+  async continueSession(sessionId: string, prompt: string, options: { systemPrompt?: string; skillIds?: string[]; imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }>; skipInitialUserMessage?: boolean } = {}): Promise<void> {
     this.stoppedSessions.delete(sessionId);
     const activeSession = this.activeSessions.get(sessionId);
     if (!activeSession) {
@@ -1534,6 +1539,7 @@ export class CoworkRunner extends EventEmitter {
         skillIds: options.skillIds,
         systemPrompt: options.systemPrompt,
         imageAttachments: options.imageAttachments,
+        skipInitialUserMessage: options.skipInitialUserMessage,
       });
       return;
     }
@@ -1541,34 +1547,39 @@ export class CoworkRunner extends EventEmitter {
     // Ensure status returns to running for resumed turns on active sessions.
     this.store.updateSession(sessionId, { status: 'running' });
 
-    // Add user message with skill info and imageAttachments
-    const messageMetadata: Record<string, unknown> = {};
-    if (options.skillIds?.length) {
-      messageMetadata.skillIds = options.skillIds;
+    if (!options.skipInitialUserMessage) {
+      // Add user message with skill info and imageAttachments
+      const messageMetadata: Record<string, unknown> = {};
+      if (options.skillIds?.length) {
+        messageMetadata.skillIds = options.skillIds;
+      }
+      const imageAttachmentMetadata = stripCoworkImageAttachmentPayloads({
+        imageAttachments: options.imageAttachments,
+      })?.imageAttachments;
+      if (imageAttachmentMetadata) {
+        messageMetadata.imageAttachments = imageAttachmentMetadata;
+      }
+      console.log('[CoworkRunner] continueSession: building user message', {
+        sessionId,
+        hasImageAttachments: !!options.imageAttachments,
+        imageAttachmentsCount: options.imageAttachments?.length ?? 0,
+        metadataKeys: Object.keys(messageMetadata),
+        metadataHasImageAttachments: !!messageMetadata.imageAttachments,
+      });
+      const userMessage = this.store.addMessage(sessionId, {
+        type: 'user',
+        content: prompt,
+        metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : undefined,
+      });
+      console.log('[CoworkRunner] continueSession: emitting message', {
+        sessionId,
+        messageId: userMessage.id,
+        hasMetadata: !!userMessage.metadata,
+        metadataKeys: userMessage.metadata ? Object.keys(userMessage.metadata) : [],
+        hasImageAttachments: !!(userMessage.metadata as Record<string, unknown>)?.imageAttachments,
+      });
+      this.emit('message', sessionId, userMessage);
     }
-    if (options.imageAttachments?.length) {
-      messageMetadata.imageAttachments = options.imageAttachments;
-    }
-    console.log('[CoworkRunner] continueSession: building user message', {
-      sessionId,
-      hasImageAttachments: !!options.imageAttachments,
-      imageAttachmentsCount: options.imageAttachments?.length ?? 0,
-      metadataKeys: Object.keys(messageMetadata),
-      metadataHasImageAttachments: !!messageMetadata.imageAttachments,
-    });
-    const userMessage = this.store.addMessage(sessionId, {
-      type: 'user',
-      content: prompt,
-      metadata: Object.keys(messageMetadata).length > 0 ? messageMetadata : undefined,
-    });
-    console.log('[CoworkRunner] continueSession: emitting message', {
-      sessionId,
-      messageId: userMessage.id,
-      hasMetadata: !!userMessage.metadata,
-      metadataKeys: userMessage.metadata ? Object.keys(userMessage.metadata) : [],
-      hasImageAttachments: !!(userMessage.metadata as Record<string, unknown>)?.imageAttachments,
-    });
-    this.emit('message', sessionId, userMessage);
 
     // Continue with the existing session
     const session = this.store.getSession(sessionId);

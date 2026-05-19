@@ -15,6 +15,8 @@ export interface DraftAttachment {
   path: string;
   name: string;
   isImage?: boolean;
+  mimeType?: string;
+  sizeBytes?: number;
   dataUrl?: string;
 }
 

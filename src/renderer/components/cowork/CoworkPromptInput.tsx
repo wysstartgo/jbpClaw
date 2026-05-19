@@ -71,6 +71,15 @@ const EMPTY_PROMPT_HISTORY: string[] = [];
 const EMPTY_SLASH_COMMAND_MATCHES: PromptSlashCommandMatch[] = [];
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg']);
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+};
 
 const isImagePath = (filePath: string): boolean => {
   const dotIndex = filePath.lastIndexOf('.');
@@ -81,6 +90,13 @@ const isImagePath = (filePath: string): boolean => {
 
 const isImageMimeType = (mimeType: string): boolean => {
   return mimeType.startsWith('image/');
+};
+
+const inferImageMimeTypeFromPath = (filePath: string): string => {
+  const dotIndex = filePath.lastIndexOf('.');
+  if (dotIndex === -1) return 'application/octet-stream';
+  const ext = filePath.slice(dotIndex).toLowerCase();
+  return IMAGE_MIME_BY_EXT[ext] || 'application/octet-stream';
 };
 
 const SlashCommandMenu: React.FC<{
@@ -155,12 +171,6 @@ function getSlashCommandMatchDescription(match: PromptSlashCommandMatch): string
       return `${match.prompt.label}${match.prompt.description ? ` · ${match.prompt.description}` : ''}`;
   }
 }
-
-const extractBase64FromDataUrl = (dataUrl: string): { mimeType: string; base64Data: string } | null => {
-  const match = /^data:(.+);base64,(.*)$/.exec(dataUrl);
-  if (!match) return null;
-  return { mimeType: match[1], base64Data: match[2] };
-};
 
 const getFileNameFromPath = (path: string): string => {
   const parts = path.split(/[/\\]/);
@@ -307,12 +317,23 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
       });
     },
     setImageAttachments: (imageAttachments: CoworkImageAttachment[]) => {
-      const nextAttachments: CoworkAttachment[] = imageAttachments.map((attachment, index) => ({
-        path: `inline:${attachment.name}:${index}`,
-        name: attachment.name,
-        isImage: true,
-        dataUrl: `data:${attachment.mimeType};base64,${attachment.base64Data}`,
-      }));
+      const nextAttachments: CoworkAttachment[] = imageAttachments.map((attachment, index) => {
+        if ('path' in attachment) {
+          return {
+            path: attachment.path,
+            name: attachment.name,
+            isImage: true,
+            mimeType: attachment.mimeType,
+            sizeBytes: attachment.sizeBytes,
+          };
+        }
+        return {
+          path: `inline:${attachment.name}:${index}`,
+          name: attachment.name,
+          isImage: true,
+          mimeType: attachment.mimeType,
+        };
+      });
       dispatch(setDraftAttachments({
         draftKey,
         attachments: nextAttachments,
@@ -804,25 +825,23 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
       ? activeSkills.map(buildInlinedSkillPrompt).join('\n\n')
       : undefined;
 
-    // Extract image attachments (with base64 data) for vision-capable models
+    // 图片附件只传轻量文件引用；main 进程会在运行时边界读取并转成 base64。
     const imageAtts: CoworkImageAttachment[] = [];
     for (const attachment of attachments) {
-      if (attachment.isImage && attachment.dataUrl) {
-        const extracted = extractBase64FromDataUrl(attachment.dataUrl);
-        if (extracted) {
-          imageAtts.push({
-            name: attachment.name,
-            mimeType: extracted.mimeType,
-            base64Data: extracted.base64Data,
-          });
-        }
+      if (attachment.isImage && attachment.path && !attachment.path.startsWith('inline:')) {
+        imageAtts.push({
+          name: attachment.name,
+          mimeType: attachment.mimeType || inferImageMimeTypeFromPath(attachment.path),
+          path: attachment.path,
+          sizeBytes: attachment.sizeBytes,
+        });
       }
     }
 
-    // 有 base64 数据的图片已经通过 chat.send attachments 传递，避免再把本地路径写进 prompt。
+    // 图片已经通过 chat.send attachments 传递，避免再把本地路径写进 prompt。
     // 否则 OpenClaw 会把路径当作 Native-image 处理，路径校验失败时可能连 base64 图片也丢弃。
     const attachmentLines = attachments
-      .filter((a) => !a.path.startsWith('inline:') && !(a.isImage && a.dataUrl))
+      .filter((a) => !a.path.startsWith('inline:') && !(a.isImage && imageAtts.some((img) => 'path' in img && img.path === a.path)))
       .map((attachment) => `${INPUT_FILE_LABEL}: ${attachment.path}`)
       .join('\n');
     const finalPrompt = trimmedValue
@@ -858,7 +877,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
       console.log('[CoworkPromptInput] handleSubmit: passing imageAtts to onSubmit', {
         count: imageAtts.length,
         names: imageAtts.map(a => a.name),
-        base64Lengths: imageAtts.map(a => a.base64Data.length),
+        sources: imageAtts.map(a => ('path' in a ? 'path' : 'base64')),
       });
     }
     updateWakeActivationOverlay({
@@ -1288,7 +1307,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     }
   }, [disabled, disarmWakeFollowUpDictation, hideWakeActivationOverlay, isMac, isSpeechActive, isStreaming, speechVisible]);
 
-  const addAttachment = useCallback((filePath: string, imageInfo?: { isImage: boolean; dataUrl?: string }) => {
+  const addAttachment = useCallback((filePath: string, imageInfo?: { isImage: boolean; mimeType?: string; sizeBytes?: number }) => {
     if (!filePath) return;
     dispatch(addDraftAttachment({
       draftKey,
@@ -1296,40 +1315,11 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
         path: filePath,
         name: getFileNameFromPath(filePath),
         isImage: imageInfo?.isImage,
-        dataUrl: imageInfo?.dataUrl,
+        mimeType: imageInfo?.mimeType,
+        sizeBytes: imageInfo?.sizeBytes,
       },
     }));
   }, [dispatch, draftKey]);
-
-  const addImageAttachmentFromDataUrl = useCallback((name: string, dataUrl: string) => {
-    // Use the dataUrl as the unique key (no file path for inline images)
-    const pseudoPath = `inline:${name}:${Date.now()}`;
-    dispatch(addDraftAttachment({
-      draftKey,
-      attachment: {
-        path: pseudoPath,
-        name,
-        isImage: true,
-        dataUrl,
-      },
-    }));
-  }, [dispatch, draftKey]);
-
-  const fileToDataUrl = useCallback((file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result;
-        if (typeof result !== 'string') {
-          reject(new Error('Failed to read file'));
-          return;
-        }
-        resolve(result);
-      };
-      reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
-      reader.readAsDataURL(file);
-    });
-  }, []);
 
   const fileToBase64 = useCallback((file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -1397,33 +1387,25 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
           // For images on vision-capable models, read as data URL
           if (nativePath) {
             try {
-              const result = await window.electron.dialog.readFileAsDataUrl(nativePath);
-              if (result.success && result.dataUrl) {
-                addAttachment(nativePath, { isImage: true, dataUrl: result.dataUrl });
-                continue;
-              }
+              addAttachment(nativePath, {
+                isImage: true,
+                mimeType: file.type || inferImageMimeTypeFromPath(nativePath),
+                sizeBytes: file.size,
+              });
+              continue;
             } catch (error) {
-              console.error('Failed to read image as data URL:', error);
+              console.error('Failed to attach image file:', error);
             }
             // Fallback: add as regular file attachment
             addAttachment(nativePath);
           } else {
-            let dataUrl: string | null = null;
-            try {
-              dataUrl = await fileToDataUrl(file);
-            } catch (error) {
-              console.error('Failed to read clipboard image as data URL:', error);
-            }
-
             const stagedPath = await saveInlineFile(file);
             if (stagedPath) {
               addAttachment(stagedPath, {
                 isImage: true,
-                dataUrl: dataUrl ?? undefined,
+                mimeType: file.type || inferImageMimeTypeFromPath(stagedPath),
+                sizeBytes: file.size,
               });
-            } else if (dataUrl) {
-              console.warn('Clipboard image saved only in memory because disk persistence failed');
-              addImageAttachmentFromDataUrl(file.name, dataUrl);
             } else {
               console.error('Failed to process clipboard image');
             }
@@ -1448,7 +1430,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     if (hasImageWithoutVision) {
       setImageVisionHint(true);
     }
-  }, [addAttachment, addImageAttachmentFromDataUrl, disabled, fileToDataUrl, getNativeFilePath, isSpeechActive, isStreaming, modelSupportsImage, saveInlineFile]);
+  }, [addAttachment, disabled, getNativeFilePath, isSpeechActive, isStreaming, modelSupportsImage, saveInlineFile]);
 
   const handleAddFile = useCallback(async () => {
     if (isAddingFile || disabled || isStreaming || isSpeechActive) return;
@@ -1463,13 +1445,10 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
         if (isImagePath(filePath)) {
           if (modelSupportsImage) {
             try {
-              const readResult = await window.electron.dialog.readFileAsDataUrl(filePath);
-              if (readResult.success && readResult.dataUrl) {
-                addAttachment(filePath, { isImage: true, dataUrl: readResult.dataUrl });
-                continue;
-              }
+              addAttachment(filePath, { isImage: true, mimeType: inferImageMimeTypeFromPath(filePath) });
+              continue;
             } catch (error) {
-              console.error('Failed to read image as data URL:', error);
+              console.error('Failed to attach image file:', error);
 
             }
           } else {

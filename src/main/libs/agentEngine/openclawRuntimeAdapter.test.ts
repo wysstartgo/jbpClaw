@@ -2460,3 +2460,71 @@ test('startSession sends the session cwd to OpenClaw chat.send', async () => {
     cwd: path.resolve('/tmp/qingshu-workspace'),
   });
 });
+
+test('startSession keeps image payload in chat.send but strips it from message metadata', async () => {
+  const { session, store } = createReconcileStore([]);
+  session.status = 'idle';
+  session.agentId = 'main';
+  store.getAgent = () => null;
+  const requests: Array<{ method: string; params?: Record<string, unknown> }> = [];
+  const adapter = new OpenClawRuntimeAdapter(store, {});
+  adapter.gatewayClient = {
+    start: () => {},
+    stop: () => {},
+    request: async (method: string, params?: Record<string, unknown>) => {
+      requests.push({ method, params });
+      if (method === 'chat.history') {
+        return { messages: [] };
+      }
+      if (method === 'chat.send') {
+        setTimeout(() => {
+          adapter.handleGatewayEvent({
+            event: 'chat',
+            payload: {
+              runId: params?.idempotencyKey,
+              sessionKey: params?.sessionKey,
+              state: 'final',
+              message: { role: 'assistant', content: 'pong' },
+            },
+          });
+        }, 0);
+        return { runId: params?.idempotencyKey };
+      }
+      return {};
+    },
+  };
+  adapter.ensureGatewayClientReady = async () => {};
+  adapter.startChannelPolling = () => {};
+
+  await adapter.startSession(session.id, 'describe image', {
+    agentId: 'main',
+    imageAttachments: [
+      {
+        name: 'large.png',
+        mimeType: 'image/png',
+        base64Data: 'YWJjZA==',
+      },
+    ],
+  });
+
+  const userMessage = session.messages.find((message) => message.type === 'user');
+  expect(userMessage?.metadata?.imageAttachments).toEqual([
+    {
+      name: 'large.png',
+      mimeType: 'image/png',
+      sizeBytes: 4,
+      base64Length: 8,
+      source: 'runtime',
+    },
+  ]);
+  expect(JSON.stringify(userMessage?.metadata)).not.toContain('YWJjZA==');
+
+  const chatSend = requests.find((request) => request.method === 'chat.send');
+  expect(chatSend?.params?.attachments).toEqual([
+    {
+      type: 'image',
+      mimeType: 'image/png',
+      content: 'YWJjZA==',
+    },
+  ]);
+});

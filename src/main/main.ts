@@ -13,6 +13,13 @@ import {
   type AuthConfig,
   type AuthPasswordLoginInput,
 } from '../common/auth';
+import {
+  type CoworkImageAttachmentInput,
+  type CoworkRuntimeImageAttachment,
+  isCoworkCachedImageAttachment,
+  isCoworkRuntimeImageAttachment,
+  stripCoworkImageAttachmentPayloads,
+} from '../common/coworkImageAttachments';
 import { OpenClawSessionIpc, type OpenClawSessionPatch } from '../common/openclawSession';
 import { buildSessionTitleFromInput } from '../common/sessionTitle';
 import { buildScheduledTaskEnginePrompt } from '../scheduledTask/enginePrompt';
@@ -64,7 +71,7 @@ import {
 } from './auth/adapter';
 import { resolveAuthBackendConfig } from './auth/config';
 import { getAutoLaunchEnabled, isAutoLaunched, setAutoLaunchEnabled } from './autoLaunchManager';
-import { type CoworkMessage, type CoworkSession, CoworkStore } from './coworkStore';
+import { type CoworkMessage, type CoworkMessageMetadata, type CoworkSession, CoworkStore } from './coworkStore';
 import { setLanguage, t } from './i18n';
 import { IMGatewayConfig,IMGatewayManager, type IMLLMConfig } from './im';
 import {
@@ -222,6 +229,15 @@ const MIME_EXTENSION_MAP: Record<string, string> = {
   'application/json': '.json',
   'text/csv': '.csv',
 };
+const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+};
 
 const sanitizeExportFileName = (value: string): string => {
   const sanitized = value.replace(INVALID_FILE_NAME_PATTERN, ' ').replace(/\s+/g, ' ').trim();
@@ -266,6 +282,52 @@ const resolveInlineAttachmentDir = (cwd?: string): string => {
     }
   }
   return path.join(app.getPath('temp'), 'lobsterai', 'attachments');
+};
+
+const inferImageMimeTypeFromFilePath = (filePath: string, fallback?: string): string => {
+  const normalizedFallback = typeof fallback === 'string' ? fallback.trim() : '';
+  if (normalizedFallback) {
+    return normalizedFallback;
+  }
+  const extension = path.extname(filePath).toLowerCase();
+  return IMAGE_MIME_BY_EXTENSION[extension] || 'application/octet-stream';
+};
+
+const resolveCoworkImageAttachmentsForRuntime = async (
+  attachments?: CoworkImageAttachmentInput[],
+): Promise<CoworkRuntimeImageAttachment[] | undefined> => {
+  if (!attachments?.length) {
+    return undefined;
+  }
+
+  const resolvedAttachments: CoworkRuntimeImageAttachment[] = [];
+  for (const attachment of attachments) {
+    if (isCoworkRuntimeImageAttachment(attachment)) {
+      resolvedAttachments.push(attachment);
+      continue;
+    }
+    if (!isCoworkCachedImageAttachment(attachment)) {
+      continue;
+    }
+
+    const resolvedPath = resolveShellFilePath(attachment.path);
+    const stat = await fs.promises.stat(resolvedPath);
+    if (!stat.isFile()) {
+      throw new Error(`Image attachment is not a file: ${resolvedPath}`);
+    }
+    if (stat.size > MAX_INLINE_ATTACHMENT_BYTES) {
+      throw new Error(`Image attachment too large (max ${Math.floor(MAX_INLINE_ATTACHMENT_BYTES / (1024 * 1024))}MB)`);
+    }
+
+    const buffer = await fs.promises.readFile(resolvedPath);
+    resolvedAttachments.push({
+      name: sanitizeAttachmentFileName(attachment.name || path.basename(resolvedPath)),
+      mimeType: inferImageMimeTypeFromFilePath(resolvedPath, attachment.mimeType),
+      base64Data: buffer.toString('base64'),
+    });
+  }
+
+  return resolvedAttachments.length ? resolvedAttachments : undefined;
 };
 
 const ensurePngFileName = (value: string): string => {
@@ -477,18 +539,11 @@ const sanitizeCoworkMessageForIpc = (message: CoworkMessage): CoworkMessage => {
     return message;
   }
 
-  // Preserve imageAttachments in metadata as-is (base64 data can be very large
-  // and must not be truncated by the generic sanitizer).
   let sanitizedMetadata: unknown;
   if (message.metadata && typeof message.metadata === 'object') {
-    const { imageAttachments, ...rest } = message.metadata as Record<string, unknown>;
-    const sanitizedRest = sanitizeIpcPayload(rest) as Record<string, unknown> | undefined;
-    sanitizedMetadata = {
-      ...(sanitizedRest && typeof sanitizedRest === 'object' ? sanitizedRest : {}),
-      ...(Array.isArray(imageAttachments) && imageAttachments.length > 0
-        ? { imageAttachments }
-        : {}),
-    };
+    sanitizedMetadata = sanitizeIpcPayload(
+      stripCoworkImageAttachmentPayloads(message.metadata as Record<string, unknown>),
+    );
   } else {
     sanitizedMetadata = undefined;
   }
@@ -3970,7 +4025,7 @@ if (!gotTheLock) {
     systemPrompt?: string;
     title?: string;
     activeSkillIds?: string[];
-    imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }>;
+    imageAttachments?: CoworkImageAttachmentInput[];
     agentId?: string;
     modelOverride?: string;
   }) => {
@@ -4017,6 +4072,7 @@ if (!gotTheLock) {
       const fallbackTitle = buildSessionTitleFromInput(options.prompt, defaultTitle);
       const title = options.title?.trim() || fallbackTitle;
       const taskWorkingDirectory = resolveTaskWorkingDirectory(selectedWorkspaceRoot);
+      const runtimeImageAttachments = await resolveCoworkImageAttachmentsForRuntime(options.imageAttachments);
 
       const session = coworkStoreInstance.createSession(
         title,
@@ -4037,8 +4093,11 @@ if (!gotTheLock) {
       if (sessionSkillIds.length) {
         messageMetadata.skillIds = sessionSkillIds;
       }
-      if (options.imageAttachments?.length) {
-        messageMetadata.imageAttachments = options.imageAttachments;
+      const imageAttachmentMetadata = stripCoworkImageAttachmentPayloads({
+        imageAttachments: runtimeImageAttachments ?? options.imageAttachments,
+      })?.imageAttachments;
+      if (imageAttachmentMetadata) {
+        messageMetadata.imageAttachments = imageAttachmentMetadata;
       }
       coworkStoreInstance.addMessage(session.id, {
         type: 'user',
@@ -4059,7 +4118,7 @@ if (!gotTheLock) {
         skillIds: sessionSkillIds,
         workspaceRoot: selectedWorkspaceRoot,
         confirmationMode: 'modal',
-        imageAttachments: options.imageAttachments,
+        imageAttachments: runtimeImageAttachments,
         agentId: options.agentId,
       }).catch(error => {
         console.error('[Cowork] session error:', error);
@@ -4100,7 +4159,8 @@ if (!gotTheLock) {
     prompt: string;
     systemPrompt?: string;
     activeSkillIds?: string[];
-    imageAttachments?: Array<{ name: string; mimeType: string; base64Data: string }>;
+    imageAttachments?: CoworkImageAttachmentInput[];
+    skipInitialUserMessage?: boolean;
   }) => {
     try {
       const existingSession = getCoworkStore().getSession(options.sessionId);
@@ -4126,11 +4186,13 @@ if (!gotTheLock) {
       if (denied) {
         return denied;
       }
+      const runtimeImageAttachments = await resolveCoworkImageAttachmentsForRuntime(options.imageAttachments);
 
       runtime.continueSession(options.sessionId, options.prompt, {
         systemPrompt: sessionAgentContext.systemPrompt,
         skillIds: sessionAgentContext.skillIds,
-        imageAttachments: options.imageAttachments,
+        imageAttachments: runtimeImageAttachments,
+        skipInitialUserMessage: options.skipInitialUserMessage,
       }).catch(error => {
         console.error('[Cowork] continue error:', error);
         try {
@@ -4280,6 +4342,37 @@ if (!gotTheLock) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fork session',
+      };
+    }
+  });
+
+  ipcMain.handle(CoworkIpcChannel.EditUserMessage, async (_event, options: { sessionId: string; messageId: string; content: string; metadata?: CoworkMessageMetadata }) => {
+    try {
+      const content = typeof options.content === 'string' ? options.content.trim() : '';
+      if (!content) {
+        return { success: false, error: 'Message content is required' };
+      }
+      const runtime = getCoworkEngineRouter();
+      if (runtime.isSessionActive(options.sessionId)) {
+        return { success: false, error: 'Cannot edit a message while the session is running.' };
+      }
+
+      const coworkStoreInstance = getCoworkStore();
+      const session = coworkStoreInstance.editUserMessageAndTruncateAfter(options.sessionId, options.messageId, {
+        content,
+        metadata: options.metadata,
+      });
+      if (!session) {
+        return { success: false, error: 'Failed to edit user message' };
+      }
+
+      await runtime.resetSessionHistory?.(options.sessionId);
+      broadcastCoworkSessionsChanged();
+      return { success: true, session: sanitizeCoworkSessionForIpc(session) };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to edit user message',
       };
     }
   });

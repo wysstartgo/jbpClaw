@@ -6,6 +6,7 @@ import {
   addMessage,
   addSession,
   clearCurrentSession,
+  clearCoworkInputQueue,
   clearPendingPermissions,
   deleteSession as deleteSessionAction,
   deleteSessions as deleteSessionsAction,
@@ -27,6 +28,7 @@ import type {
   CoworkConfigUpdate,
   CoworkContinueOptions,
   CoworkMemoryStats,
+  CoworkMessage,
   CoworkPermissionResult,
   CoworkSession,
   CoworkSessionListResult,
@@ -400,6 +402,7 @@ class CoworkService {
       systemPrompt: options.systemPrompt,
       activeSkillIds: options.activeSkillIds,
       imageAttachments: options.imageAttachments,
+      skipInitialUserMessage: options.skipInitialUserMessage,
     });
     if (!result.success) {
       store.dispatch(setStreaming(false));
@@ -518,6 +521,28 @@ class CoworkService {
 
     console.error('Failed to rename session:', result.error);
     return false;
+  }
+
+  async editUserMessage(options: {
+    sessionId: string;
+    messageId: string;
+    content: string;
+    metadata?: CoworkMessage['metadata'];
+  }): Promise<CoworkSession | null> {
+    const cowork = window.electron?.cowork;
+    if (!cowork?.editUserMessage) return null;
+
+    const result = await cowork.editUserMessage(options);
+    if (result.success && result.session) {
+      store.dispatch(setCurrentSession(result.session));
+      store.dispatch(clearCoworkInputQueue(options.sessionId));
+      store.dispatch(setStreaming(false));
+      void petService.setRuntimeProjectionFromCoworkState(store.getState().cowork);
+      return result.session;
+    }
+
+    console.error('Failed to edit user message:', result.error);
+    return null;
   }
 
   async forkSession(sessionId: string, messageId: string): Promise<CoworkSession | null> {

@@ -211,3 +211,48 @@ describe('CoworkStore session forks', () => {
     expect(source?.messages.map((message) => message.content)).toEqual(['first', 'reply', 'later']);
   });
 });
+
+describe('CoworkStore user message edits', () => {
+  test('updates a user message and removes every following message', () => {
+    const db = createDb();
+    createCoworkTables(db);
+    insertSession(db, 'session-1');
+    insertMessage(db, 'message-1', 'session-1', 'user', 'first', '{"skillIds":["demo"]}', 1, 1_000);
+    insertMessage(db, 'message-2', 'session-1', 'assistant', 'old reply', '{}', 2, 2_000);
+    insertMessage(db, 'message-3', 'session-1', 'tool_use', 'old tool', '{}', 3, 3_000);
+    insertMessage(db, 'message-4', 'session-1', 'user', 'later', '{}', 4, 4_000);
+
+    const store = new CoworkStore(db, () => {});
+    const edited = store.editUserMessageAndTruncateAfter('session-1', 'message-1', {
+      content: 'edited first',
+    });
+
+    expect(edited).not.toBeNull();
+    expect(edited?.status).toBe('idle');
+    expect(edited?.claudeSessionId).toBeNull();
+    expect(edited?.messages.map((message) => ({
+      id: message.id,
+      type: message.type,
+      content: message.content,
+      metadata: message.metadata,
+    }))).toEqual([
+      { id: 'message-1', type: 'user', content: 'edited first', metadata: { skillIds: ['demo'] } },
+    ]);
+  });
+
+  test('does not edit assistant messages', () => {
+    const db = createDb();
+    createCoworkTables(db);
+    insertSession(db, 'session-1');
+    insertMessage(db, 'message-1', 'session-1', 'user', 'first', '{}', 1, 1_000);
+    insertMessage(db, 'message-2', 'session-1', 'assistant', 'reply', '{}', 2, 2_000);
+
+    const store = new CoworkStore(db, () => {});
+    const edited = store.editUserMessageAndTruncateAfter('session-1', 'message-2', {
+      content: 'edited reply',
+    });
+
+    expect(edited).toBeNull();
+    expect(store.getSession('session-1')?.messages.map((message) => message.content)).toEqual(['first', 'reply']);
+  });
+});

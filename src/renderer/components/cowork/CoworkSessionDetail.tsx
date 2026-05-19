@@ -13,6 +13,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 
+import type {
+  CoworkImageAttachmentMetadata,
+  CoworkRuntimeImageAttachment,
+} from '../../../common/coworkImageAttachments';
 import { getScheduledReminderDisplayText } from '../../../scheduledTask/reminderText';
 import { PetAnchor } from '../../../shared/pet/constants';
 import type { TtsAvailability } from '../../../shared/tts/constants';
@@ -40,11 +44,12 @@ import type { QueuedCoworkInput } from '../../store/slices/coworkSlice';
 import { setActiveSkillIds } from '../../store/slices/skillSlice';
 import type { Artifact } from '../../types/artifact';
 import { PREVIEWABLE_ARTIFACT_TYPES } from '../../types/artifact';
-import type { CoworkImageAttachment, CoworkMessage, CoworkMessageMetadata } from '../../types/cowork';
+import type { CoworkImageAttachment, CoworkImageAttachmentPreview, CoworkMessage, CoworkMessageMetadata } from '../../types/cowork';
 import type { Skill } from '../../types/skill';
 import { getCompactFolderName } from '../../utils/path';
 import { parseUserMessageForDisplay } from '../../utils/userMessageDisplay';
 import Modal from '../common/Modal';
+import BranchIcon from '../icons/BranchIcon';
 import ComposeIcon from '../icons/ComposeIcon';
 import EllipsisHorizontalIcon from '../icons/EllipsisHorizontalIcon';
 import ExclamationTriangleIcon from '../icons/ExclamationTriangleIcon';
@@ -72,6 +77,21 @@ import CoworkPromptInput, { type CoworkPromptInputRef } from './CoworkPromptInpu
 import { buildSpeakableAssistantText } from './coworkTtsText';
 import DiffView, { extractDiffFromToolInput } from './DiffView';
 
+const hasInlineImagePayload = (attachment: CoworkImageAttachmentPreview): attachment is CoworkRuntimeImageAttachment => (
+  typeof (attachment as CoworkRuntimeImageAttachment).base64Data === 'string'
+  && (attachment as CoworkRuntimeImageAttachment).base64Data.length > 0
+);
+
+const formatImageAttachmentSize = (attachment: Pick<CoworkImageAttachmentMetadata, 'sizeBytes'>): string => {
+  if (typeof attachment.sizeBytes !== 'number' || attachment.sizeBytes <= 0) {
+    return '';
+  }
+  if (attachment.sizeBytes >= 1024 * 1024) {
+    return `${(attachment.sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${Math.ceil(attachment.sizeBytes / 1024)} KB`;
+};
+
 interface CoworkSessionDetailProps {
   onManageSkills?: () => void;
   onContinue: (prompt: string, skillPrompt?: string, imageAttachments?: CoworkImageAttachment[]) => boolean | void | Promise<boolean | void>;
@@ -84,6 +104,7 @@ interface CoworkSessionDetailProps {
   updateBadge?: React.ReactNode;
   queuedCount?: number;
   queuedInputs?: QueuedCoworkInput[];
+  onEditUserMessage?: (message: CoworkMessage, content: string) => Promise<boolean | void>;
 }
 
 const AUTO_SCROLL_THRESHOLD = 120;
@@ -1018,7 +1039,7 @@ const ArtifactBadge: React.FC<{
   );
 };
 
-// Re-edit button component — lets the user re-fill a sent message back into the input
+// Re-edit button component — edits a sent message in place and rebuilds the following turn
 const ReEditButton: React.FC<{
   visible: boolean;
   onClick: () => void;
@@ -1058,11 +1079,16 @@ export const UserMessageItem: React.FC<{
   message: CoworkMessage;
   skills: Skill[];
   onReEdit?: (message: CoworkMessage) => void;
+  onEditSubmit?: (message: CoworkMessage, content: string) => Promise<boolean | void>;
   onFork?: (message: CoworkMessage) => void;
   resolveLocalFilePath?: (href: string, text: string) => string | null;
-}> = React.memo(({ message, skills, onReEdit, onFork, resolveLocalFilePath }) => {
+}> = React.memo(({ message, skills, onReEdit, onEditSubmit, onFork, resolveLocalFilePath }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(message.content);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Get skills used for this message
   const messageSkillIds = (message.metadata as CoworkMessageMetadata)?.skillIds || [];
@@ -1071,8 +1097,22 @@ export const UserMessageItem: React.FC<{
     .filter((s): s is NonNullable<typeof s> => s !== undefined);
 
   // Get image attachments from metadata
-  const imageAttachments = ((message.metadata as CoworkMessageMetadata)?.imageAttachments ?? []) as CoworkImageAttachment[];
+  const imageAttachments = ((message.metadata as CoworkMessageMetadata)?.imageAttachments ?? []) as CoworkImageAttachmentPreview[];
   const displayContent = parseUserMessageForDisplay(message.content);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setEditValue(message.content);
+    }
+  }, [isEditing, message.content]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    const textarea = editTextareaRef.current;
+    if (!textarea) return;
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  }, [isEditing]);
 
   useEffect(() => {
     if (!expandedImage) return;
@@ -1084,6 +1124,35 @@ export const UserMessageItem: React.FC<{
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [expandedImage]);
+
+  const handleStartEdit = useCallback(() => {
+    setEditValue(message.content);
+    setIsEditing(true);
+  }, [message.content]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditValue(message.content);
+    setIsEditing(false);
+  }, [message.content]);
+
+  const handleSubmitEdit = useCallback(async () => {
+    if (!onEditSubmit || isSavingEdit) return;
+    const nextContent = editValue.trim();
+    if (!nextContent) return;
+    if (nextContent === message.content.trim()) {
+      setIsEditing(false);
+      return;
+    }
+    setIsSavingEdit(true);
+    try {
+      const success = await onEditSubmit(message, nextContent);
+      if (success !== false) {
+        setIsEditing(false);
+      }
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }, [editValue, isSavingEdit, message, onEditSubmit]);
 
   return (
     <div
@@ -1099,42 +1168,106 @@ export const UserMessageItem: React.FC<{
         
         <div className="flex-1 min-w-0 relative group/content flex flex-col items-end">
           <div className="text-foreground text-[14px] leading-relaxed w-fit max-w-[42rem] rounded-2xl px-4 py-2.5 bg-surface shadow-subtle text-left">
-            {displayContent.trim() && (
-              <MarkdownContent
-                content={displayContent}
-                className="max-w-none whitespace-pre-wrap break-words"
-                resolveLocalFilePath={resolveLocalFilePath}
-                showRevealInFolderAction
-                onImageClick={setExpandedImage}
-              />
+            {isEditing ? (
+              <div className="w-[min(42rem,calc(100vw-10rem))] max-w-full">
+                <textarea
+                  ref={editTextareaRef}
+                  value={editValue}
+                  onChange={(event) => setEditValue(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      handleCancelEdit();
+                    }
+                    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                      event.preventDefault();
+                      void handleSubmitEdit();
+                    }
+                  }}
+                  rows={Math.min(Math.max(editValue.split('\n').length, 3), 10)}
+                  className="w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  disabled={isSavingEdit}
+                />
+                <div className="mt-1 text-[11px] text-secondary/70">
+                  {i18nService.t('coworkEditTruncateHint')}
+                </div>
+                <div className="mt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    disabled={isSavingEdit}
+                    className="rounded-md px-3 py-1.5 text-xs font-medium text-secondary hover:bg-surface-hover disabled:opacity-50"
+                  >
+                    {i18nService.t('cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSubmitEdit()}
+                    disabled={isSavingEdit || !editValue.trim()}
+                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSavingEdit ? i18nService.t('saving') : i18nService.t('coworkEditAndResubmit')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              displayContent.trim() && (
+                <MarkdownContent
+                  content={displayContent}
+                  className="max-w-none whitespace-pre-wrap break-words"
+                  resolveLocalFilePath={resolveLocalFilePath}
+                  showRevealInFolderAction
+                  onImageClick={setExpandedImage}
+                />
+              )
             )}
             {imageAttachments.length > 0 && (
               <div className={`flex flex-wrap gap-2 ${message.content?.trim() ? 'mt-2' : ''}`}>
-                {imageAttachments.map((img, idx) => (
-                  <div key={idx} className="relative group">
-                    <img
-                      src={`data:${img.mimeType};base64,${img.base64Data}`}
-                      alt={img.name}
-                      className="max-h-48 max-w-[16rem] rounded-lg object-contain cursor-pointer border border-border hover:border-primary transition-colors"
+                {imageAttachments.map((img, idx) => {
+                  if (hasInlineImagePayload(img)) {
+                    const dataUrl = `data:${img.mimeType};base64,${img.base64Data}`;
+                    return (
+                      <div key={idx} className="relative group">
+                        <img
+                          src={dataUrl}
+                          alt={img.name}
+                          className="max-h-48 max-w-[16rem] rounded-lg object-contain cursor-pointer border border-border hover:border-primary transition-colors"
+                          title={img.name}
+                          onClick={() => setExpandedImage(dataUrl)}
+                        />
+                        <div className="absolute bottom-1 left-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/50 text-white text-[10px] opacity-0 group-hover:opacity-100 transition-opacity truncate pointer-events-none">
+                          <PhotoIcon className="h-3 w-3 flex-shrink-0" />
+                          <span className="truncate">{img.name}</span>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const sizeLabel = formatImageAttachmentSize(img);
+                  return (
+                    <div
+                      key={idx}
+                      className="flex max-w-[16rem] items-center gap-2 rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs text-secondary"
                       title={img.name}
-                      onClick={() => setExpandedImage(`data:${img.mimeType};base64,${img.base64Data}`)}
-                    />
-                    <div className="absolute bottom-1 left-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/50 text-white text-[10px] opacity-0 group-hover:opacity-100 transition-opacity truncate pointer-events-none">
-                      <PhotoIcon className="h-3 w-3 flex-shrink-0" />
+                    >
+                      <PhotoIcon className="h-4 w-4 flex-shrink-0 text-primary" />
                       <span className="truncate">{img.name}</span>
+                      {sizeLabel && <span className="shrink-0 text-secondary/60">{sizeLabel}</span>}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
 
           {/* Actions - Hover to show */}
-          <div className="absolute -top-3 left-0 flex items-center gap-1.5 opacity-0 group-hover/content:opacity-100 transition-opacity bg-background/80 backdrop-blur-sm rounded-lg p-1 shadow-sm border border-border/50">
-            {onReEdit && (
+          <div className={`absolute -top-3 left-0 flex items-center gap-1.5 transition-opacity bg-background/80 backdrop-blur-sm rounded-lg p-1 shadow-sm border border-border/50 ${
+            isEditing ? 'hidden' : 'opacity-0 group-hover/content:opacity-100'
+          }`}>
+            {(onEditSubmit || onReEdit) && (
               <ReEditButton
                 visible={isHovered}
-                onClick={() => onReEdit(message)}
+                onClick={onEditSubmit ? handleStartEdit : () => onReEdit?.(message)}
               />
             )}
             <CopyButton
@@ -1153,7 +1286,7 @@ export const UserMessageItem: React.FC<{
                 }`}
                 title={i18nService.t('coworkContinueFromHere')}
               >
-                <ComposeIcon className="w-4 h-4 text-[var(--icon-secondary)]" />
+                <BranchIcon className="w-4 h-4 text-[var(--icon-secondary)]" />
               </button>
             )}
             {messageSkills.length > 0 && (
@@ -1641,6 +1774,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
   updateBadge,
   queuedCount = 0,
   queuedInputs = [],
+  onEditUserMessage,
 }) => {
   const dispatch = useDispatch();
   const isMac = window.electron.platform === 'darwin';
@@ -2400,7 +2534,8 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
       ref.setValue(message.content);
     }
     // Restore image attachments (always call to clear previous attachments)
-    const imageAttachments = ((message.metadata as CoworkMessageMetadata)?.imageAttachments ?? []) as CoworkImageAttachment[];
+    const imageAttachments = (((message.metadata as CoworkMessageMetadata)?.imageAttachments ?? []) as CoworkImageAttachmentPreview[])
+      .filter(hasInlineImagePayload);
     ref.setImageAttachments(imageAttachments);
     // Restore active skills
     const skillIds = (message.metadata as CoworkMessageMetadata)?.skillIds;
@@ -2424,6 +2559,18 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
       detail: i18nService.t('coworkContinueFromHereCreated'),
     }));
   }, [currentSession, isStreaming]);
+
+  const handleEditUserMessage = useCallback(async (message: CoworkMessage, content: string): Promise<boolean> => {
+    if (!currentSession || isStreaming || !onEditUserMessage) return false;
+    const success = await onEditUserMessage(message, content);
+    if (success === false) {
+      window.dispatchEvent(new CustomEvent(AppCustomEvent.ShowToast, {
+        detail: i18nService.t('coworkEditMessageFailed'),
+      }));
+      return false;
+    }
+    return true;
+  }, [currentSession, isStreaming, onEditUserMessage]);
 
   const messages = currentSession?.messages;
   const displayItems = useMemo(() => messages ? buildDisplayItems(messages) : [], [messages]);
@@ -2575,6 +2722,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
                 skills={skills}
                 resolveLocalFilePath={resolveLocalFilePath}
                 onReEdit={remoteManaged ? undefined : handleReEdit}
+                onEditSubmit={remoteManaged || isStreaming ? undefined : handleEditUserMessage}
                 onFork={remoteManaged || isStreaming ? undefined : handleForkFromMessage}
               />
             </div>

@@ -1,11 +1,15 @@
 import type { Platform } from '@shared/platform';
 
+import type {
+  CoworkCachedImageAttachment,
+  CoworkImageAttachment as RuntimeCoworkImageAttachment,
+  CoworkImageAttachmentInput,
+  CoworkImageAttachmentMetadata,
+} from '../../common/coworkImageAttachments';
+
 // Cowork image attachment for vision-capable models
-export interface CoworkImageAttachment {
-  name: string;
-  mimeType: string;
-  base64Data: string;
-}
+export type CoworkImageAttachment = CoworkImageAttachmentInput;
+export type CoworkImageAttachmentPreview = RuntimeCoworkImageAttachment | CoworkCachedImageAttachment | CoworkImageAttachmentMetadata;
 
 // Cowork session status
 export type CoworkSessionStatus = 'idle' | 'running' | 'completed' | 'error';
@@ -236,6 +240,7 @@ export interface CoworkContinueOptions {
   systemPrompt?: string;
   activeSkillIds?: string[];
   imageAttachments?: CoworkImageAttachment[];
+  skipInitialUserMessage?: boolean;
 }
 
 // IPC result types
