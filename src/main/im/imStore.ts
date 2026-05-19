@@ -616,6 +616,18 @@ export class IMStore {
     this.setIMSettings({ platformAgentBindings });
   }
 
+  private deleteInstanceSessionMappings(platform: Platform, instanceId: string): void {
+    const accountId = instanceId.slice(0, 8);
+    if (!accountId) {
+      return;
+    }
+    this.run(
+      'DELETE FROM im_session_mappings WHERE platform = ? AND im_conversation_id LIKE ?',
+      [platform, `${accountId}:%`],
+    );
+    this.saveDb();
+  }
+
   private replaceMultiInstanceConfig<TInstance extends { instanceId: string }>(
     platform: 'dingtalk' | 'discord' | 'feishu' | 'nim' | 'popo' | 'qq' | 'telegram' | 'wecom',
     nextInstances: TInstance[],
@@ -1009,7 +1021,7 @@ export class IMStore {
   deleteDiscordInstance(instanceId: string): void {
     this.deletePlatformAgentBinding(`discord:${instanceId}`);
     this.run('DELETE FROM im_config WHERE key = ?', [`discord:${instanceId}`]);
-    this.run('DELETE FROM im_session_mappings WHERE platform = ?', [`discord:${instanceId}`]);
+    this.deleteInstanceSessionMappings('discord', instanceId);
     this.saveDb();
   }
 
@@ -1193,7 +1205,7 @@ export class IMStore {
   deleteTelegramInstance(instanceId: string): void {
     this.deletePlatformAgentBinding(`telegram:${instanceId}`);
     this.run('DELETE FROM im_config WHERE key = ?', [`telegram:${instanceId}`]);
-    this.run('DELETE FROM im_session_mappings WHERE platform = ?', [`telegram:${instanceId}`]);
+    this.deleteInstanceSessionMappings('telegram', instanceId);
     this.saveDb();
   }
 

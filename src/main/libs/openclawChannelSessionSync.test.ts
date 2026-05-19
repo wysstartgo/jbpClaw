@@ -95,6 +95,19 @@ describe('openclawChannelSessionSync', () => {
     expect(agentId).toBe('telegram-agent');
   });
 
+  test('prefers per-instance agent bindings for Discord sessions', () => {
+    const agentId = resolveAgentBinding(
+      {
+        discord: 'main',
+        'discord:dcabcdef-1234-5678': 'discord-agent',
+      },
+      'discord',
+      'dcabcdef',
+    );
+
+    expect(agentId).toBe('discord-agent');
+  });
+
   test('prefers per-instance agent bindings for NIM sessions', () => {
     const agentId = resolveAgentBinding(
       {

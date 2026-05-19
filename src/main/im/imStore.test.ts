@@ -1,7 +1,7 @@
+import Database from 'better-sqlite3';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import Database from 'better-sqlite3';
 import { afterEach, describe, expect, test } from 'vitest';
 
 import { IMStore } from './imStore';
@@ -106,7 +106,9 @@ describe('IMStore multi-instance agent bindings', () => {
   test.each([
     ['dingtalk', 'deleteDingTalkInstance'],
     ['feishu', 'deleteFeishuInstance'],
+    ['discord', 'deleteDiscordInstance'],
     ['qq', 'deleteQQInstance'],
+    ['telegram', 'deleteTelegramInstance'],
     ['wecom', 'deleteWecomInstance'],
   ] as const)('removes only the deleted %s instance binding', (platform, deleteMethod) => {
     const { store } = createStore();
@@ -127,6 +129,48 @@ describe('IMStore multi-instance agent bindings', () => {
       feishu: 'legacy-feishu-agent',
       telegram: 'telegram-agent',
     });
+  });
+
+  test.each([
+    ['telegram', 'deleteTelegramInstance'],
+    ['discord', 'deleteDiscordInstance'],
+  ] as const)('removes %s session mappings for deleted instance account scope', (platform, deleteMethod) => {
+    const { store } = createStore();
+    const deletedInstanceId = 'abcd1234-deleted-instance';
+    const keptInstanceId = 'efgh5678-kept-instance';
+
+    store.createSessionMapping(
+      'abcd1234:direct:user-1',
+      platform,
+      'cowork-deleted',
+      'agent-deleted',
+      `agent:agent-deleted:${platform}:abcd1234:direct:user-1`,
+    );
+    store.createSessionMapping(
+      'efgh5678:direct:user-2',
+      platform,
+      'cowork-kept',
+      'agent-kept',
+      `agent:agent-kept:${platform}:efgh5678:direct:user-2`,
+    );
+    store.createSessionMapping(
+      'group:shared-room',
+      platform,
+      'cowork-group',
+      'agent-group',
+      `agent:agent-group:${platform}:group:shared-room`,
+    );
+
+    store[deleteMethod](deletedInstanceId);
+
+    expect(store.getSessionMapping('abcd1234:direct:user-1', platform)).toBe(null);
+    expect(store.getSessionMapping('efgh5678:direct:user-2', platform)?.coworkSessionId)
+      .toBe('cowork-kept');
+    expect(store.getSessionMapping('group:shared-room', platform)?.coworkSessionId)
+      .toBe('cowork-group');
+    expect(store.getSessionMappingByCoworkSessionId('cowork-deleted')).toBe(null);
+    expect(store.getSessionMappingByCoworkSessionId('cowork-kept')?.imConversationId)
+      .toBe(`${keptInstanceId.slice(0, 8)}:direct:user-2`);
   });
 
   test('keeps settings stable when deleting an unbound instance', () => {
