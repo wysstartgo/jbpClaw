@@ -1,19 +1,24 @@
 import type { Platform } from '@shared/platform';
+import { PlatformRegistry } from '@shared/platform';
 
 import type {
   DingTalkInstanceConfig,
+  DiscordInstanceConfig,
   FeishuInstanceConfig,
   IMGatewayConfig,
   IMPlatform,
   QQInstanceConfig,
+  TelegramInstanceConfig,
   WecomInstanceConfig,
 } from '../../types/im';
 
 export type AgentImBindingPlatform = IMPlatform | Platform;
 export const MultiInstanceAgentBindingPlatform = {
   DingTalk: 'dingtalk',
+  Discord: 'discord',
   Feishu: 'feishu',
   QQ: 'qq',
+  Telegram: 'telegram',
   Wecom: 'wecom',
 } as const;
 export type MultiInstanceAgentBindingPlatform =
@@ -21,8 +26,10 @@ export type MultiInstanceAgentBindingPlatform =
 
 type MultiInstanceAgentBindingConfig =
   | DingTalkInstanceConfig
+  | DiscordInstanceConfig
   | FeishuInstanceConfig
   | QQInstanceConfig
+  | TelegramInstanceConfig
   | WecomInstanceConfig;
 type AgentImBindingInstanceConfig = MultiInstanceAgentBindingConfig & {
   instanceId: string;
@@ -74,11 +81,17 @@ const getMultiInstanceAgentBindingConfigs = (
   if (platform === MultiInstanceAgentBindingPlatform.DingTalk) {
     return config.dingtalk.instances;
   }
+  if (platform === MultiInstanceAgentBindingPlatform.Discord) {
+    return config.discord.instances ?? [];
+  }
   if (platform === MultiInstanceAgentBindingPlatform.Feishu) {
     return config.feishu.instances;
   }
   if (platform === MultiInstanceAgentBindingPlatform.QQ) {
     return config.qq.instances;
+  }
+  if (platform === MultiInstanceAgentBindingPlatform.Telegram) {
+    return config.telegram.instances ?? [];
   }
   return config.wecom.instances;
 };
@@ -209,4 +222,32 @@ export const buildAgentBindingKeyBindings = (
     nextBindings[normalizeAgentImBindingKey(bindingKey)] = agentId;
   }
   return nextBindings;
+};
+
+export const getVisibleAgentImBindingPlatforms = (
+  visiblePlatforms: readonly Platform[],
+  config: IMGatewayConfig | null,
+  bindings?: Record<string, string>,
+): Platform[] => {
+  const visible = new Set<Platform>(visiblePlatforms);
+  for (const bindingKey of Object.keys(bindings ?? {})) {
+    const normalizedKey = normalizeAgentImBindingKey(bindingKey);
+    const platform = normalizeAgentImBindingPlatform(
+      normalizedKey.includes(':') ? normalizedKey.slice(0, normalizedKey.indexOf(':')) : normalizedKey,
+    );
+    if (PlatformRegistry.platforms.includes(platform as Platform)) {
+      visible.add(platform as Platform);
+    }
+  }
+
+  for (const platform of PlatformRegistry.platforms) {
+    if (visible.has(platform)) {
+      continue;
+    }
+    if (isAgentImBindingPlatformConfigured(config, platform)) {
+      visible.add(platform);
+    }
+  }
+
+  return PlatformRegistry.platforms.filter((platform) => visible.has(platform));
 };

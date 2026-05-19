@@ -14,14 +14,17 @@ import { RootState } from '../../store';
 import type { PresetAgent } from '../../types/agent';
 import type { IMGatewayConfig } from '../../types/im';
 import { getVisibleIMPlatforms } from '../../utils/regionFilter';
+import AgentAvatarPicker from './AgentAvatarPicker';
 import { resolveAgentBundleSaveFlow } from './agentBundleSaveFlow';
 import {
   buildAgentBundleSaveWarningState,
 } from './agentBundleSaveGuard';
+import AgentConfirmDialog from './AgentConfirmDialog';
 import { hasCreateAgentDraftChanges } from './agentDraftState';
 import {
   buildAgentBindingKeyBindings,
   getAgentImBindingEnabledInstances,
+  getVisibleAgentImBindingPlatforms,
   hasAgentImBindingInstanceConfigs,
   isAgentImBindingPlatformConfigured,
 } from './agentImBindingConfig';
@@ -32,8 +35,6 @@ import AgentToolBundleDebugGuide from './AgentToolBundleDebugGuide';
 import AgentToolBundleDebugSelector from './AgentToolBundleDebugSelector';
 import AgentToolBundleReadOnlyPanel from './AgentToolBundleReadOnlyPanel';
 import AgentToolBundleSelector from './AgentToolBundleSelector';
-import AgentAvatarPicker from './AgentAvatarPicker';
-import AgentConfirmDialog from './AgentConfirmDialog';
 import AgentWorkingDirectoryField from './AgentWorkingDirectoryField';
 import { AgentConfirmDialogVariant } from './constants';
 
@@ -160,9 +161,13 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
     : saveWarningState
       ? (i18nService.t('agentToolBundlesConfirmSave') || 'Save Again')
       : (i18nService.t('create') || 'Create');
-  const visibleImPlatforms = PlatformRegistry.platforms.filter((platform) => (
-    getVisibleIMPlatforms(i18nService.getLanguage()) as readonly string[]
-  ).includes(platform));
+  const visibleImPlatforms = useMemo(() => getVisibleAgentImBindingPlatforms(
+    PlatformRegistry.platforms.filter((platform) => (
+      getVisibleIMPlatforms(i18nService.getLanguage()) as readonly string[]
+    ).includes(platform)),
+    imConfig,
+    imConfig?.settings?.platformAgentBindings,
+  ), [imConfig]);
 
   const handleRequestClose = useCallback(() => {
     if (creating) {

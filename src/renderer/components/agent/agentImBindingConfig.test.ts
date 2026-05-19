@@ -3,16 +3,19 @@ import { expect, test } from 'vitest';
 import {
   DEFAULT_IM_CONFIG,
   type DingTalkInstanceConfig,
+  type DiscordInstanceConfig,
   type EmailInstanceConfig,
   type FeishuInstanceConfig,
   type IMGatewayConfig,
   type NimInstanceConfig,
   type PopoInstanceConfig,
+  type TelegramInstanceConfig,
 } from '../../types/im';
 import {
   buildAgentBindingKeyBindings,
   collectAgentBoundBindingKeys,
   getAgentImBindingEnabledInstances,
+  getVisibleAgentImBindingPlatforms,
   hasAgentImBindingInstanceConfigs,
   isAgentImBindingPlatformConfigured,
   isMultiInstanceAgentBindingPlatform,
@@ -150,6 +153,8 @@ test('isAgentImBindingPlatformConfigured 在 NIM/POPO 实例模式下按启用�
 
 test('isMultiInstanceAgentBindingPlatform 能识别多实例平台', () => {
   expect(isMultiInstanceAgentBindingPlatform('feishu')).toBe(true);
+  expect(isMultiInstanceAgentBindingPlatform('telegram')).toBe(true);
+  expect(isMultiInstanceAgentBindingPlatform('discord')).toBe(true);
   expect(isMultiInstanceAgentBindingPlatform('weixin')).toBe(false);
   expect(isMultiInstanceAgentBindingPlatform('nim')).toBe(false);
   expect(isMultiInstanceAgentBindingPlatform('popo')).toBe(false);
@@ -168,6 +173,33 @@ test('getAgentImBindingEnabledInstances 仅返回已启用实例', () => {
   expect(
     getAgentImBindingEnabledInstances(config, 'feishu').map((instance) => instance.instanceId),
   ).toEqual(['b']);
+});
+
+test('getAgentImBindingEnabledInstances 支持 Telegram 和 Discord 实例', () => {
+  const config = createConfig({
+    telegram: {
+      ...DEFAULT_IM_CONFIG.telegram,
+      instances: [
+        { instanceId: 'tg-disabled', instanceName: 'TG Disabled', enabled: false } as TelegramInstanceConfig,
+        { instanceId: 'tg-enabled', instanceName: 'TG Enabled', enabled: true } as TelegramInstanceConfig,
+      ],
+    },
+    discord: {
+      ...DEFAULT_IM_CONFIG.discord,
+      instances: [
+        { instanceId: 'dc-enabled', instanceName: 'Discord Enabled', enabled: true } as DiscordInstanceConfig,
+      ],
+    },
+  });
+
+  expect(
+    getAgentImBindingEnabledInstances(config, 'telegram').map((instance) => instance.instanceId),
+  ).toEqual(['tg-enabled']);
+  expect(
+    getAgentImBindingEnabledInstances(config, 'discord').map((instance) => instance.instanceId),
+  ).toEqual(['dc-enabled']);
+  expect(isAgentImBindingPlatformConfigured(config, 'telegram')).toBe(true);
+  expect(isAgentImBindingPlatformConfigured(config, 'discord')).toBe(true);
 });
 
 test('getAgentImBindingEnabledInstances 支持未来 NIM 和 POPO 实例数组', () => {
@@ -499,6 +531,54 @@ test('collectAgentBoundBindingKeys 在 NIM/POPO 实例模式下过滤禁用实�
       config,
     ),
   ).toEqual(new Set(['nim', 'nim:enabled', 'popo:enabled']));
+});
+
+test('collectAgentBoundBindingKeys 会按实例级保留 Telegram 和 Discord 绑定', () => {
+  const config = createConfig({
+    telegram: {
+      ...DEFAULT_IM_CONFIG.telegram,
+      instances: [
+        { instanceId: 'tg-enabled', instanceName: 'TG Enabled', enabled: true } as TelegramInstanceConfig,
+        { instanceId: 'tg-disabled', instanceName: 'TG Disabled', enabled: false } as TelegramInstanceConfig,
+      ],
+    },
+    discord: {
+      ...DEFAULT_IM_CONFIG.discord,
+      instances: [
+        { instanceId: 'dc-enabled', instanceName: 'Discord Enabled', enabled: true } as DiscordInstanceConfig,
+      ],
+    },
+  });
+
+  expect(
+    collectAgentBoundBindingKeys(
+      {
+        'telegram:tg-enabled': 'agent-1',
+        'telegram:tg-disabled': 'agent-1',
+        'discord:dc-enabled': 'agent-1',
+      },
+      'agent-1',
+      ['telegram', 'discord'],
+      config,
+    ),
+  ).toEqual(new Set(['telegram:tg-enabled', 'discord:dc-enabled']));
+});
+
+test('getVisibleAgentImBindingPlatforms 会补充已配置或已绑定的全球平台', () => {
+  const config = createConfig({
+    telegram: {
+      ...DEFAULT_IM_CONFIG.telegram,
+      instances: [
+        { instanceId: 'tg-enabled', instanceName: 'TG Enabled', enabled: true } as TelegramInstanceConfig,
+      ],
+    },
+  });
+
+  expect(
+    getVisibleAgentImBindingPlatforms(['feishu', 'qq'], config, {
+      'discord:dc-bound': 'agent-1',
+    }),
+  ).toEqual(['feishu', 'qq', 'telegram', 'discord']);
 });
 
 test('buildAgentBindingKeyBindings 会用实例级 key 写入 NIM 和 POPO 绑定', () => {
