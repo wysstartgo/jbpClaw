@@ -5,6 +5,8 @@ import {
   OpenClawApi,
   ProviderName,
   ProviderRegistry,
+  isQingShuServerProvider,
+  normalizeQingShuServerProviderId,
 } from './constants';
 
 describe('ProviderName constants', () => {
@@ -12,8 +14,15 @@ describe('ProviderName constants', () => {
     expect(ProviderName.OpenAI).toBe('openai');
     expect(ProviderName.DeepSeek).toBe('deepseek');
     expect(ProviderName.Custom).toBe('custom');
+    expect(ProviderName.QingShuServer).toBe('qingshu-server');
     expect(ProviderName.LobsteraiServer).toBe('lobsterai-server');
     expect(ProviderName.Copilot).toBe('github-copilot');
+  });
+
+  test('treats legacy lobsterai-server as QingShu server alias', () => {
+    expect(isQingShuServerProvider('qingshu-server')).toBe(true);
+    expect(isQingShuServerProvider('lobsterai-server')).toBe(true);
+    expect(normalizeQingShuServerProviderId('lobsterai-server')).toBe('qingshu-server');
   });
 });
 

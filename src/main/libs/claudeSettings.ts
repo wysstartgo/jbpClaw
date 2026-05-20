@@ -2,7 +2,7 @@ import { app } from 'electron';
 import { join } from 'path';
 
 import type { ProviderConfig as SharedProviderConfig, ProviderModelConfig } from '../../shared/providers';
-import { ProviderName, ProviderRegistry, resolveCodingPlanBaseUrl } from '../../shared/providers';
+import { ProviderName, ProviderRegistry, isQingShuServerProvider, resolveCodingPlanBaseUrl } from '../../shared/providers';
 import type { SqliteStore } from '../sqliteStore';
 import type { CoworkApiConfig } from './coworkConfigStore';
 import { type AnthropicApiFormat,normalizeProviderApiFormat } from './coworkFormatTransform';
@@ -14,7 +14,7 @@ import {
 } from './coworkOpenAICompatProxy';
 import { readOpenAICodexAuthFile } from './openaiCodexAuth';
 
-const LOBSTERAI_SERVER_PROXY_PATH = '/api/qingshu-claw/proxy/v1';
+const QINGSHU_SERVER_PROXY_PATH = '/api/qingshu-claw/proxy/v1';
 
 type ProviderModelInputConfig = Omit<ProviderModelConfig, 'name'> & { name?: string };
 type ProviderConfig = Omit<SharedProviderConfig, 'apiFormat' | 'models'> & {
@@ -62,6 +62,18 @@ let serverBaseUrlGetter: (() => string) | null = null;
 
 export function setServerBaseUrlGetter(getter: () => string): void {
   serverBaseUrlGetter = getter;
+}
+
+let qingShuInvocationContextGetter: (() => {
+  clientUserId?: string | null;
+  deviceId?: string | null;
+} | null) | null = null;
+
+export function setQingShuInvocationContextGetter(getter: () => {
+  clientUserId?: string | null;
+  deviceId?: string | null;
+} | null): void {
+  qingShuInvocationContextGetter = getter;
 }
 
 // Cached server model metadata (populated when auth:getModels is called)
@@ -225,17 +237,17 @@ function providerRequiresApiKey(providerName: string): boolean {
   return providerName !== ProviderName.Ollama && providerName !== ProviderName.LmStudio;
 }
 
-function tryLobsteraiServerFallback(modelId?: string): MatchedProvider | null {
+function tryQingShuServerFallback(modelId?: string): MatchedProvider | null {
   const tokens = authTokensGetter?.();
   const serverBaseUrl = serverBaseUrlGetter?.();
   if (!tokens?.accessToken || !serverBaseUrl) return null;
   const effectiveModelId = modelId?.trim() || '';
   if (!effectiveModelId) return null;
-  const baseURL = `${serverBaseUrl}${LOBSTERAI_SERVER_PROXY_PATH}`;
+  const baseURL = `${serverBaseUrl}${QINGSHU_SERVER_PROXY_PATH}`;
   const cachedMeta = serverModelMetadataCache.get(effectiveModelId);
-  console.log('[ClaudeSettings] lobsterai-server fallback activated:', { baseURL, modelId: effectiveModelId, supportsImage: cachedMeta?.supportsImage });
+  console.log('[ClaudeSettings] qingshu-server fallback activated:', { baseURL, modelId: effectiveModelId, supportsImage: cachedMeta?.supportsImage });
   return {
-    providerName: ProviderName.LobsteraiServer,
+    providerName: ProviderName.QingShuServer,
     providerConfig: { enabled: true, apiKey: tokens.accessToken, baseUrl: baseURL, apiFormat: 'openai', models: buildServerFallbackModels(effectiveModelId) },
     modelId: effectiveModelId,
     apiFormat: 'openai',
@@ -274,7 +286,7 @@ function resolveMatchedProvider(appConfig: AppConfig): { matched: MatchedProvide
   if (!modelId) {
     const fallback = resolveFallbackModel();
     if (!fallback) {
-      const serverFallback = tryLobsteraiServerFallback(configuredModelId);
+      const serverFallback = tryQingShuServerFallback(configuredModelId);
       if (serverFallback) return { matched: serverFallback };
       return { matched: null, error: 'No available model configured in enabled providers.' };
     }
@@ -284,9 +296,9 @@ function resolveMatchedProvider(appConfig: AppConfig): { matched: MatchedProvide
   let providerEntry: [string, ProviderConfig] | undefined;
   const preferredProviderName = appConfig.model?.defaultModelProvider?.trim();
 
-  // Handle lobsterai-server provider: dynamically construct from auth tokens
-  if (preferredProviderName === ProviderName.LobsteraiServer) {
-    const serverMatch = tryLobsteraiServerFallback(modelId);
+  // Handle QingShu server provider: dynamically construct from auth tokens.
+  if (isQingShuServerProvider(preferredProviderName)) {
+    const serverMatch = tryQingShuServerFallback(modelId);
     if (serverMatch) {
       return { matched: serverMatch };
     }
@@ -317,7 +329,7 @@ function resolveMatchedProvider(appConfig: AppConfig): { matched: MatchedProvide
       modelId = fallback.modelId;
       providerEntry = [fallback.providerName, fallback.providerConfig];
     } else {
-      const serverFallback = tryLobsteraiServerFallback(modelId);
+      const serverFallback = tryQingShuServerFallback(modelId);
       if (serverFallback) return { matched: serverFallback };
       return { matched: null, error: `No enabled provider found for model: ${modelId}` };
     }
@@ -326,12 +338,12 @@ function resolveMatchedProvider(appConfig: AppConfig): { matched: MatchedProvide
   const [providerName, providerConfig] = providerEntry;
   const credential = resolveProviderCredential(providerName, providerConfig);
   if (providerName === ProviderName.OpenAI && credential.isOAuth && !credential.apiKey) {
-    const serverFallback = tryLobsteraiServerFallback(modelId);
+    const serverFallback = tryQingShuServerFallback(modelId);
     if (serverFallback) return { matched: serverFallback };
     return { matched: null, error: 'OpenAI Codex OAuth mode selected but login not completed.' };
   }
   if (credential.isOAuth && !credential.apiKey) {
-    const serverFallback = tryLobsteraiServerFallback(modelId);
+    const serverFallback = tryQingShuServerFallback(modelId);
     if (serverFallback) return { matched: serverFallback };
     return { matched: null, error: 'MiniMax OAuth mode selected but login not completed.' };
   }
@@ -345,13 +357,13 @@ function resolveMatchedProvider(appConfig: AppConfig): { matched: MatchedProvide
   }
 
   if (!baseURL) {
-    const serverFallback = tryLobsteraiServerFallback(modelId);
+    const serverFallback = tryQingShuServerFallback(modelId);
     if (serverFallback) return { matched: serverFallback };
     return { matched: null, error: `Provider ${providerName} is missing base URL.` };
   }
 
   if (apiFormat === 'anthropic' && providerRequiresApiKey(providerName) && !credential.apiKey) {
-    const serverFallback = tryLobsteraiServerFallback(modelId);
+    const serverFallback = tryQingShuServerFallback(modelId);
     if (serverFallback) return { matched: serverFallback };
     return { matched: null, error: `Provider ${providerName} requires API key for Anthropic-compatible mode.` };
   }
@@ -439,6 +451,7 @@ export function resolveCurrentApiConfig(target: OpenAICompatProxyTarget = 'local
     apiKey: resolvedApiKey || undefined,
     model: matched.modelId,
     provider: matched.providerName,
+    ...(isQingShuServerProvider(matched.providerName) ? (qingShuInvocationContextGetter?.() ?? {}) : {}),
   });
 
   const proxyBaseURL = getCoworkOpenAICompatProxyBaseURL(target);
@@ -524,7 +537,7 @@ export function resolveRawApiConfig(): ApiConfigResolution {
 export function resolveAllProviderApiKeys(): Record<string, string> {
   const result: Record<string, string> = {};
 
-  // lobsterai-server token is now managed by the token proxy
+  // QingShu server token is now managed by the token proxy
   // (openclawTokenProxy.ts) — no longer injected as an env var.
 
   // All configured custom providers
@@ -565,7 +578,7 @@ export function resolveAllEnabledProviderConfigs(): ProviderRawConfig[] {
 
   for (const [providerName, providerConfig] of Object.entries(appConfig.providers)) {
     if (!providerConfig?.enabled) continue;
-    if (providerName === ProviderName.LobsteraiServer) continue;
+    if (isQingShuServerProvider(providerName)) continue;
 
     const credential = resolveProviderCredential(providerName, providerConfig);
     const apiKey = credential.apiKey;

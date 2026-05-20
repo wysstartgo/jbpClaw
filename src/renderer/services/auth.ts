@@ -7,6 +7,7 @@ import {
   type FeishuScanSession,
   type FeishuScanSessionPollResult,
 } from '../../common/auth';
+import { ProviderName } from '../../shared/providers';
 import { AppCustomEvent } from '../constants/app';
 import { store } from '../store';
 import { setAgents, setCurrentAgentId } from '../store/slices/agentSlice';
@@ -20,7 +21,7 @@ import {
 } from '../store/slices/authSlice';
 import { clearCurrentSession } from '../store/slices/coworkSlice';
 import type { Model } from '../store/slices/modelSlice';
-import { clearServerModels,setServerModels } from '../store/slices/modelSlice';
+import { clearServerModels, setServerModels } from '../store/slices/modelSlice';
 import { clearActiveSkills, setSkills } from '../store/slices/skillSlice';
 import { disableQingShuManagedItems } from './authSessionReset';
 import { agentService } from './agent';
@@ -604,7 +605,7 @@ class AuthService {
           id: m.modelId,
           name: m.modelName,
           provider: m.provider,
-          providerKey: 'lobsterai-server',
+          providerKey: ProviderName.QingShuServer,
           isServerModel: true,
           serverApiFormat: m.apiFormat,
           supportsImage: m.supportsImage ?? false,

@@ -679,6 +679,48 @@ describe('OpenClawConfigSync runtime config output', () => {
     expect(env.LOBSTER_EMAIL_WORK_APIKEY).toBe('email-secret-api-key');
   });
 
+  test('projects legacy Feishu group chat ids into groups config', async () => {
+    const sync = await createSync({
+      getFeishuInstances: () => [{
+        enabled: true,
+        appId: 'feishu-app-id',
+        appSecret: 'feishu-secret',
+        instanceId: 'afc83707-a3ea-40a5-ba71-fbb72a817002',
+        instanceName: 'Feishu Bot 1',
+        domain: 'feishu',
+        dmPolicy: 'open',
+        allowFrom: [],
+        groupPolicy: 'allowlist',
+        groupAllowFrom: [
+          'oc_6f3f554b197f45f82fe2f2526387f80e',
+          'ou_sender_open_id',
+          'oc_6f3f554b197f45f82fe2f2526387f80e',
+        ],
+        groups: {},
+        historyLimit: 50,
+        streaming: true,
+        replyMode: 'auto',
+        blockStreaming: false,
+        footer: { status: true, elapsed: true },
+        mediaMaxMb: 30,
+        debug: false,
+      }],
+    });
+
+    const result = sync.sync('feishu-group-chat-allowlist');
+    expect(result.ok).toBe(true);
+
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const account = config.channels.feishu.accounts.afc83707;
+    expect(account.groupPolicy).toBe('allowlist');
+    expect(account.groupAllowFrom).toEqual(['ou_sender_open_id']);
+    expect(account.groups).toEqual({
+      '*': { requireMention: true },
+      oc_6f3f554b197f45f82fe2f2526387f80e: { requireMention: true },
+    });
+    expect(JSON.stringify(config)).not.toContain('feishu-secret');
+  });
+
   test('cleans stale plugin package ids and preserves manifest entry config', async () => {
     fs.writeFileSync(configPath, JSON.stringify({
       plugins: {

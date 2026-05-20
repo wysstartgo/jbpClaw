@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 import { isDesignedAgentAvatarIcon } from '../../shared/agent/avatar';
+import { normalizeQingShuServerProviderId } from '../../shared/providers';
 import type { Agent } from '../coworkStore';
 
 type BuildManagedAgentEntriesInput = {
@@ -30,7 +31,7 @@ export function parsePrimaryModelRef(primaryModel: string): ManagedSessionModelT
     return null;
   }
 
-  const providerId = normalized.slice(0, slashIndex).trim();
+  const providerId = normalizeQingShuServerProviderId(normalized.slice(0, slashIndex).trim());
   const modelId = normalized.slice(slashIndex + 1).trim();
   if (!providerId || !modelId) {
     return null;
@@ -51,7 +52,8 @@ export function resolveManagedSessionModelTarget(options: {
 }): ManagedSessionModelTarget {
   const fallbackTarget = parsePrimaryModelRef(options.fallbackPrimaryModel);
   const explicitModel = options.agentModel.trim();
-  const currentProviderId = options.currentProviderId?.trim() || '';
+  const currentProviderId =
+    normalizeQingShuServerProviderId(options.currentProviderId?.trim() || '');
 
   if (!explicitModel) {
     if (fallbackTarget) {

@@ -18,7 +18,7 @@ describe('buildAgentEntry', () => {
       description: '',
       systemPrompt: '',
       identity: '',
-      model: 'lobsterai-server/deepseek-v3.2',
+      model: 'qingshu-server/deepseek-v3.2',
       workingDirectory: '',
       icon: '',
       skillIds: [],
@@ -34,7 +34,7 @@ describe('buildAgentEntry', () => {
     expect(result).toMatchObject({
       id: 'main',
       default: true,
-      model: { primary: 'lobsterai-server/deepseek-v3.2' },
+      model: { primary: 'qingshu-server/deepseek-v3.2' },
     });
   });
 
@@ -273,10 +273,18 @@ describe('buildManagedAgentEntries', () => {
 
 describe('parsePrimaryModelRef', () => {
   test('能解析带 provider 的 primary model ref', () => {
-    expect(parsePrimaryModelRef('lobsterai-server/deepseek-v3.2')).toEqual({
-      providerId: 'lobsterai-server',
+    expect(parsePrimaryModelRef('qingshu-server/deepseek-v3.2')).toEqual({
+      providerId: 'qingshu-server',
       modelId: 'deepseek-v3.2',
-      primaryModel: 'lobsterai-server/deepseek-v3.2',
+      primaryModel: 'qingshu-server/deepseek-v3.2',
+    });
+  });
+
+  test('旧 lobsterai-server provider 会归一化到 qingshu-server', () => {
+    expect(parsePrimaryModelRef('lobsterai-server/deepseek-v3.2')).toEqual({
+      providerId: 'qingshu-server',
+      modelId: 'deepseek-v3.2',
+      primaryModel: 'qingshu-server/deepseek-v3.2',
     });
   });
 
@@ -287,26 +295,26 @@ describe('parsePrimaryModelRef', () => {
 
 describe('resolveManagedSessionModelTarget', () => {
   const availableProviders = {
-    'lobsterai-server': { models: [{ id: 'qwen3.5-plus' }, { id: 'deepseek-v3.2' }] },
+    'qingshu-server': { models: [{ id: 'qwen3.5-plus' }, { id: 'deepseek-v3.2' }] },
     minimax: { models: [{ id: 'MiniMax-M2.7' }] },
   };
 
   test('当 agent model 为空时使用 fallback target', () => {
     expect(resolveManagedSessionModelTarget({
       agentModel: '',
-      fallbackPrimaryModel: 'lobsterai-server/qwen3.5-plus',
+      fallbackPrimaryModel: 'qingshu-server/qwen3.5-plus',
       availableProviders,
     })).toEqual({
-      providerId: 'lobsterai-server',
+      providerId: 'qingshu-server',
       modelId: 'qwen3.5-plus',
-      primaryModel: 'lobsterai-server/qwen3.5-plus',
+      primaryModel: 'qingshu-server/qwen3.5-plus',
     });
   });
 
   test('保留显式 provider-qualified model', () => {
     expect(resolveManagedSessionModelTarget({
       agentModel: 'minimax/MiniMax-M2.7',
-      fallbackPrimaryModel: 'lobsterai-server/qwen3.5-plus',
+      fallbackPrimaryModel: 'qingshu-server/qwen3.5-plus',
       availableProviders,
     })).toEqual({
       providerId: 'minimax',
@@ -318,25 +326,25 @@ describe('resolveManagedSessionModelTarget', () => {
   test('能根据 provider catalog 解析裸 model id', () => {
     expect(resolveManagedSessionModelTarget({
       agentModel: 'deepseek-v3.2',
-      fallbackPrimaryModel: 'lobsterai-server/qwen3.5-plus',
+      fallbackPrimaryModel: 'qingshu-server/qwen3.5-plus',
       availableProviders,
     })).toEqual({
-      providerId: 'lobsterai-server',
+      providerId: 'qingshu-server',
       modelId: 'deepseek-v3.2',
-      primaryModel: 'lobsterai-server/deepseek-v3.2',
+      primaryModel: 'qingshu-server/deepseek-v3.2',
     });
   });
 
   test('裸 model 无法唯一解析时回退到当前 provider', () => {
     expect(resolveManagedSessionModelTarget({
       agentModel: 'unknown-model',
-      fallbackPrimaryModel: 'lobsterai-server/qwen3.5-plus',
+      fallbackPrimaryModel: 'qingshu-server/qwen3.5-plus',
       availableProviders,
-      currentProviderId: 'lobsterai-server',
+      currentProviderId: 'qingshu-server',
     })).toEqual({
-      providerId: 'lobsterai-server',
+      providerId: 'qingshu-server',
       modelId: 'unknown-model',
-      primaryModel: 'lobsterai-server/unknown-model',
+      primaryModel: 'qingshu-server/unknown-model',
     });
   });
 });
@@ -346,12 +354,12 @@ describe('resolveQualifiedAgentModelRef', () => {
     expect(resolveQualifiedAgentModelRef({
       agentModel: 'deepseek-v3.2',
       availableProviders: {
-        'lobsterai-server': { models: [{ id: 'deepseek-v3.2' }] },
+        'qingshu-server': { models: [{ id: 'deepseek-v3.2' }] },
         minimax: { models: [{ id: 'MiniMax-M2.7' }] },
       },
     })).toEqual({
       status: 'qualified',
-      primaryModel: 'lobsterai-server/deepseek-v3.2',
+      primaryModel: 'qingshu-server/deepseek-v3.2',
     });
   });
 
@@ -360,12 +368,12 @@ describe('resolveQualifiedAgentModelRef', () => {
       agentModel: 'deepseek-v3.2',
       availableProviders: {
         anthropic: { models: [{ id: 'deepseek-v3.2' }] },
-        'lobsterai-server': { models: [{ id: 'deepseek-v3.2' }] },
+        'qingshu-server': { models: [{ id: 'deepseek-v3.2' }] },
       },
     })).toEqual({
       status: 'ambiguous',
       modelId: 'deepseek-v3.2',
-      providerIds: ['anthropic', 'lobsterai-server'],
+      providerIds: ['anthropic', 'qingshu-server'],
     });
   });
 

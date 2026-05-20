@@ -121,6 +121,103 @@ describe('openclawChannelSessionSync', () => {
     expect(agentId).toBe('nim-agent');
   });
 
+  test('uses OpenClaw routed agent for Feishu group keys without account id', () => {
+    const createSessionMapping = vi.fn();
+    const createSession = vi.fn((
+      title: string,
+      cwd: string,
+      systemPrompt: string,
+      executionMode: 'local',
+      activeSkillIds: string[],
+      agentId: string,
+    ) => makeCoworkSession('cowork-feishu-group', { title, cwd, systemPrompt, executionMode, activeSkillIds, agentId }));
+    const sync = new OpenClawChannelSessionSync({
+      coworkStore: {
+        getSession: () => null,
+        createSession,
+      },
+      imStore: {
+        getIMSettings: () => ({
+          skillsEnabled: true,
+          platformAgentBindings: {
+            'feishu:afc83707-a3ea-40a5-ba71-fbb72a817002': 'qingshu-managed:qingshu-presales-analysis',
+          },
+        }),
+        getSessionMapping: () => null,
+        updateSessionLastActive: () => {},
+        deleteSessionMapping: () => {},
+        createSessionMapping,
+      },
+      getDefaultCwd: (agentId?: string) => `/repo/${agentId || 'main'}`,
+    } as never);
+
+    const sessionKey = 'agent:qingshu-managed-qingshu-presales-analysis:feishu:group:oc_6f3f554b197f45f82fe2f2526387f80e';
+
+    expect(sync.isCurrentBindingKey(sessionKey)).toBe(true);
+    expect(sync.resolveOrCreateSession(sessionKey)).toBe('cowork-feishu-group');
+    expect(createSession).toHaveBeenCalledWith(
+      expect.any(String),
+      '/repo/qingshu-managed:qingshu-presales-analysis',
+      '',
+      'local',
+      [],
+      'qingshu-managed:qingshu-presales-analysis',
+    );
+    expect(createSessionMapping).toHaveBeenCalledWith(
+      'group:oc_6f3f554b197f45f82fe2f2526387f80e',
+      'feishu',
+      'cowork-feishu-group',
+      'qingshu-managed:qingshu-presales-analysis',
+      sessionKey,
+    );
+  });
+
+  test('moves stale Feishu group mapping from main to the routed bound agent', () => {
+    const updateSessionMappingTarget = vi.fn();
+    const sync = new OpenClawChannelSessionSync({
+      coworkStore: {
+        getSession: (sessionId: string) => makeCoworkSession(sessionId, { agentId: 'main' }),
+        createSession: () => makeCoworkSession('cowork-feishu-group-new', {
+          agentId: 'qingshu-managed:qingshu-presales-analysis',
+        }),
+      },
+      imStore: {
+        getIMSettings: () => ({
+          skillsEnabled: true,
+          platformAgentBindings: {
+            'feishu:afc83707-a3ea-40a5-ba71-fbb72a817002': 'qingshu-managed:qingshu-presales-analysis',
+          },
+        }),
+        getSessionMapping: () => ({
+          imConversationId: 'group:oc_6f3f554b197f45f82fe2f2526387f80e',
+          platform: 'feishu',
+          coworkSessionId: 'cowork-main-group',
+          agentId: 'main',
+          openClawSessionKey: 'agent:main:feishu:group:oc_6f3f554b197f45f82fe2f2526387f80e',
+          createdAt: 1,
+          lastActiveAt: 1,
+        }),
+        updateSessionMappingTarget,
+        updateSessionLastActive: () => {},
+        deleteSessionMapping: () => {},
+        createSessionMapping: () => {},
+      },
+      getDefaultCwd: (agentId?: string) => `/repo/${agentId || 'main'}`,
+    } as never);
+
+    const sessionKey = 'agent:qingshu-managed-qingshu-presales-analysis:feishu:group:oc_6f3f554b197f45f82fe2f2526387f80e';
+
+    expect(sync.resolveOrCreateSession(sessionKey)).toBe('cowork-feishu-group-new');
+    expect(updateSessionMappingTarget).toHaveBeenCalledWith(
+      'group:oc_6f3f554b197f45f82fe2f2526387f80e',
+      'feishu',
+      'cowork-feishu-group-new',
+      'qingshu-managed:qingshu-presales-analysis',
+      sessionKey,
+    );
+    expect(sync.isAgentChangedSession('cowork-feishu-group-new')).toBe(true);
+  });
+
   test('falls back to platform binding when instance binding is missing', () => {
     const agentId = resolveAgentBinding(
       {
@@ -339,7 +436,17 @@ function createSync(): OpenClawChannelSessionSync {
   } as never);
 }
 
-function makeCoworkSession(id: string) {
+function makeCoworkSession(
+  id: string,
+  overrides: Partial<ReturnType<typeof makeCoworkSessionBase>> = {},
+) {
+  return {
+    ...makeCoworkSessionBase(id),
+    ...overrides,
+  };
+}
+
+function makeCoworkSessionBase(id: string) {
   return {
     id,
     title: '[Feishu] ou_123',

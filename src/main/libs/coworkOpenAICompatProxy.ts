@@ -10,12 +10,16 @@ import {
   type OpenAIStreamChunk,
   openAIToAnthropic,
 } from './coworkFormatTransform';
+import { isQingShuServerProvider } from '../../shared/providers';
 
 export type OpenAICompatUpstreamConfig = {
   baseURL: string;
   apiKey?: string;
   model: string;
   provider?: string;
+  clientUserId?: string | null;
+  deviceId?: string | null;
+  agentId?: string | null;
 };
 
 export type OpenAICompatProxyTarget = 'local' | 'sandbox';
@@ -136,6 +140,7 @@ let lastProxyError: string | null = null;
 let tokenRefresher: (() => Promise<string | null>) | null = null;
 const tokenRefreshers = new Map<string, () => Promise<string | null>>();
 let currentCoworkSessionId: string | null = null;
+let currentCoworkAgentId: string | null = null;
 const toolCallExtraContentById = new Map<string, unknown>();
 
 const ALLOWED_PROXY_HOSTS = new Set([
@@ -169,6 +174,10 @@ export function isAllowedProxyHost(req: http.IncomingMessage): boolean {
 
 export function setCoworkProxySessionId(sessionId: string | null): void {
   currentCoworkSessionId = sessionId;
+}
+
+export function setCoworkProxyAgentId(agentId: string | null): void {
+  currentCoworkAgentId = agentId;
 }
 const MAX_TOOL_CALL_EXTRA_CONTENT_CACHE = 1024;
 
@@ -2426,11 +2435,22 @@ async function handleRequest(
   const upstreamAPIType = resolveUpstreamAPIType(upstreamConfig.provider);
   const openAIRequest = anthropicToOpenAI(parsedRequestBody);
 
-  // Inject session_id and user_message for lobsterai-server logging only.
+  // Inject QingShu audit metadata for QingShu server logging only.
   // Strict providers (e.g. Gemini) reject unknown payload fields.
-  if (upstreamConfig.provider === 'lobsterai-server') {
+  if (isQingShuServerProvider(upstreamConfig.provider)) {
+    openAIRequest.request_id = crypto.randomUUID();
     if (currentCoworkSessionId) {
       openAIRequest.session_id = currentCoworkSessionId;
+    }
+    if (upstreamConfig.clientUserId) {
+      openAIRequest.client_user_id = upstreamConfig.clientUserId;
+    }
+    if (upstreamConfig.deviceId) {
+      openAIRequest.device_id = upstreamConfig.deviceId;
+    }
+    const effectiveAgentId = upstreamConfig.agentId || currentCoworkAgentId;
+    if (effectiveAgentId) {
+      openAIRequest.agent_id = effectiveAgentId;
     }
     const extractedUserMessage = extractLastUserMessageText(parsedRequestBody);
     if (extractedUserMessage) {

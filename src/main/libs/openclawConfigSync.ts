@@ -85,6 +85,46 @@ function deriveNimAccountConfigKey(
   return deriveNimAccountId(instance);
 }
 
+function normalizeAllowListEntries(entries: string[] | undefined): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const raw of entries ?? []) {
+    const entry = String(raw).trim();
+    if (!entry || seen.has(entry)) continue;
+    seen.add(entry);
+    normalized.push(entry);
+  }
+  return normalized;
+}
+
+function buildFeishuGroupRuntimeConfig(instance: FeishuInstanceConfig): {
+  groupAllowFrom: string[];
+  groups: Record<string, unknown>;
+} {
+  const configuredGroups = instance.groups && Object.keys(instance.groups).length > 0
+    ? instance.groups
+    : { '*': { requireMention: true } };
+  const groups: Record<string, unknown> = { ...configuredGroups };
+  const senderAllowFrom: string[] = [];
+
+  for (const entry of normalizeAllowListEntries(instance.groupAllowFrom)) {
+    if (entry === '*') {
+      if (instance.groupPolicy === 'open') senderAllowFrom.push(entry);
+      continue;
+    }
+    if (entry.startsWith('oc_')) {
+      groups[entry] = groups[entry] ?? { requireMention: true };
+      continue;
+    }
+    senderAllowFrom.push(entry);
+  }
+
+  return {
+    groupAllowFrom: senderAllowFrom,
+    groups,
+  };
+}
+
 function shouldUseOpenAIResponsesApi(providerName?: string, baseURL?: string): boolean {
   if (providerName !== ProviderName.OpenAI) return false;
   if (!baseURL) return true;
@@ -578,8 +618,8 @@ const resolveDeepSeekModelReasoning = (modelId: string): boolean | undefined => 
 };
 
 const PROVIDER_REGISTRY: Record<string, ProviderDescriptor> = {
-  [ProviderName.LobsteraiServer]: {
-    providerId: OpenClawProviderId.LobsteraiServer,
+  [ProviderName.QingShuServer]: {
+    providerId: OpenClawProviderId.QingShuServer,
     resolveApi: () => OpenClawApiConst.OpenAICompletions as OpenClawProviderApi,
     normalizeBaseUrl: (url) => {
       const proxyPort = getOpenClawTokenProxyPort();
@@ -1230,7 +1270,7 @@ export class OpenClawConfigSync {
     const proxyPort = getOpenClawTokenProxyPort();
     if (proxyPort) {
       const serverModels = getAllServerModelMetadata();
-      const providerId = OpenClawProviderId.LobsteraiServer;
+      const providerId = OpenClawProviderId.QingShuServer;
 
       if (serverModels.length > 0 || !allProvidersMap[providerId]) {
         const firstServerModelId = serverModels[0]?.modelId || modelId;
@@ -1239,18 +1279,18 @@ export class OpenClawConfigSync {
           baseURL: `http://127.0.0.1:${proxyPort}/v1`,
           modelId: firstServerModelId,
           apiType: 'openai',
-          providerName: ProviderName.LobsteraiServer,
+          providerName: ProviderName.QingShuServer,
           supportsImage: serverModels[0]?.supportsImage,
         });
-        const lobsteraiProviderConfig =
+        const qingShuProviderConfig =
           allProvidersMap[providerId] ?? {
             ...firstServerSel.providerConfig,
             models: [] as typeof firstServerSel.providerConfig.models,
           };
-        allProvidersMap[providerId] = lobsteraiProviderConfig;
+        allProvidersMap[providerId] = qingShuProviderConfig;
 
         if (serverModels.length === 0) {
-          upsertProviderModel(lobsteraiProviderConfig, firstServerSel.providerConfig.models[0]);
+          upsertProviderModel(qingShuProviderConfig, firstServerSel.providerConfig.models[0]);
         } else {
           for (const sm of serverModels) {
             const serverSel = buildProviderSelection({
@@ -1258,11 +1298,11 @@ export class OpenClawConfigSync {
               baseURL: `http://127.0.0.1:${proxyPort}/v1`,
               modelId: sm.modelId,
               apiType: 'openai',
-              providerName: ProviderName.LobsteraiServer,
+              providerName: ProviderName.QingShuServer,
               supportsImage: sm.supportsImage,
               modelName: sm.modelId,
             });
-            upsertProviderModel(lobsteraiProviderConfig, serverSel.providerConfig.models[0]);
+            upsertProviderModel(qingShuProviderConfig, serverSel.providerConfig.models[0]);
           }
         }
       }
@@ -1705,6 +1745,7 @@ export class OpenClawConfigSync {
       for (let index = 0; index < enabledFeishuInstances.length; index += 1) {
         const instance = enabledFeishuInstances[index];
         const secretEnvVar = index === 0 ? 'LOBSTER_FEISHU_APP_SECRET' : `LOBSTER_FEISHU_APP_SECRET_${index}`;
+        const groupRuntimeConfig = buildFeishuGroupRuntimeConfig(instance);
         accounts[instance.instanceId.slice(0, 8)] = {
           enabled: true,
           name: instance.instanceName,
@@ -1718,14 +1759,8 @@ export class OpenClawConfigSync {
             return ids;
           })(),
           groupPolicy: instance.groupPolicy || 'allowlist',
-          groupAllowFrom: (() => {
-            const ids = instance.groupAllowFrom?.length ? [...instance.groupAllowFrom] : [];
-            if (instance.groupPolicy === 'open' && !ids.includes('*')) ids.push('*');
-            return ids;
-          })(),
-          groups: instance.groups && Object.keys(instance.groups).length > 0
-            ? instance.groups
-            : { '*': { requireMention: true } },
+          groupAllowFrom: groupRuntimeConfig.groupAllowFrom,
+          groups: groupRuntimeConfig.groups,
           historyLimit: instance.historyLimit || 50,
           mediaMaxMb: instance.mediaMaxMb || 30,
           ...mapFeishuReplyMode(instance.replyMode),

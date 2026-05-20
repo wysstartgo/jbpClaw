@@ -6,6 +6,8 @@ export {
   ApiFormat,
   AuthType,
   ProviderRegistry,
+  isQingShuServerProvider,
+  normalizeQingShuServerProviderId,
 } from './constants';
 export { resolveCodingPlanBaseUrl } from './codingPlan';
 export type { ProviderConfig, ProviderModelConfig } from './types';

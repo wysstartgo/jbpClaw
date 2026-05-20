@@ -40,14 +40,29 @@ export const ProviderName = {
   Ollama: 'ollama',
   LmStudio: 'lm-studio',
   Custom: 'custom',
+  QingShuServer: 'qingshu-server',
   LobsteraiServer: 'lobsterai-server',
   Copilot: 'github-copilot',
 } as const;
 export type ProviderName = typeof ProviderName[keyof typeof ProviderName];
 
+export const LegacyProviderName = {
+  LobsteraiServer: 'lobsterai-server',
+} as const;
+
+export const isQingShuServerProvider = (providerId?: string | null): boolean => {
+  const normalized = providerId?.trim();
+  return normalized === ProviderName.QingShuServer || normalized === LegacyProviderName.LobsteraiServer;
+};
+
+export const normalizeQingShuServerProviderId = (providerId?: string | null): string => (
+  isQingShuServerProvider(providerId) ? ProviderName.QingShuServer : (providerId?.trim() || '')
+);
+
 // ─── OpenClaw Provider ID ───────────────────────────────────────────────
 // OpenClaw gateway provider identifiers. May differ from ProviderName.
 export const OpenClawProviderId = {
+  QingShuServer: 'qingshu-server',
   LobsteraiServer: 'lobsterai-server',
   KimiCoding: 'kimi-coding',
   Moonshot: 'moonshot',

@@ -28,12 +28,23 @@ describe('openclawModelRef', () => {
     expect(toOpenClawModelRef(models[0])).toBe('openai-codex/gpt-5.3-codex');
   });
 
-  test('keeps server package models under lobsterai-server', () => {
+  test('keeps server package models under qingshu-server', () => {
     expect(toOpenClawModelRef({
       id: 'qwen3.5-plus',
       providerKey: ProviderName.Qwen,
       isServerModel: true,
-    })).toBe('lobsterai-server/qwen3.5-plus');
+    })).toBe('qingshu-server/qwen3.5-plus');
+  });
+
+  test('resolves legacy lobsterai-server refs to server package models', () => {
+    const serverModel: Model = {
+      id: 'qwen3.5-plus',
+      name: 'Qwen 3.5 Plus',
+      providerKey: ProviderName.QingShuServer,
+      isServerModel: true,
+    };
+
+    expect(resolveOpenClawModelRef('lobsterai-server/qwen3.5-plus', [serverModel])).toBe(serverModel);
   });
 
   test('uses lobster fallback when provider key is missing', () => {

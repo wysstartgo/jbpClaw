@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron';
 
 import { parseChannelSessionKey } from '../main/libs/openclawChannelSessionSync';
 import { PlatformRegistry } from '../shared/platform';
+import { normalizeQingShuServerProviderId } from '../shared/providers';
 import type {
   DeliveryMode as DeliveryModeType,
   GatewayStatus as GatewayStatusType,
@@ -265,8 +266,23 @@ function toGatewayPayload(payload: ScheduledTaskPayload): GatewayPayload {
     ...(typeof payload.timeoutSeconds === 'number'
       ? { timeoutSeconds: payload.timeoutSeconds }
       : {}),
-    ...(payload.model ? { model: payload.model } : {}),
+    ...(normalizeScheduledTaskModelRef(payload.model)
+      ? { model: normalizeScheduledTaskModelRef(payload.model) }
+      : {}),
   };
+}
+
+function normalizeScheduledTaskModelRef(model?: string): string | undefined {
+  const normalized = model?.trim();
+  if (!normalized) {
+    return undefined;
+  }
+  const slashIndex = normalized.indexOf('/');
+  if (slashIndex <= 0 || slashIndex === normalized.length - 1) {
+    return normalized;
+  }
+  const providerId = normalizeQingShuServerProviderId(normalized.slice(0, slashIndex));
+  return `${providerId}/${normalized.slice(slashIndex + 1)}`;
 }
 
 function toGatewayDelivery(delivery?: ScheduledTaskDelivery): GatewayDelivery | undefined {
@@ -371,7 +387,9 @@ export function mapGatewayJob(job: GatewayJob): ScheduledTask {
           ...(typeof job.payload.timeoutSeconds === 'number'
             ? { timeoutSeconds: job.payload.timeoutSeconds }
             : {}),
-          ...(job.payload.model ? { model: job.payload.model } : {}),
+          ...(normalizeScheduledTaskModelRef(job.payload.model)
+            ? { model: normalizeScheduledTaskModelRef(job.payload.model) }
+            : {}),
         },
     delivery: {
       mode: delivery.mode,

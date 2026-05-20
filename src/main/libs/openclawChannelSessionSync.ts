@@ -185,6 +185,35 @@ export function extractAccountIdFromKey(sessionKey: string): string | null {
   return null;
 }
 
+function toOpenClawAgentKey(agentId: string): string {
+  return agentId.trim().replace(/:/g, '-');
+}
+
+function isSameOpenClawAgentId(openClawAgentId: string | null, localAgentId: string | null | undefined): boolean {
+  const keyAgentId = openClawAgentId?.trim();
+  const candidate = localAgentId?.trim();
+  if (!keyAgentId || !candidate) return false;
+  return keyAgentId === candidate || keyAgentId === toOpenClawAgentKey(candidate);
+}
+
+function resolveLocalAgentIdFromOpenClawKey(
+  openClawAgentId: string | null,
+  bindings: Record<string, string> | undefined,
+): string | null {
+  const keyAgentId = openClawAgentId?.trim();
+  if (!keyAgentId || keyAgentId === DEFAULT_MANAGED_AGENT_ID || !bindings) {
+    return null;
+  }
+
+  for (const agentId of Object.values(bindings)) {
+    if (isSameOpenClawAgentId(keyAgentId, agentId)) {
+      return agentId;
+    }
+  }
+
+  return null;
+}
+
 const MULTI_INSTANCE_PLATFORMS = new Set<Platform>([
   'dingtalk',
   'discord',
@@ -215,6 +244,22 @@ export function resolveAgentBinding(
   }
 
   return bindings[platform] || 'main';
+}
+
+function resolveAgentIdForChannelSession(
+  sessionKey: string,
+  platform: Platform,
+  bindings: Record<string, string> | undefined,
+): string {
+  const accountId = extractAccountIdFromKey(sessionKey);
+  const bindingAgentId = resolveAgentBinding(bindings, platform, accountId);
+  if (accountId || bindingAgentId !== DEFAULT_MANAGED_AGENT_ID) {
+    return bindingAgentId;
+  }
+
+  const keyAgentId = extractAgentIdFromKey(sessionKey);
+  const localAgentId = resolveLocalAgentIdFromOpenClawKey(keyAgentId, bindings);
+  return localAgentId ?? keyAgentId ?? DEFAULT_MANAGED_AGENT_ID;
 }
 
 /** Match OpenClaw main agent session keys like "agent:main:main" or "agent:secondary:main". */
@@ -344,7 +389,13 @@ export class OpenClawChannelSessionSync {
     const imSettings = this.imStore.getIMSettings();
     const accountId = extractAccountIdFromKey(sessionKey);
     const currentAgentId = resolveAgentBinding(imSettings.platformAgentBindings, parsed.platform, accountId);
-    return keyAgentId === currentAgentId;
+    if (isSameOpenClawAgentId(keyAgentId, currentAgentId)) {
+      return true;
+    }
+    if (!accountId && currentAgentId === DEFAULT_MANAGED_AGENT_ID) {
+      return resolveLocalAgentIdFromOpenClawKey(keyAgentId, imSettings.platformAgentBindings) !== null;
+    }
+    return false;
   }
 
   /**
@@ -397,8 +448,11 @@ export class OpenClawChannelSessionSync {
         // When platformAgentBindings changes, the mapping's agentId becomes stale.
         // Create a new session for the new agent and update the mapping.
         const imSettings = this.imStore.getIMSettings();
-        const accountId = extractAccountIdFromKey(sessionKey);
-        const currentAgentId = resolveAgentBinding(imSettings.platformAgentBindings, parsed.platform, accountId);
+        const currentAgentId = resolveAgentIdForChannelSession(
+          sessionKey,
+          parsed.platform,
+          imSettings.platformAgentBindings,
+        );
         if (existingMapping.agentId !== currentAgentId) {
           console.log('[ChannelSessionSync] agent binding changed:', existingMapping.agentId, '→', currentAgentId, '— creating new session');
           const titlePrefix = getChannelTitlePrefix(parsed.platform);
@@ -432,8 +486,11 @@ export class OpenClawChannelSessionSync {
     const title = `${titlePrefix} ${buildChannelDisplayName(parsed.conversationId)}`;
     // Look up the per-platform agent binding so the session is filed under the correct agent.
     const imSettings = this.imStore.getIMSettings();
-    const accountId = extractAccountIdFromKey(sessionKey);
-    const agentId = resolveAgentBinding(imSettings.platformAgentBindings, parsed.platform, accountId);
+    const agentId = resolveAgentIdForChannelSession(
+      sessionKey,
+      parsed.platform,
+      imSettings.platformAgentBindings,
+    );
     const cwd = this.getDefaultCwd(agentId);
     console.log('[ChannelSessionSync] creating new cowork session: title=', title, 'cwd=', cwd, 'agentId=', agentId);
 

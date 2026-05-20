@@ -30,7 +30,7 @@ import { ArtifactPreviewIpc } from '../shared/artifactPreview/constants';
 import { CoworkIpcChannel } from '../shared/cowork/constants';
 import { PetStatus } from '../shared/pet/constants';
 import { type Platform as SharedPlatform,PlatformRegistry } from '../shared/platform';
-import { OpenClawProviderId, ProviderName } from '../shared/providers';
+import { OpenClawProviderId, ProviderName, isQingShuServerProvider } from '../shared/providers';
 import {
   getQingShuManagedCapabilityErrorCode,
   QingShuManagedAccessState,
@@ -101,7 +101,7 @@ import { mergeAgentInstructionPrompt, mergeAgentSkillIds } from './libs/agentEng
 import { AppUpdateCoordinator } from './libs/appUpdateCoordinator';
 import { downloadUpdate, installUpdate } from './libs/appUpdateInstaller';
 import { AssistantSpeechGuard } from './libs/assistantSpeechGuard';
-import { clearServerModelMetadata,getAllServerModelMetadata, getCurrentApiConfig, resolveCurrentApiConfig, setAuthTokensGetter, setServerBaseUrlGetter, setStoreGetter, updateServerModelMetadata } from './libs/claudeSettings';
+import { clearServerModelMetadata,getAllServerModelMetadata, getCurrentApiConfig, resolveCurrentApiConfig, setAuthTokensGetter, setQingShuInvocationContextGetter, setServerBaseUrlGetter, setStoreGetter, updateServerModelMetadata } from './libs/claudeSettings';
 import {
   clearCopilotTokenState,
   initCopilotTokenManager,
@@ -215,6 +215,7 @@ const PowerSaveBlockerType = {
 } as const;
 const RENAMED_PROVIDER_IDS: Record<string, string> = {
   'github-copilot': 'lobsterai-copilot',
+  'lobsterai-server': 'qingshu-server',
 };
 const MIME_EXTENSION_MAP: Record<string, string> = {
   'image/png': '.png',
@@ -1192,13 +1193,13 @@ const resolveSessionWorkingDirectory = (options: { cwd?: string; agentId?: strin
   return resolveAgentDefaultWorkingDirectory(options.agentId);
 };
 
-const isLobsteraiServerModelRef = (modelRef: string): boolean => {
+const isQingShuServerModelRef = (modelRef: string): boolean => {
   const normalized = modelRef.trim();
   if (!normalized) return false;
 
   const parsed = parsePrimaryModelRef(normalized);
   if (parsed) {
-    return parsed.providerId === ProviderName.LobsteraiServer;
+    return isQingShuServerProvider(parsed.providerId);
   }
 
   return getAllServerModelMetadata().some((model) => model.modelId === normalized);
@@ -1208,18 +1209,18 @@ const shouldRefreshServerQuotaForSession = (sessionId: string): boolean => {
   const sessionRecord = getCoworkStore().getSession(sessionId);
   const sessionModelRef = sessionRecord?.modelOverride?.trim();
   if (sessionModelRef) {
-    return isLobsteraiServerModelRef(sessionModelRef);
+    return isQingShuServerModelRef(sessionModelRef);
   }
 
   const agentModelRef = sessionRecord?.agentId
     ? getAgentManager().getAgent(sessionRecord.agentId)?.model?.trim()
     : '';
   if (agentModelRef) {
-    return isLobsteraiServerModelRef(agentModelRef);
+    return isQingShuServerModelRef(agentModelRef);
   }
 
   const apiConfig = resolveCurrentApiConfig();
-  return apiConfig.providerMetadata?.providerName === ProviderName.LobsteraiServer;
+  return isQingShuServerProvider(apiConfig.providerMetadata?.providerName);
 };
 
 const listWorkspaceSkillInstalls = (): Array<{
@@ -3270,6 +3271,28 @@ if (!gotTheLock) {
 
   const getAuthTokens = (): { accessToken: string; refreshToken: string } | null => {
     return getStore().get<{ accessToken: string; refreshToken: string }>('auth_tokens') || null;
+  };
+
+  const getOrCreateInstallationUuid = (): string => {
+    const existing = getStore().get<string>('installation_uuid');
+    if (typeof existing === 'string' && existing.trim()) {
+      return existing.trim();
+    }
+    const next = crypto.randomUUID();
+    getStore().set('installation_uuid', next);
+    return next;
+  };
+
+  const resolveAuthUserIdForInvocation = (): string | null => {
+    try {
+      const tokens = getAuthTokens();
+      if (!tokens?.accessToken) return null;
+      const payload = JSON.parse(Buffer.from(tokens.accessToken.split('.')[1], 'base64').toString()) as Record<string, unknown>;
+      const userId = payload.token_user_id ?? payload.userId ?? payload.user_id ?? payload.sub;
+      return userId == null ? null : String(userId).trim() || null;
+    } catch {
+      return null;
+    }
   };
 
   const clearAuthTokens = () => {
@@ -7381,7 +7404,7 @@ end tell'`, { timeout: 5000 });
     }
     // Inject store getter into claudeSettings
     setStoreGetter(() => store);
-    // Inject auth getters for lobsterai-server provider routing
+    // Inject auth getters for QingShu server provider routing
     // The getter proactively triggers a background token refresh when the
     // accessToken is within 5 minutes of expiry, so that the SDK always
     // gets a fresh token without blocking.
@@ -7432,6 +7455,10 @@ end tell'`, { timeout: 5000 });
       return tokens;
     });
     setServerBaseUrlGetter(() => getCurrentAuthApiBaseUrl() || getServerApiBaseUrl());
+    setQingShuInvocationContextGetter(() => ({
+      clientUserId: resolveAuthUserIdForInvocation(),
+      deviceId: getOrCreateInstallationUuid(),
+    }));
     getQingShuExtensionHost();
     getQingShuGovernanceService();
 
@@ -7457,6 +7484,7 @@ end tell'`, { timeout: 5000 });
     // on 401/403 with a fresh accessToken instead of failing immediately.
     // Delegates to the shared refreshOnce() to avoid concurrent refresh races.
     setProxyTokenRefresher(() => refreshOnce('proxy'));
+    registerProxyTokenRefresher(OpenClawProviderId.QingShuServer, () => refreshOnce('proxy'));
     registerProxyTokenRefresher(OpenClawProviderId.LobsteraiServer, () => refreshOnce('proxy'));
     registerProxyTokenRefresher(ProviderName.Copilot, async () => {
       const state = await refreshCopilotTokenNow();
@@ -7468,7 +7496,7 @@ end tell'`, { timeout: 5000 });
     });
 
     // Start the lightweight token proxy before OpenClaw config sync so that
-    // lobsterai-server provider can use the proxy URL in its config.
+    // QingShu server provider can use the proxy URL in its config.
     try {
       await startOpenClawTokenProxy({
         getAuthTokens,

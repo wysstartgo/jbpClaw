@@ -1,4 +1,9 @@
-import { OpenClawProviderId, ProviderName, ProviderRegistry } from '../../shared/providers/constants';
+import {
+  OpenClawProviderId,
+  ProviderName,
+  ProviderRegistry,
+  isQingShuServerProvider,
+} from '../../shared/providers/constants';
 
 import type { Model } from '../store/slices/modelSlice';
 
@@ -6,7 +11,7 @@ type ModelRefInput = Pick<Model, 'id' | 'providerKey' | 'openClawProviderId' | '
 
 function resolveModelOpenClawProviderId(model: ModelRefInput): string {
   if (model.isServerModel) {
-    return OpenClawProviderId.LobsteraiServer;
+    return OpenClawProviderId.QingShuServer;
   }
 
   return model.openClawProviderId || ProviderRegistry.getOpenClawProviderId(model.providerKey ?? '');
@@ -42,6 +47,10 @@ export function resolveOpenClawModelRef<T extends ModelRefInput>(
     const slashIndex = normalizedRef.indexOf('/');
     const providerId = normalizedRef.slice(0, slashIndex);
     const modelId = normalizedRef.slice(slashIndex + 1);
+
+    if (isQingShuServerProvider(providerId)) {
+      return availableModels.find((model) => model.id === modelId && model.isServerModel) ?? null;
+    }
 
     if (providerId === OpenClawProviderId.OpenAI) {
       const codexMatch = availableModels.find((model) => (

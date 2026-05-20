@@ -26,6 +26,139 @@
 - `SOLID`：按模块边界说明影响范围，避免把 UI、runtime、配置投影混在一起。
 - `DRY`：已有机制文档只做链接引用，不在 changelog 里重复长篇展开。
 
+## 2026-05-20 IM 多实例机制文档补充：主 Agent 调度边界
+
+### 变更背景
+
+需要明确最近几轮 IM 绑定讨论的边界：如果把 IM 通道绑定到 `main` Agent，`main` 是否可以自动调配其他 Agent 工作。
+
+### 结论
+
+当前实现中，IM 绑定是入口路由能力，不是跨 Agent 调度能力。
+
+- 绑定到 `main`：外部 IM 消息进入 `main` Agent 的 session。
+- 绑定到其他 Agent：外部 IM 消息进入对应 Agent 的 session。
+- `main` 不会自动把任务派发给其他 Agent。
+- 当前 Agent prompt 也明确约束：除非用户显式要求，不要一开始就去找其他 Agent 代办。
+
+### 改动内容
+
+- 在 [IM多实例.md](/Users/wuyongsheng/workspace/projects/QingShuClaw/IM多实例.md) 中新增“主 Agent 绑定 IM 后的调度边界”章节。
+- 明确当前可用模式：
+  - 稳妥版：业务 IM 实例直接绑定业务 Agent，`main` 作为默认兜底。
+  - 总控版：后续单独建设“主 Agent 调度器”，需要设计意图识别、目标 Agent session、结果回传和权限边界。
+- 在验收建议中补充：绑定到 `main` 时只验证进入 `main` 会话，不预期自动派发。
+
+### 影响范围
+
+仅文档更新，不改变运行时代码。
+
+### 后续注意事项
+
+如果后续要做“主 Agent 调度器”，应作为独立专项实现，不能把 `platformAgentBindings` 直接扩展成隐式派单逻辑，否则容易破坏 IM 会话归属、青数 managed Agent 治理链和工具权限边界。
+
+## 2026-05-20 飞书群 @ 消息 Agent 归属修复
+
+### 变更背景
+
+飞书 bot 绑定到某个 Agent 后，私聊消息会进入该 Agent 的 session 列表；但在飞书群内 `@bot` 后，消息会出现在 `main` Agent 的 session 列表中。
+
+### 根因
+
+OpenClaw runtime 已经把群消息路由到了绑定 Agent，群聊 sessionKey 中也带有已路由出的 Agent：
+
+```text
+agent:qingshu-managed-qingshu-presales-analysis:feishu:group:oc_xxx
+```
+
+但本地 `openclawChannelSessionSync` 旧逻辑主要依赖 accountId 反查 `platformAgentBindings`。私聊 key 带 accountId，可以匹配实例绑定；群聊 key 不带 accountId，只能走平台级兜底，最终落到 `main`。
+
+同时青数 managed Agent 的本地 ID 含冒号，例如 `qingshu-managed:qingshu-presales-analysis`；OpenClaw key 中可能使用安全化形式 `qingshu-managed-qingshu-presales-analysis`。旧逻辑没有做这层等价匹配。
+
+### 改动内容
+
+- 在 [openclawChannelSessionSync.ts](/Users/wuyongsheng/workspace/projects/QingShuClaw/src/main/libs/openclawChannelSessionSync.ts) 中新增 OpenClaw agent key 与本地 Agent ID 的等价匹配。
+- `sessionKey` 带 accountId 时，继续优先按实例绑定反查，保持多实例行为不变。
+- `sessionKey` 不带 accountId 时，优先尊重 OpenClaw 已路由出的非 `main` Agent。
+- 已存在的 `main` mapping 收到新的绑定 Agent 群聊 key 时，会创建新 Agent session 并更新 mapping，避免后续群消息继续落到主 Agent。
+- 在 [openclawChannelSessionSync.test.ts](/Users/wuyongsheng/workspace/projects/QingShuClaw/src/main/libs/openclawChannelSessionSync.test.ts) 中新增飞书群聊无 accountId 的回归测试。
+- 在 [IM多实例.md](/Users/wuyongsheng/workspace/projects/QingShuClaw/IM多实例.md) 中补充原因、修复规则和验收项。
+
+### 与 main 分支对齐结论
+
+已核对 `origin/main`：`main` 已有多实例 accountId 匹配能力，但还没有覆盖“飞书群聊 key 不带 accountId，需要从 OpenClaw key agentId 反推本地 Agent”的场景。
+
+当前分支保留 `main` 的多实例匹配方式，并补齐该公共 bugfix。
+
+### 影响范围
+
+直接影响：
+
+- 飞书群聊 `@bot` 触发后的本地 session 归属。
+- OpenClaw channel session 同步到 QingShuClaw 本地列表的 Agent 映射。
+
+不应影响：
+
+- 飞书私聊多实例路由。
+- OpenClaw runtime 的实际消息处理。
+- 青数品牌、工作台、内置治理链。
+- 唤醒/TTS。
+
+### 验证结果
+
+- `npm test -- src/main/libs/openclawChannelSessionSync.test.ts src/main/libs/openclawConfigSync.runtime.test.ts`
+- `npx tsc --project electron-tsconfig.json --noEmit`
+
+## 2026-05-20 飞书群白名单 OpenClaw 语义适配
+
+### 变更背景
+
+飞书实例绑定 Agent 后，群策略设为 `open` 可以响应；但设为 `allowlist` 并填入正确群 `chat_id` 后，群内 `@bot` 不响应。
+
+### 根因
+
+当前 OpenClaw runtime 已将飞书群聊权限拆成两个语义：
+
+- `groups` 控制允许哪些群，key 是群 `chat_id`，通常形如 `oc_xxx`。
+- `groupAllowFrom` 控制允许哪些群成员触发，值是用户 `open_id`，通常形如 `ou_xxx`。
+
+青数 UI 仍沿用旧使用方式，把群 `chat_id` 填进 `groupAllowFrom`。在新版 OpenClaw 中，这会被当成发送人白名单，导致真实群成员无法匹配。
+
+### 改动内容
+
+- 在 [openclawConfigSync.ts](/Users/wuyongsheng/workspace/projects/QingShuClaw/src/main/libs/openclawConfigSync.ts) 中新增飞书群白名单投影兼容逻辑。
+- 投影到 OpenClaw 时：
+  - `oc_xxx` 自动写入 `channels.feishu.accounts.<accountId>.groups`。
+  - `ou_xxx` 保留在 `groupAllowFrom`。
+  - 重复项自动去重。
+  - 默认保留 `requireMention=true`。
+- 在 [openclawConfigSync.runtime.test.ts](/Users/wuyongsheng/workspace/projects/QingShuClaw/src/main/libs/openclawConfigSync.runtime.test.ts) 中新增回归测试，覆盖旧 UI 输入到新版 OpenClaw 配置的转换。
+- 在 [IM多实例.md](/Users/wuyongsheng/workspace/projects/QingShuClaw/IM多实例.md) 中补充飞书群白名单旧/新语义、main 对齐结论与验收建议。
+
+### 与 main 分支对齐结论
+
+已对最新 `FETCH_HEAD` 的 `main` 核对：`main` 当前仍把 `groupAllowFrom` 原样投影到 OpenClaw，尚未完成该 runtime 新语义适配。
+
+本次属于基于当前 vendored OpenClaw runtime 的公共 bugfix 先行修复。后续合入 main 时需要保留该兼容逻辑，直到 main 也完成同类适配。
+
+### 影响范围
+
+直接影响：
+
+- 飞书群聊 `allowlist` 策略。
+- 飞书多实例配置到 OpenClaw runtime 的投影。
+
+不应影响：
+
+- 飞书私聊。
+- Agent 绑定关系。
+- 青数品牌、工作台、内置治理链。
+- 唤醒/TTS。
+
+### 验证结果
+
+已新增定向测试，验证 `oc_xxx` 不再写入 OpenClaw `groupAllowFrom`，而是进入 `groups`。
+
 ## 2026-05-20 Agent IM 多实例绑定保存与机制文档
 
 ### 变更背景

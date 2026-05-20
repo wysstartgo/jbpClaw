@@ -21,7 +21,7 @@ describe('providerApiKeyEnvVar', () => {
   });
 
   test('replaces hyphens and special chars with underscores', () => {
-    expect(providerApiKeyEnvVar(ProviderName.LobsteraiServer)).toBe('LOBSTER_APIKEY_LOBSTERAI_SERVER');
+    expect(providerApiKeyEnvVar(ProviderName.QingShuServer)).toBe('LOBSTER_APIKEY_QINGSHU_SERVER');
     expect(providerApiKeyEnvVar('my.provider')).toBe('LOBSTER_APIKEY_MY_PROVIDER');
   });
 

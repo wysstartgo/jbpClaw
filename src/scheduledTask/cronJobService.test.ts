@@ -325,7 +325,7 @@ describe('mapGatewayJob', () => {
 
     expect(task.payload).toMatchObject({
       kind: PayloadKind.AgentTurn,
-      model: 'lobsterai-server/qwen3.6-plus-YoudaoInner',
+      model: 'qingshu-server/qwen3.6-plus-YoudaoInner',
     });
   });
 });

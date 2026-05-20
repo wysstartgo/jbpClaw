@@ -1,5 +1,5 @@
 import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
-import { ProviderName } from '@shared/providers';
+import { ProviderName, isQingShuServerProvider } from '@shared/providers';
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
@@ -232,7 +232,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 
   const resolveModelIconProviderKey = (model: Model): string => {
     const providerKey = model.providerKey?.trim();
-    if (providerKey && providerKey !== ProviderName.LobsteraiServer) return providerKey;
+    if (providerKey && !isQingShuServerProvider(providerKey)) return providerKey;
 
     const searchableText = `${model.name} ${model.id}`;
     return MODEL_ICON_PROVIDER_HINTS.find(({ pattern }) => pattern.test(searchableText))?.providerName
