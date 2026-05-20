@@ -1,5 +1,107 @@
 # QingShuClaw Branch Changelog
 
+## 0. Change Log 维护约定
+
+从 2026-05-20 起，本文件作为当前分支的统一 change log 入口。后续每次发生以下任一情况，都需要在本文件顶部追加一条对应更新记录：
+
+- 修复用户可感知的问题。
+- 合入 `origin/main` 的公共能力或 bugfix。
+- 调整青数品牌、工作台、内置治理链、唤醒/TTS、IM、多实例、OpenClaw runtime 等关键链路。
+- 新增或更新机制文档、FAQ、验收文档。
+- 打包测试前有影响行为的代码变更。
+
+每条记录建议包含：
+
+- `更新时间`
+- `变更背景`
+- `改动内容`
+- `影响范围`
+- `验证结果`
+- `后续注意事项`
+
+原则：
+
+- `KISS`：每次只记录当前批次的真实变化，不写泛泛计划。
+- `YAGNI`：不为尚未实现的功能提前记为完成。
+- `SOLID`：按模块边界说明影响范围，避免把 UI、runtime、配置投影混在一起。
+- `DRY`：已有机制文档只做链接引用，不在 changelog 里重复长篇展开。
+
+## 2026-05-20 Agent IM 多实例绑定保存与机制文档
+
+### 变更背景
+
+在 Agent 设置弹窗的“IM 渠道”中选择或变更 IM 渠道后，底部保存按钮在部分场景下仍保持置灰，无法保存。
+
+典型场景：
+
+- 青数 managed/readOnly Agent 中只调整 IM 渠道绑定。
+- 未修改额外 Skill，仅修改飞书、钉钉、邮箱等 IM 实例绑定。
+
+### 根因
+
+编辑弹窗中 managed/readOnly Agent 的保存按钮只判断 `hasManagedExtraSkillChanges`，没有把 IM 绑定变化纳入可保存条件。
+
+同时 managed/readOnly Agent 的保存分支只保存额外 Skill，没有持久化 `platformAgentBindings`，导致 UI 选择了 IM 渠道但保存入口不承认这次变更。
+
+### 改动内容
+
+- 在 [AgentSettingsPanel.tsx](/Users/wuyongsheng/workspace/projects/QingShuClaw/src/renderer/components/agent/AgentSettingsPanel.tsx) 中新增 `hasImBindingChanges` 判断。
+- managed/readOnly Agent 中只要 IM 绑定发生变化，保存按钮即可点亮。
+- managed/readOnly Agent 保存时：
+  - 如果额外 Skill 变化，则继续保存额外 Skill。
+  - 如果 IM 绑定变化，则保存 `IMSettings.platformAgentBindings` 并触发 IM/OpenClaw 配置同步。
+  - 不修改青数 managed Agent 的品牌、人设、内置治理链等只读业务字段。
+- 普通 Agent 保存逻辑复用同一个 `hasImBindingChanges` 判断，避免重复计算。
+- 新增 [IM多实例.md](/Users/wuyongsheng/workspace/projects/QingShuClaw/IM多实例.md)，系统梳理 IM 多实例与 Agent 绑定机制。
+
+### IM 多实例机制沉淀
+
+[IM多实例.md](/Users/wuyongsheng/workspace/projects/QingShuClaw/IM多实例.md) 已覆盖：
+
+- IM 绑定后的实际效果。
+- 飞书多实例示例。
+- 默认 `main` Agent 回退逻辑。
+- 实例级绑定优先、平台级绑定兜底。
+- 同一 IM 实例绑定互斥。
+- 绑定变更后新旧 session 的处理方式。
+- OpenClaw `bindings` 配置投影。
+- 代码索引与验收建议。
+
+### 影响范围
+
+直接影响：
+
+- Agent 设置弹窗的“IM 渠道”保存能力。
+- 青数 managed/readOnly Agent 的 IM 路由绑定配置。
+- IM 多实例到 Agent 的归属说明文档。
+
+不应影响：
+
+- 青数品牌内容。
+- 主工作台 UI。
+- 青数内置治理链。
+- 唤醒/TTS。
+- Agent 的 managed descriptor、人设和内置 Skill 真源。
+
+### 验证结果
+
+已验证：
+
+- `npx tsc --project tsconfig.json --noEmit`
+- `npm test -- src/renderer/components/agent/agentDraftState.test.ts src/renderer/components/agent/agentImBindingConfig.test.ts`
+- `npx eslint src/renderer/components/agent/AgentSettingsPanel.tsx src/renderer/components/agent/agentDraftState.ts src/renderer/components/agent/agentDraftState.test.ts src/renderer/components/agent/agentImBindingConfig.ts src/renderer/components/agent/agentImBindingConfig.test.ts`
+
+并已基于该修复打出新的 `.app` 测试包：
+
+- [release/mac-arm64/QingShuClaw.app](/Users/wuyongsheng/workspace/projects/QingShuClaw/release/mac-arm64/QingShuClaw.app)
+
+### 后续注意事项
+
+- 后续每次调整 Agent 设置、IM 多实例、OpenClaw `bindings` 投影时，都需要同步追加本 changelog。
+- IM 绑定属于路由层配置，不应反向修改青数 managed Agent 的后端 descriptor。
+- 同一个 IM 实例绑定是互斥的，UI 和持久化层都应保持 `platform:instanceId -> agentId` 的单归属模型。
+- 绑定变更后不要强行迁移旧 session 历史，优先创建新 Agent session，避免上下文污染。
+
 ## 1. 文档目的
 
 本文记录当前分支 `qingshu-dev` 相对远程 `origin/main` 的全部已知差异，并补充当前工作区未提交改动与后续本地开发注意事项，供后续继续开发、回顾和合并时参考。

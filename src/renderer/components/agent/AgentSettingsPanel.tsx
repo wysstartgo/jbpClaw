@@ -193,6 +193,10 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
     () => hasOrderedSelectionChanges(managedExtraSkillIds, savedManagedExtraSkillIds),
     [managedExtraSkillIds, savedManagedExtraSkillIds],
   );
+  const hasImBindingChanges = useMemo(
+    () => hasBindingSelectionChanges(boundBindingKeys, initialBoundBindingKeys),
+    [boundBindingKeys, initialBoundBindingKeys],
+  );
   const getManagedLockTag = (allowed?: boolean, policyNote?: string) => {
     const access = resolveQingShuManagedAccessPresentation({
       sourceType: QingShuObjectSourceType.QingShuManaged,
@@ -329,15 +333,29 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
   const handleSave = async () => {
     if (isManagedReadOnly) {
       if (isManagedUnavailable || isManagedForbidden || !agent) return;
+      if (!hasManagedExtraSkillChanges && !hasImBindingChanges) return;
       setSaving(true);
       try {
-        const mergedSkillIds = Array.from(new Set([
-          ...managedBaseSkillIds,
-          ...managedExtraSkillIds,
-        ]));
-        await agentService.updateAgent(agentId, {
-          skillIds: mergedSkillIds,
-        });
+        if (hasManagedExtraSkillChanges) {
+          const mergedSkillIds = Array.from(new Set([
+            ...managedBaseSkillIds,
+            ...managedExtraSkillIds,
+          ]));
+          await agentService.updateAgent(agentId, {
+            skillIds: mergedSkillIds,
+          });
+        }
+        if (hasImBindingChanges && imConfig) {
+          const currentBindings = buildAgentBindingKeyBindings(
+            imConfig.settings?.platformAgentBindings,
+            agentId,
+            boundBindingKeys,
+          );
+          await imService.persistConfig({
+            settings: { ...imConfig.settings, platformAgentBindings: currentBindings },
+          });
+          await imService.saveAndSyncConfig();
+        }
         onClose();
       } finally {
         setSaving(false);
@@ -379,8 +397,7 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
         debugToolBundleIds,
       }));
       // Persist IM bindings if changed
-      const bindingsChanged = hasBindingSelectionChanges(boundBindingKeys, initialBoundBindingKeys);
-      if (bindingsChanged && imConfig) {
+      if (hasImBindingChanges && imConfig) {
         const currentBindings = buildAgentBindingKeyBindings(
           imConfig.settings?.platformAgentBindings,
           agentId,
@@ -1046,8 +1063,8 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={isManagedReadOnly
-                  ? (saving || isManagedUnavailable || isManagedForbidden || !hasManagedExtraSkillChanges)
+                  disabled={isManagedReadOnly
+                  ? (saving || isManagedUnavailable || isManagedForbidden || (!hasManagedExtraSkillChanges && !hasImBindingChanges))
                   : saving}
                 className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
