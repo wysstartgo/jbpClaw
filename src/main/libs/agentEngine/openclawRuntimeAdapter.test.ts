@@ -2461,6 +2461,66 @@ test('startSession sends the session cwd to OpenClaw chat.send', async () => {
   });
 });
 
+test('continueSession with edited user message reuses local message and completes after lifecycle end', async () => {
+  const { session, store } = createHistoryStore([
+    { id: 'msg-1', type: 'user', content: 'edited question', timestamp: 1, metadata: {} },
+  ]);
+  session.status = 'idle';
+  session.agentId = 'main';
+  store.getAgent = () => null;
+
+  const completeEvents: Array<{ sessionId: string; runId: string | null }> = [];
+  const requests: Array<{ method: string; params?: Record<string, unknown> }> = [];
+  const adapter = new OpenClawRuntimeAdapter(store, {});
+  adapter.gatewayClient = {
+    start: () => {},
+    stop: () => {},
+    request: async (method: string, params?: Record<string, unknown>) => {
+      requests.push({ method, params });
+      if (method === 'chat.history') {
+        return { messages: [] };
+      }
+      if (method === 'chat.send') {
+        setTimeout(() => {
+          adapter.handleGatewayEvent({
+            event: 'chat',
+            payload: {
+              runId: params?.idempotencyKey,
+              sessionKey: params?.sessionKey,
+              state: 'final',
+              message: { role: 'assistant', content: 'edited answer' },
+            },
+          });
+          adapter.handleGatewayEvent({
+            event: 'agent',
+            payload: {
+              runId: params?.idempotencyKey,
+              sessionKey: params?.sessionKey,
+              stream: 'lifecycle',
+              phase: 'end',
+            },
+          });
+        }, 0);
+        return { runId: params?.idempotencyKey };
+      }
+      return {};
+    },
+  };
+  adapter.ensureGatewayClientReady = async () => {};
+  adapter.startChannelPolling = () => {};
+  adapter.on('complete', (sessionId, runId) => {
+    completeEvents.push({ sessionId, runId });
+  });
+
+  await adapter.continueSession(session.id, 'edited question', { skipInitialUserMessage: true });
+
+  expect(session.messages.filter((message) => message.type === 'user')).toHaveLength(1);
+  expect(session.messages.map((message) => message.content)).toContain('edited answer');
+  expect(session.status).toBe('completed');
+  expect(completeEvents).toHaveLength(1);
+  expect(requests.find((request) => request.method === 'chat.send')?.params?.message).toContain('edited question');
+});
+
 test('startSession keeps image payload in chat.send but strips it from message metadata', async () => {
   const { session, store } = createReconcileStore([]);
   session.status = 'idle';

@@ -4154,13 +4154,14 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('cowork:session:continue', async (_event, options: {
+  const continueCoworkSessionFromIpc = async (options: {
     sessionId: string;
     prompt: string;
     systemPrompt?: string;
     activeSkillIds?: string[];
     imageAttachments?: CoworkImageAttachmentInput[];
     skipInitialUserMessage?: boolean;
+    errorPrefix?: string;
   }) => {
     try {
       const existingSession = getCoworkStore().getSession(options.sessionId);
@@ -4188,13 +4189,14 @@ if (!gotTheLock) {
       }
       const runtimeImageAttachments = await resolveCoworkImageAttachmentsForRuntime(options.imageAttachments);
 
+      getCoworkStore().updateSession(options.sessionId, { status: 'running' });
       runtime.continueSession(options.sessionId, options.prompt, {
         systemPrompt: sessionAgentContext.systemPrompt,
         skillIds: sessionAgentContext.skillIds,
         imageAttachments: runtimeImageAttachments,
         skipInitialUserMessage: options.skipInitialUserMessage,
       }).catch(error => {
-        console.error('[Cowork] continue error:', error);
+        console.error(`[Cowork] ${options.errorPrefix || 'continue'} error:`, error);
         try {
           // The engine router already emits an 'error' event (handled at line ~990)
           // which sends cowork:stream:error to the renderer. Only send here if the
@@ -4222,7 +4224,16 @@ if (!gotTheLock) {
         error: error instanceof Error ? error.message : 'Failed to continue session',
       };
     }
-  });
+  };
+
+  ipcMain.handle('cowork:session:continue', async (_event, options: {
+    sessionId: string;
+    prompt: string;
+    systemPrompt?: string;
+    activeSkillIds?: string[];
+    imageAttachments?: CoworkImageAttachmentInput[];
+    skipInitialUserMessage?: boolean;
+  }) => continueCoworkSessionFromIpc(options));
 
   ipcMain.handle('cowork:session:stop', async (_event, sessionId: string) => {
     try {
@@ -4373,6 +4384,54 @@ if (!gotTheLock) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to edit user message',
+      };
+    }
+  });
+
+  ipcMain.handle(CoworkIpcChannel.EditUserMessageAndRerun, async (_event, options: {
+    sessionId: string;
+    messageId: string;
+    content: string;
+    metadata?: CoworkMessageMetadata;
+    systemPrompt?: string;
+    activeSkillIds?: string[];
+    imageAttachments?: CoworkImageAttachmentInput[];
+  }) => {
+    try {
+      const content = typeof options.content === 'string' ? options.content.trim() : '';
+      if (!content) {
+        return { success: false, error: 'Message content is required' };
+      }
+      const runtime = getCoworkEngineRouter();
+      if (runtime.isSessionActive(options.sessionId)) {
+        return { success: false, error: 'Cannot edit a message while the session is running.' };
+      }
+
+      const coworkStoreInstance = getCoworkStore();
+      const session = coworkStoreInstance.editUserMessageAndTruncateAfter(options.sessionId, options.messageId, {
+        content,
+        metadata: options.metadata,
+      });
+      if (!session) {
+        return { success: false, error: 'Failed to edit user message' };
+      }
+
+      await runtime.resetSessionHistory?.(options.sessionId);
+      broadcastCoworkSessionsChanged();
+
+      return await continueCoworkSessionFromIpc({
+        sessionId: options.sessionId,
+        prompt: content,
+        systemPrompt: options.systemPrompt,
+        activeSkillIds: options.activeSkillIds,
+        imageAttachments: options.imageAttachments,
+        skipInitialUserMessage: true,
+        errorPrefix: 'edit rerun',
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to edit and rerun user message',
       };
     }
   });

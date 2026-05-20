@@ -5,8 +5,8 @@ import { store } from '../store';
 import {
   addMessage,
   addSession,
-  clearCurrentSession,
   clearCoworkInputQueue,
+  clearCurrentSession,
   clearPendingPermissions,
   deleteSession as deleteSessionAction,
   deleteSessions as deleteSessionsAction,
@@ -542,6 +542,55 @@ class CoworkService {
     }
 
     console.error('Failed to edit user message:', result.error);
+    return null;
+  }
+
+  async editUserMessageAndRerun(options: {
+    sessionId: string;
+    messageId: string;
+    content: string;
+    metadata?: CoworkMessage['metadata'];
+    systemPrompt?: string;
+    activeSkillIds?: string[];
+    imageAttachments?: CoworkContinueOptions['imageAttachments'];
+  }): Promise<CoworkSession | null> {
+    const cowork = window.electron?.cowork;
+    if (!cowork?.editUserMessageAndRerun) return null;
+
+    store.dispatch(setStreaming(true));
+    store.dispatch(updateSessionStatus({ sessionId: options.sessionId, status: 'running' }));
+    const result = await cowork.editUserMessageAndRerun(options);
+    if (result.success && result.session) {
+      store.dispatch(setCurrentSession(result.session));
+      store.dispatch(clearCoworkInputQueue(options.sessionId));
+      store.dispatch(setStreaming(result.session.status === 'running'));
+      void petService.setRuntimeProjectionFromCoworkState(store.getState().cowork);
+      return result.session;
+    }
+
+    store.dispatch(setStreaming(false));
+    if (result.engineStatus) {
+      this.notifyOpenClawStatus(result.engineStatus);
+    }
+    const visibleErrorContent = result.error
+      ? getCoworkVisibleErrorMessage(result.error, result.code)
+      : null;
+    if (result.code !== 'ENGINE_NOT_READY') {
+      store.dispatch(updateSessionStatus({ sessionId: options.sessionId, status: 'error' }));
+    }
+    if (visibleErrorContent) {
+      store.dispatch(addMessage({
+        sessionId: options.sessionId,
+        message: {
+          id: `error-${Date.now()}`,
+          type: 'system',
+          content: visibleErrorContent,
+          timestamp: Date.now(),
+        },
+      }));
+    }
+    void petService.setRuntimeProjectionFromCoworkState(store.getState().cowork);
+    console.error('Failed to edit and rerun user message:', result.error);
     return null;
   }
 

@@ -660,6 +660,7 @@ interface IElectronAPI {
     renameSession: (options: { sessionId: string; title: string }) => Promise<{ success: boolean; error?: string }>;
     forkSession: (options: { sessionId: string; messageId: string }) => Promise<{ success: boolean; session?: CoworkSession; error?: string }>;
     editUserMessage: (options: { sessionId: string; messageId: string; content: string; metadata?: CoworkMessage['metadata'] }) => Promise<{ success: boolean; session?: CoworkSession; error?: string }>;
+    editUserMessageAndRerun: (options: { sessionId: string; messageId: string; content: string; metadata?: CoworkMessage['metadata']; systemPrompt?: string; activeSkillIds?: string[]; imageAttachments?: Array<{ name: string; mimeType?: string; base64Data?: string; path?: string; sizeBytes?: number }> }) => Promise<{ success: boolean; session?: CoworkSession; error?: string; code?: string; engineStatus?: OpenClawEngineStatus }>;
     getSession: (sessionId: string) => Promise<{ success: boolean; session?: CoworkSession; error?: string }>;
     remoteManaged: (sessionId: string) => Promise<{ success: boolean; remoteManaged: boolean; error?: string }>;
     listSessions: (agentId?: string) => Promise<{ success: boolean; sessions?: CoworkSessionSummary[]; error?: string }>;

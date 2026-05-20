@@ -398,14 +398,6 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
   const handleEditUserMessage = useCallback(async (message: CoworkMessage, content: string): Promise<boolean> => {
     if (!currentSession || isStreaming) return false;
     const metadata = message.metadata;
-    const editedSession = await coworkService.editUserMessage({
-      sessionId: currentSession.id,
-      messageId: message.id,
-      content,
-      metadata,
-    });
-    if (!editedSession) return false;
-
     const skillIds = Array.isArray(metadata?.skillIds)
       ? metadata.skillIds.filter((id): id is string => typeof id === 'string')
       : undefined;
@@ -417,16 +409,33 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         base64Data: attachment.base64Data,
       }));
     const normalizedImageAttachments = imageAttachments.length > 0 ? imageAttachments : undefined;
-    const success = await continueSessionById(
-      editedSession,
+    const sessionSkillIds = skillIds
+      ? [...skillIds]
+      : activeSkillIds.length > 0
+        ? [...activeSkillIds]
+        : [...(currentAgent?.skillIds ?? [])];
+
+    if (sessionSkillIds.length > 0) {
+      dispatch(clearActiveSkills());
+    }
+
+    let effectiveSkillPrompt: string | undefined;
+    if (!isOpenClawEngine) {
+      effectiveSkillPrompt = await skillService.getAutoRoutingPrompt() || undefined;
+    }
+    const combinedSystemPrompt = buildCoworkContinuationSystemPrompt(effectiveSkillPrompt, config.systemPrompt);
+
+    const rerunSession = await coworkService.editUserMessageAndRerun({
+      sessionId: currentSession.id,
+      messageId: message.id,
       content,
-      undefined,
-      normalizedImageAttachments,
-      skillIds,
-      true,
-    );
-    return success !== false;
-  }, [continueSessionById, currentSession, isStreaming]);
+      metadata,
+      systemPrompt: combinedSystemPrompt,
+      activeSkillIds: sessionSkillIds.length > 0 ? sessionSkillIds : undefined,
+      imageAttachments: normalizedImageAttachments,
+    });
+    return !!rerunSession;
+  }, [activeSkillIds, config.systemPrompt, currentAgent?.skillIds, currentSession, dispatch, isOpenClawEngine, isStreaming]);
 
   useEffect(() => {
     if (!currentSession || isStreaming || isContinuingRef.current) return;

@@ -287,6 +287,8 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke(CoworkIpcChannel.ForkSession, options),
     editUserMessage: (options: { sessionId: string; messageId: string; content: string; metadata?: Record<string, unknown> }) =>
       ipcRenderer.invoke(CoworkIpcChannel.EditUserMessage, options),
+    editUserMessageAndRerun: (options: { sessionId: string; messageId: string; content: string; metadata?: Record<string, unknown>; systemPrompt?: string; activeSkillIds?: string[]; imageAttachments?: Array<{ name: string; mimeType?: string; base64Data?: string; path?: string; sizeBytes?: number }> }) =>
+      ipcRenderer.invoke(CoworkIpcChannel.EditUserMessageAndRerun, options),
     getSession: (sessionId: string) =>
       ipcRenderer.invoke('cowork:session:get', sessionId),
     remoteManaged: (sessionId: string) =>
