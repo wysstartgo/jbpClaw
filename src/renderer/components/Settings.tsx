@@ -2941,15 +2941,21 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
         ];
         return (
           <div className="flex flex-col h-full space-y-4">
-            <div className="flex gap-1 border-b border-border shrink-0">
+            <div
+              className="flex flex-wrap gap-2 border-b border-border pb-3 shrink-0"
+              role="tablist"
+              aria-label={i18nService.t('coworkMemoryTitle')}
+            >
               {memoryTabs.map((tab) => (
                 <button
                   type="button"
                   key={tab.key}
+                  role="tab"
+                  aria-selected={memoryTab === tab.key}
                   onClick={() => setMemoryTab(tab.key)}
-                  className={`px-4 py-2 text-sm font-medium transition-colors rounded-t-lg ${
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                     memoryTab === tab.key
-                      ? 'bg-primary-muted text-primary border-b-2 border-primary'
+                      ? 'bg-primary-muted text-primary'
                       : 'text-secondary hover:text-foreground hover:bg-surface-raised'
                   }`}
                 >

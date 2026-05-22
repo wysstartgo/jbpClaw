@@ -4,7 +4,7 @@
  */
 
 import { EyeIcon, EyeSlashIcon, XCircleIcon as XCircleIconSolid } from '@heroicons/react/20/solid';
-import { ArrowLeftIcon, CheckCircleIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, EllipsisVerticalIcon, ExclamationTriangleIcon, PencilIcon, PencilSquareIcon, PlusIcon, SignalIcon, XCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, CheckCircleIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, EllipsisVerticalIcon, ExclamationTriangleIcon, PlusIcon, SignalIcon, XCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import type { Platform } from '@shared/platform';
 import { PlatformRegistry } from '@shared/platform';
@@ -21,6 +21,8 @@ import type { EmailInstanceConfig, IMConnectivityCheck, IMConnectivityTestResult
 import { MAX_DINGTALK_INSTANCES, MAX_DISCORD_INSTANCES, MAX_EMAIL_INSTANCES, MAX_FEISHU_INSTANCES, MAX_NIM_INSTANCES, MAX_POPO_INSTANCES, MAX_QQ_INSTANCES, MAX_TELEGRAM_INSTANCES, MAX_WECOM_INSTANCES } from '../../types/im';
 import { getVisibleIMPlatforms } from '../../utils/regionFilter';
 import Modal from '../common/Modal';
+import ComposeIcon from '../icons/ComposeIcon';
+import EditIcon from '../icons/EditIcon';
 import TrashIcon from '../icons/TrashIcon';
 import DingTalkInstanceSettings from './DingTalkInstanceSettings';
 import DiscordInstanceSettings from './DiscordInstanceSettings';
@@ -1440,7 +1442,7 @@ const IMSettings: React.FC = () => {
                       }}
                       className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-surface-raised"
                     >
-                      <PencilSquareIcon className="h-3.5 w-3.5" />
+                      <ComposeIcon className="h-3.5 w-3.5" />
                       {i18nService.t('edit')}
                     </button>
                     <button
@@ -1451,7 +1453,7 @@ const IMSettings: React.FC = () => {
                       }}
                       className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-foreground transition-colors hover:bg-surface-raised"
                     >
-                      <PencilIcon className="h-3.5 w-3.5" />
+                      <EditIcon className="h-3.5 w-3.5" />
                       {i18nService.t('rename')}
                     </button>
                     <button

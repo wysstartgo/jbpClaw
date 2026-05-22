@@ -6,7 +6,7 @@ import { ProviderRegistry } from '../../../shared/providers';
 import { defaultConfig, getCustomProviderDefaultName, getProviderDisplayName, isCustomProvider } from '../../config';
 import { getProviderIcon } from '../../providers/uiRegistry';
 import { i18nService } from '../../services/i18n';
-import PencilIcon from '../icons/PencilIcon';
+import EditIcon from '../icons/EditIcon';
 import PlusCircleIcon from '../icons/PlusCircleIcon';
 import { GitHubCopilotIcon } from '../icons/providers';
 import TrashIcon from '../icons/TrashIcon';
@@ -29,6 +29,8 @@ const CW_LOG_MIN = Math.log(CW_MIN);
 const CW_LOG_MAX = Math.log(CW_MAX);
 const CW_DEFAULT = 200_000;
 const CW_SCALE_EXP = 1.5;
+const CW_SLIDER_THUMB_SIZE = 14;
+const CW_SLIDER_THUMB_RADIUS = CW_SLIDER_THUMB_SIZE / 2;
 
 function contextWindowToSlider(value: number): number {
   const t = (Math.log(Math.max(CW_MIN, Math.min(CW_MAX, value))) - CW_LOG_MIN) / (CW_LOG_MAX - CW_LOG_MIN);
@@ -46,6 +48,10 @@ const CW_MARKER_STOPS = [
   { label: '1M', value: 1000000 },
   { label: '2M', value: CW_MAX },
 ].map(m => ({ ...m, pos: contextWindowToSlider(m.value) }));
+
+function sliderThumbCenterPosition(pos: number): string {
+  return `calc(${pos * 100}% + ${(0.5 - pos) * CW_SLIDER_THUMB_SIZE}px)`;
+}
 
 function snapSliderValue(t: number): number {
   for (const m of CW_MARKER_STOPS) {
@@ -1364,7 +1370,7 @@ const ModelSettingsSection: React.FC<ModelSettingsSectionProps> = ({
                             onClick={() => handleEditModel(model.id, model.name, model.supportsImage, model.contextWindow, model.customParams)}
                             className="p-0.5 text-secondary hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
                           >
-                            <PencilIcon className="h-3.5 w-3.5" />
+                            <EditIcon className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"
@@ -1665,16 +1671,18 @@ const ModelSettingsSection: React.FC<ModelSettingsSectionProps> = ({
                       {/* Track + dots + slider */}
                       <div className="relative h-3">
                         {/* Track line */}
-                        <div className="absolute top-1/2 left-0 right-0 h-[3px] -translate-y-1/2 rounded-full bg-border" />
-                        {/* Marker dots (clickable) */}
+                        <div
+                          className="absolute top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-border"
+                          style={{ left: CW_SLIDER_THUMB_RADIUS, right: CW_SLIDER_THUMB_RADIUS }}
+                        />
+                        {/* Marker dots */}
                         {CW_MARKER_STOPS.map((m) => (
                           <div
                             key={m.label}
-                            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full cursor-pointer z-[3] flex items-center justify-center"
-                            style={{ left: `${m.pos * 100}%` }}
-                            onClick={() => setNewModelContextWindow(m.value)}
+                            className="pointer-events-none absolute top-1/2 z-[1] flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full"
+                            style={{ left: sliderThumbCenterPosition(m.pos) }}
                           >
-                            <div className="w-[7px] h-[7px] rounded-full bg-white border-[1.5px] border-border" />
+                            <div className="h-1.5 w-1.5 rounded-full border border-border bg-surface" />
                           </div>
                         ))}
                         {/* Range input overlay */}
@@ -1694,7 +1702,7 @@ const ModelSettingsSection: React.FC<ModelSettingsSectionProps> = ({
                           <span
                             key={m.label}
                             className="absolute text-[9px] text-muted select-none -translate-x-1/2"
-                            style={{ left: `${m.pos * 100}%` }}
+                            style={{ left: sliderThumbCenterPosition(m.pos) }}
                           >
                             {m.label}
                           </span>
