@@ -6,6 +6,7 @@ import { buildSessionTitleFromInput } from '../../common/sessionTitle';
 import { buildEnvForConfig, getCurrentApiConfig, resolveCurrentApiConfig, resolveRawApiConfig } from './claudeSettings';
 import type { OpenAICompatProxyTarget } from './coworkOpenAICompatProxy';
 import { coworkLog } from './coworkLogger';
+import { getOpenClawTokenProxyPort } from './openclawTokenProxy';
 import { appendPythonRuntimeToEnv } from './pythonRuntime';
 import { isSystemProxyEnabled, resolveSystemProxyUrlForTargets } from './systemProxy';
 import {
@@ -1351,6 +1352,12 @@ export async function getEnhancedEnv(target: OpenAICompatProxyTarget = 'local'):
   const skillsRoot = getSkillsRoot().replace(/\\/g, '/');
   env.SKILLS_ROOT = skillsRoot;
   env.LOBSTERAI_SKILLS_ROOT = skillsRoot; // Alternative name for clarity
+  const qingShuTokenProxyPort = getOpenClawTokenProxyPort();
+  if (qingShuTokenProxyPort) {
+    env.QINGSHU_IMAGE_PROXY_BASE_URL = `http://127.0.0.1:${qingShuTokenProxyPort}/v1`;
+  } else {
+    delete env.QINGSHU_IMAGE_PROXY_BASE_URL;
+  }
   if (process.platform === 'win32' || env.LOBSTERAI_NODE_SHIM_ACTIVE === '1') {
     env.LOBSTERAI_ELECTRON_PATH = getElectronNodeRuntimePath().replace(/\\/g, '/');
   } else {

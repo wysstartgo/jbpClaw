@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
+import { QingShuFileToolName } from '../../shared/qingshuFile/constants';
 import type { QingShuManagedCatalogService } from './catalogService';
 import { __qingShuManagedMcpServerTestUtils, QingShuManagedMcpServer } from './managedMcpServer';
 
@@ -120,6 +121,51 @@ describe('QingShuManagedMcpServer', () => {
     }
   });
 
+  test('exposes and invokes the local QingShu file publish tool', async () => {
+    const publish = vi.fn(async (args: Record<string, unknown>) => ({
+      content: [{ type: 'text', text: JSON.stringify({ success: true, shareUrl: 'https://qingshu.test/s/file' }) }],
+      isError: false,
+    }));
+    const server = new QingShuManagedMcpServer(createCatalogService({ tools: [] }), {
+      [QingShuFileToolName.Publish]: publish,
+    });
+    activeServers.push(server);
+
+    const config = await server.start();
+    expect(config).not.toBeNull();
+
+    const { client, transport } = await connectClient(config!);
+    try {
+      const tools = await client.listTools();
+      expect(tools.tools).toEqual([
+        expect.objectContaining({
+          name: QingShuFileToolName.Publish,
+          inputSchema: expect.objectContaining({
+            type: 'object',
+            required: ['filePath'],
+          }),
+        }),
+      ]);
+
+      const result = await client.callTool({
+        name: QingShuFileToolName.Publish,
+        arguments: { filePath: '/tmp/report.html' },
+      });
+
+      expect(result).toMatchObject({
+        content: [{ type: 'text', text: JSON.stringify({ success: true, shareUrl: 'https://qingshu.test/s/file' }) }],
+        isError: false,
+      });
+      expect(publish).toHaveBeenCalledWith(
+        { filePath: '/tmp/report.html' },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    } finally {
+      await transport.close();
+      await client.close();
+    }
+  });
+
   test('reuses the same server config for concurrent start calls', async () => {
     const server = new QingShuManagedMcpServer(createCatalogService());
     activeServers.push(server);
@@ -131,6 +177,16 @@ describe('QingShuManagedMcpServer', () => {
 
     expect(firstConfig).not.toBeNull();
     expect(secondConfig).toEqual(firstConfig);
+  });
+
+  test('clears server config after stopping the HTTP server', async () => {
+    const server = new QingShuManagedMcpServer(createCatalogService());
+    activeServers.push(server);
+
+    expect(await server.start()).not.toBeNull();
+    await server.stop();
+
+    expect(server.getServerConfig()).toBeNull();
   });
 
   test('rejects requests without the managed MCP secret', async () => {

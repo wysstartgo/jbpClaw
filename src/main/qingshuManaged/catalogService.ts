@@ -2,6 +2,7 @@ import {
   QingShuManagedToolRuntime,
   QingShuObjectSourceType,
 } from '../../shared/qingshuManaged/constants';
+import { QingShuFileToolName } from '../../shared/qingshuFile/constants';
 import type {
   QingShuManagedAgentDescriptor,
   QingShuManagedCatalogSnapshot,
@@ -57,8 +58,11 @@ export type QingShuManagedMcpToolResult = {
 const MANAGED_AGENT_ID_PREFIX = 'qingshu-managed:';
 const QINGSHU_MANAGED_CATALOG_SNAPSHOT_KEY = 'qingshuManaged.catalogSnapshot.v1';
 const QINGSHU_MANAGED_AGENT_EXTRA_SKILL_IDS_KEY = 'qingshuManaged.agentExtraSkillIds.v1';
-const MANAGED_TOOL_TIMEOUT_MS = 200_000;
+const MANAGED_TOOL_TIMEOUT_MS = 600_000;
 const QINGSHU_AUTHENTICATION_FAILED_PATTERN = /authentication failed|please login|未登录|登录失效|登录已失效|认证失败|token.*(expired|invalid)|invalid.*token/i;
+const QINGSHU_LOCAL_ONLY_TOOL_NAMES = new Set<string>([
+  QingShuFileToolName.Publish,
+]);
 
 const emptySnapshot = (): QingShuManagedCatalogSnapshot => ({
   catalogVersion: '',
@@ -336,7 +340,7 @@ export class QingShuManagedCatalogService {
     }
 
     return this.snapshot.tools
-      .filter((tool) => tool.allowed)
+      .filter((tool) => tool.allowed && !QINGSHU_LOCAL_ONLY_TOOL_NAMES.has(tool.toolName))
       .map((tool) => ({
         server: QingShuManagedToolRuntime.ServerName,
         name: tool.toolName,
@@ -358,6 +362,15 @@ export class QingShuManagedCatalogService {
     args: Record<string, unknown>,
     options?: { signal?: AbortSignal },
   ): Promise<{ content: Array<{ type: string; text?: string }>; isError: boolean }> {
+    if (QINGSHU_LOCAL_ONLY_TOOL_NAMES.has(toolName)) {
+      const errorMessage = `Tool "${toolName}" must be invoked through QingShuClaw local MCP runtime.`;
+      console.warn(`[QingShuManaged] blocked backend invocation for local-only tool "${toolName}"`);
+      return {
+        content: [{ type: 'text', text: errorMessage }],
+        isError: true,
+      };
+    }
+
     const toolAlias = buildManagedToolAlias(toolName);
     const backendPath = `/api/qingshu-claw/managed/tools/${encodeURIComponent(toolName)}/invoke`;
     console.log(

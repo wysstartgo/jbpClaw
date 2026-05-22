@@ -2,6 +2,8 @@ import http from 'http';
 import { net } from 'electron';
 
 const PROXY_BIND_HOST = '127.0.0.1';
+const QINGSHU_CLAW_PROXY_PREFIX = '/api/qingshu-claw/proxy';
+const LOG_BODY_PREVIEW_LIMIT = 500;
 
 let proxyServer: http.Server | null = null;
 let proxyPort: number | null = null;
@@ -67,6 +69,82 @@ export function getOpenClawTokenProxyPort(): number | null {
   return proxyPort;
 }
 
+function summarizeAccessToken(accessToken?: string | null): Record<string, unknown> {
+  const summary: Record<string, unknown> = {
+    present: Boolean(accessToken),
+    length: accessToken?.length || 0,
+  };
+  if (!accessToken) {
+    return summary;
+  }
+  const parts = accessToken.split('.');
+  summary.jwtLike = parts.length === 3;
+  if (parts.length !== 3) {
+    return summary;
+  }
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as Record<string, unknown>;
+    const exp = typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+    summary.expiresAt = exp ? new Date(exp).toISOString() : null;
+    summary.expiresInMs = exp ? exp - Date.now() : null;
+    summary.userId = payload.token_user_id ?? payload.userId ?? payload.user_id ?? payload.sub ?? null;
+  } catch {
+    summary.parseError = true;
+  }
+  return summary;
+}
+
+function summarizeUrl(url: string): Record<string, unknown> {
+  try {
+    const parsed = new URL(url);
+    return {
+      origin: parsed.origin,
+      pathname: parsed.pathname,
+    };
+  } catch {
+    return {
+      raw: url.replace(/[?&](access_token|token|api_key|key)=([^&]+)/gi, '$1=***'),
+    };
+  }
+}
+
+function buildQingShuProxyPath(requestUrl?: string): string {
+  const rawPath = requestUrl || '/';
+  return `${QINGSHU_CLAW_PROXY_PREFIX}${rawPath}`;
+}
+
+function readBodyPreview(body: Buffer): string | null {
+  if (!body.length) {
+    return null;
+  }
+  return body.toString('utf8', 0, Math.min(body.length, LOG_BODY_PREVIEW_LIMIT));
+}
+
+function summarizeRequestBody(body: Buffer): Record<string, unknown> {
+  if (!body.length) {
+    return { present: false, bytes: 0 };
+  }
+  try {
+    const parsed = JSON.parse(body.toString('utf8')) as Record<string, unknown>;
+    const messages = Array.isArray(parsed.messages) ? parsed.messages : [];
+    return {
+      present: true,
+      bytes: body.length,
+      model: typeof parsed.model === 'string' ? parsed.model : null,
+      messageCount: messages.length,
+      stream: parsed.stream === true,
+      maxTokens: parsed.max_tokens ?? parsed.maxTokens ?? null,
+    };
+  } catch {
+    return {
+      present: true,
+      bytes: body.length,
+      parseError: true,
+      preview: readBodyPreview(body),
+    };
+  }
+}
+
 function collectRequestBody(req: http.IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -82,6 +160,11 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     const serverBaseUrl = serverBaseUrlGetter?.();
 
     if (!tokens?.accessToken || !serverBaseUrl) {
+      console.warn('[OpenClawTokenProxy] rejecting QingShu server request because auth context is missing:', {
+        hasTokens: Boolean(tokens),
+        hasAccessToken: Boolean(tokens?.accessToken),
+        hasServerBaseUrl: Boolean(serverBaseUrl),
+      });
       res.writeHead(503, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'No auth tokens available' }));
       return;
@@ -89,21 +172,45 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
     const body = await collectRequestBody(req);
 
-    // Build upstream URL: serverBaseUrl + request path
-    // OpenClaw sends to /v1/chat/completions, upstream is /api/proxy/v1/chat/completions
-    const upstreamPath = `/api/proxy${req.url || '/'}`;
+    // Build upstream URL: serverBaseUrl + request path. OpenClaw sends to
+    // /v1/chat/completions; QingShu backend expects
+    // /api/qingshu-claw/proxy/v1/chat/completions.
+    const upstreamPath = buildQingShuProxyPath(req.url);
     const upstreamUrl = `${serverBaseUrl}${upstreamPath}`;
+
+    console.log('[OpenClawTokenProxy] forwarding QingShu server request:', {
+      method: req.method || 'POST',
+      incomingPath: req.url || '/',
+      upstream: summarizeUrl(upstreamUrl),
+      body: summarizeRequestBody(body),
+      contentType: req.headers['content-type'] || null,
+      accept: req.headers.accept || null,
+      token: summarizeAccessToken(tokens.accessToken),
+    });
 
     const result = await forwardRequest(upstreamUrl, req.method || 'POST', tokens.accessToken, body, req.headers);
 
     if ((result.status === 401 || result.status === 403) && tokenRefresher) {
-      console.log(`[OpenClawTokenProxy] received ${result.status}, attempting token refresh`);
+      console.warn('[OpenClawTokenProxy] QingShu server returned auth failure, attempting token refresh:', {
+        status: result.status,
+        upstream: summarizeUrl(upstreamUrl),
+        responsePreview: Buffer.isBuffer(result.body) ? result.body.toString('utf8', 0, LOG_BODY_PREVIEW_LIMIT) : null,
+      });
       const newToken = await tokenRefresher('openclaw-proxy');
       if (newToken) {
         const retryResult = await forwardRequest(upstreamUrl, req.method || 'POST', newToken, body, req.headers);
+        console.log('[OpenClawTokenProxy] QingShu server retry completed:', {
+          status: retryResult.status,
+          upstream: summarizeUrl(upstreamUrl),
+          token: summarizeAccessToken(newToken),
+          responsePreview: Buffer.isBuffer(retryResult.body)
+            ? retryResult.body.toString('utf8', 0, LOG_BODY_PREVIEW_LIMIT)
+            : null,
+        });
         pipeResponse(retryResult, res);
         return;
       }
+      console.warn('[OpenClawTokenProxy] QingShu token refresh returned no token; forwarding original response');
     }
 
     pipeResponse(result, res);
@@ -130,8 +237,10 @@ async function forwardRequest(
   body: Buffer,
   incomingHeaders: http.IncomingHttpHeaders,
 ): Promise<UpstreamResult> {
+  const startedAt = Date.now();
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${accessToken}`,
+    'auth': `Bearer ${accessToken}`,
     'Content-Type': incomingHeaders['content-type'] || 'application/json',
   };
 
@@ -152,6 +261,13 @@ async function forwardRequest(
   const responseHeaders: Record<string, string> = {};
   resp.headers.forEach((value, key) => {
     responseHeaders[key] = value;
+  });
+  console.log('[OpenClawTokenProxy] QingShu upstream response received:', {
+    status: resp.status,
+    elapsedMs: Date.now() - startedAt,
+    upstream: summarizeUrl(url),
+    contentType,
+    isStream,
   });
 
   if (isStream && resp.body) {

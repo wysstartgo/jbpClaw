@@ -9,6 +9,9 @@ import { z } from 'zod';
 
 import { stripCoworkImageAttachmentPayloads } from '../../common/coworkImageAttachments';
 import { SCHEDULED_TASK_SWITCH_MESSAGE } from '../../scheduledTask/enginePrompt';
+import { QingShuFileToolName } from '../../shared/qingshuFile/constants';
+import { QINGSHU_FILE_PUBLISH_PROMPT } from '../../shared/qingshuFile/prompt';
+import type { QingShuFilePublishResult } from '../../shared/qingshuFile/types';
 import type { CoworkExecutionMode, CoworkMessage, CoworkStore } from '../coworkStore';
 import { loadClaudeSdk } from './claudeSdk';
 import { getClaudeCodePath, getCurrentApiConfig } from './claudeSettings';
@@ -247,6 +250,7 @@ export class CoworkRunner extends EventEmitter {
     url?: string;
     headers?: Record<string, string>;
   }>;
+  private qingShuFilePublisher?: (filePath?: string) => Promise<QingShuFilePublishResult>;
 
   constructor(store: CoworkStore) {
     super();
@@ -263,6 +267,12 @@ export class CoworkRunner extends EventEmitter {
     headers?: Record<string, string>;
   }>): void {
     this.mcpServerProvider = provider;
+  }
+
+  setQingShuFilePublisher(
+    publisher: (filePath?: string) => Promise<QingShuFilePublishResult>,
+  ): void {
+    this.qingShuFilePublisher = publisher;
   }
 
   private isSessionStopRequested(sessionId: string, activeSession?: ActiveSession): boolean {
@@ -1206,7 +1216,7 @@ export class CoworkRunner extends EventEmitter {
       );
     }
     const trimmedBasePrompt = baseSystemPrompt?.trim();
-    return [safetyPrompt, windowsEncodingPrompt, windowsBundledRuntimePrompt, memoryRecallPrompt.join('\n'), trimmedBasePrompt]
+    return [safetyPrompt, windowsEncodingPrompt, windowsBundledRuntimePrompt, QINGSHU_FILE_PUBLISH_PROMPT, memoryRecallPrompt.join('\n'), trimmedBasePrompt]
       .filter((section): section is string => Boolean(section?.trim()))
       .join('\n\n');
   }
@@ -2009,6 +2019,35 @@ export class CoworkRunner extends EventEmitter {
 
       const memoryServerName = `user-memory-${sessionId.slice(0, 8)}`;
       const memoryTools: any[] = [
+        tool(
+          QingShuFileToolName.Publish,
+          'Upload a local file to QingShu managed storage and return a cross-device shareUrl. Requires QingShu login. Max file size: 50MB.',
+          {
+            filePath: z.string().min(1),
+          },
+          async (args: { filePath: string }) => {
+            if (!this.qingShuFilePublisher) {
+              return {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify({
+                    success: false,
+                    error: 'QingShu file publisher is not initialized',
+                  }, null, 2),
+                }],
+                isError: true,
+              } as any;
+            }
+            const result = await this.qingShuFilePublisher(args.filePath);
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify(result, null, 2),
+              }],
+              isError: result.success !== true,
+            } as any;
+          }
+        ),
         tool(
           'conversation_search',
           'Search prior conversations by query and return Claude-style <chat> blocks.',

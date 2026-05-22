@@ -80,6 +80,31 @@ export function setQingShuInvocationContextGetter(getter: () => {
 // Keyed by modelId → { supportsImage }
 let serverModelMetadataCache: Map<string, { supportsImage?: boolean }> = new Map();
 
+function summarizeAccessTokenForLog(accessToken?: string | null): Record<string, unknown> {
+  const summary: Record<string, unknown> = {
+    present: Boolean(accessToken),
+    length: accessToken?.length || 0,
+  };
+  if (!accessToken) {
+    return summary;
+  }
+  const parts = accessToken.split('.');
+  summary.jwtLike = parts.length === 3;
+  if (parts.length !== 3) {
+    return summary;
+  }
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString()) as Record<string, unknown>;
+    const expiresAt = typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+    summary.expiresAt = expiresAt ? new Date(expiresAt).toISOString() : null;
+    summary.expiresInMs = expiresAt ? expiresAt - Date.now() : null;
+    summary.userId = payload.token_user_id ?? payload.userId ?? payload.user_id ?? payload.sub ?? null;
+  } catch {
+    summary.parseError = true;
+  }
+  return summary;
+}
+
 export function updateServerModelMetadata(models: Array<{ modelId: string; supportsImage?: boolean }>): boolean {
   const previous = serializeServerModelMetadata(getAllServerModelMetadata());
   const nextCache = new Map(models.map(m => [m.modelId, { supportsImage: m.supportsImage }]));
@@ -240,12 +265,25 @@ function providerRequiresApiKey(providerName: string): boolean {
 function tryQingShuServerFallback(modelId?: string): MatchedProvider | null {
   const tokens = authTokensGetter?.();
   const serverBaseUrl = serverBaseUrlGetter?.();
-  if (!tokens?.accessToken || !serverBaseUrl) return null;
   const effectiveModelId = modelId?.trim() || '';
-  if (!effectiveModelId) return null;
+  if (!tokens?.accessToken || !serverBaseUrl || !effectiveModelId) {
+    console.warn('[ClaudeSettings] qingshu-server fallback unavailable:', {
+      modelId: effectiveModelId || null,
+      hasAccessToken: Boolean(tokens?.accessToken),
+      hasRefreshToken: Boolean(tokens?.refreshToken),
+      hasServerBaseUrl: Boolean(serverBaseUrl),
+      token: summarizeAccessTokenForLog(tokens?.accessToken),
+    });
+    return null;
+  }
   const baseURL = `${serverBaseUrl}${QINGSHU_SERVER_PROXY_PATH}`;
   const cachedMeta = serverModelMetadataCache.get(effectiveModelId);
-  console.log('[ClaudeSettings] qingshu-server fallback activated:', { baseURL, modelId: effectiveModelId, supportsImage: cachedMeta?.supportsImage });
+  console.log('[ClaudeSettings] qingshu-server fallback activated:', {
+    baseURL,
+    modelId: effectiveModelId,
+    supportsImage: cachedMeta?.supportsImage,
+    token: summarizeAccessTokenForLog(tokens.accessToken),
+  });
   return {
     providerName: ProviderName.QingShuServer,
     providerConfig: { enabled: true, apiKey: tokens.accessToken, baseUrl: baseURL, apiFormat: 'openai', models: buildServerFallbackModels(effectiveModelId) },
@@ -453,6 +491,15 @@ export function resolveCurrentApiConfig(target: OpenAICompatProxyTarget = 'local
     provider: matched.providerName,
     ...(isQingShuServerProvider(matched.providerName) ? (qingShuInvocationContextGetter?.() ?? {}) : {}),
   });
+  if (isQingShuServerProvider(matched.providerName)) {
+    console.log('[ClaudeSettings] configured QingShu server through compatibility proxy:', {
+      provider: matched.providerName,
+      model: matched.modelId,
+      upstreamBaseURL: resolvedBaseURL,
+      hasResolvedApiKey: Boolean(resolvedApiKey),
+      proxyStatus: getCoworkOpenAICompatProxyStatus(),
+    });
+  }
 
   const proxyBaseURL = getCoworkOpenAICompatProxyBaseURL(target);
   if (!proxyBaseURL) {

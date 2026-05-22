@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { buildScheduledTaskEnginePrompt } from '../../scheduledTask/enginePrompt';
+import { QINGSHU_FILE_PUBLISH_PROMPT } from '../../shared/qingshuFile/prompt';
 import { AuthType, OpenClawApi as OpenClawApiConst, OpenClawProviderId, ProviderName, ProviderRegistry } from '../../shared/providers';
 import type { Agent,CoworkConfig, CoworkExecutionMode, UserInstalledPlugin } from '../coworkStore';
 import type { DiscordInstanceConfig, DiscordOpenClawConfig, EmailMultiInstanceConfig, IMSettings,TelegramInstanceConfig, TelegramOpenClawConfig } from '../im/types';
@@ -2492,6 +2493,7 @@ export class OpenClawConfigSync {
 
       sections.push(MANAGED_WEB_SEARCH_POLICY_PROMPT);
       sections.push(MANAGED_EXEC_SAFETY_PROMPT);
+      sections.push(QINGSHU_FILE_PUBLISH_PROMPT);
       sections.push(MANAGED_MEMORY_POLICY_PROMPT);
 
       // Keep scheduled-task policy after skills so native channel sessions

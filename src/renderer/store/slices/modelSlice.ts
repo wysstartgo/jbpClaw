@@ -12,6 +12,7 @@ export interface Model {
   supportsImage?: boolean;
   isServerModel?: boolean; // 是否为服务端套餐模型
   serverApiFormat?: string; // 服务端模型的 API 格式 ("openai" | "anthropic")
+  modelKind?: string; // 服务端模型类型，客户端模型选择器只展示 chat
 }
 
 export function getModelIdentityKey(model: Pick<Model, 'id' | 'providerKey'>): string {

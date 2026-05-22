@@ -48,6 +48,7 @@ import { CoworkIpcChannel } from '../shared/cowork/constants';
 import { PetIpcChannel } from '../shared/pet/constants';
 import type { PetConfig, PetImportRequest, PetRuntimeState } from '../shared/pet/types';
 import type { Platform } from '../shared/platform';
+import { QingShuFileIpcChannel } from '../shared/qingshuFile/constants';
 import { SpeechIpcChannel } from '../shared/speech/constants';
 import { TtsIpcChannel } from '../shared/tts/constants';
 import { WakeInputIpcChannel } from '../shared/wakeInput/constants';
@@ -95,6 +96,10 @@ contextBridge.exposeInMainWorld('electron', {
   qingshuManaged: {
     syncCatalog: () => ipcRenderer.invoke('qingshuManaged:syncCatalog'),
     getCatalog: () => ipcRenderer.invoke('qingshuManaged:getCatalog'),
+  },
+  qingshuFile: {
+    publish: (filePath: string) =>
+      ipcRenderer.invoke(QingShuFileIpcChannel.Publish, filePath),
   },
   mcp: {
     list: () => ipcRenderer.invoke('mcp:list'),

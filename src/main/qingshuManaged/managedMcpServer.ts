@@ -10,6 +10,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
+import { QingShuFileToolName } from '../../shared/qingshuFile/constants';
 import { QingShuManagedToolRuntime } from '../../shared/qingshuManaged/constants';
 import type { QingShuManagedCatalogService } from './catalogService';
 
@@ -32,7 +33,27 @@ export type QingShuManagedMcpServerConfig = {
   headers: Record<string, string>;
 };
 
+export type QingShuLocalToolHandler = (
+  args: Record<string, unknown>,
+  options?: { signal?: AbortSignal },
+) => Promise<{ content: Array<{ type: string; text?: string }>; isError: boolean }>;
+
 const SECRET_HEADER = 'x-qingshu-managed-mcp-secret';
+
+const QINGSHU_FILE_PUBLISH_TOOL = {
+  name: QingShuFileToolName.Publish,
+  description: 'Upload a local file to QingShu managed storage and return a cross-device shareUrl. Requires QingShu login. Max file size: 50MB.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      filePath: {
+        type: 'string',
+        description: 'Absolute or workspace-relative local file path to upload.',
+      },
+    },
+    required: ['filePath'],
+  },
+};
 
 const normalizeToolInputSchema = (inputSchema: Record<string, unknown>): ToolInputSchema => {
   const normalized: ToolInputSchema = {
@@ -58,10 +79,13 @@ export class QingShuManagedMcpServer {
   private readonly secret = randomUUID();
   private readonly transports = new Map<string, TransportEntry>();
 
-  constructor(private readonly catalogService: QingShuManagedCatalogService) {}
+  constructor(
+    private readonly catalogService: QingShuManagedCatalogService,
+    private readonly localToolHandlers: Record<string, QingShuLocalToolHandler> = {},
+  ) {}
 
   getServerConfig(): QingShuManagedMcpServerConfig | null {
-    if (!this.port || this.catalogService.getManagedToolRuntimeManifest().length === 0) {
+    if (!this.port || this.getRuntimeTools().length === 0) {
       return null;
     }
     return {
@@ -97,6 +121,13 @@ export class QingShuManagedMcpServer {
           });
         });
 
+        server.once('close', () => {
+          if (this.server === server) {
+            this.server = null;
+            this.port = null;
+          }
+          console.log('[QingShuManagedMcp] server stopped');
+        });
         server.once('error', reject);
         server.listen(port, '127.0.0.1', () => {
           this.server = server;
@@ -127,13 +158,15 @@ export class QingShuManagedMcpServer {
       return;
     }
 
+    const server = this.server;
     await new Promise<void>((resolve) => {
-      this.server?.close(() => resolve());
-      setTimeout(() => this.server?.closeAllConnections?.(), 2000);
+      server.close(() => resolve());
+      setTimeout(() => server.closeAllConnections?.(), 2000);
     });
-    this.server = null;
-    this.port = null;
-    console.log('[QingShuManagedMcp] server stopped');
+    if (this.server === server) {
+      this.server = null;
+      this.port = null;
+    }
   }
 
   private createMcpServer(): Server {
@@ -152,7 +185,7 @@ export class QingShuManagedMcpServer {
     );
 
     server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: this.catalogService.getManagedToolRuntimeManifest().map((tool) => ({
+      tools: this.getRuntimeTools().map((tool) => ({
         name: tool.name,
         description: tool.description,
         inputSchema: normalizeToolInputSchema(tool.inputSchema),
@@ -160,6 +193,11 @@ export class QingShuManagedMcpServer {
     }));
 
     server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+      const localToolHandler = this.localToolHandlers[request.params.name];
+      if (localToolHandler) {
+        return localToolHandler(request.params.arguments ?? {}, { signal: extra.signal });
+      }
+
       const result = await this.catalogService.invokeManagedMcpTool(
         request.params.name,
         request.params.arguments ?? {},
@@ -175,6 +213,17 @@ export class QingShuManagedMcpServer {
     });
 
     return server;
+  }
+
+  private getRuntimeTools() {
+    const tools = [
+      ...this.catalogService.getManagedToolRuntimeManifest(),
+      ...(this.localToolHandlers[QingShuFileToolName.Publish] ? [{
+        server: QingShuManagedToolRuntime.ServerName,
+        ...QINGSHU_FILE_PUBLISH_TOOL,
+      }] : []),
+    ];
+    return Array.from(new Map(tools.map((tool) => [tool.name, tool])).values());
   }
 
   private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {

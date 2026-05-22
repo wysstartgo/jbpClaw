@@ -3379,6 +3379,9 @@ const Settings: React.FC<SettingsProps> = ({
                       placeholder={i18nService.t('authQtbApiBaseUrlPlaceholder')}
                       className="w-full rounded-lg border dark:border-claude-darkBorder border-claude-border px-3 py-2 text-sm dark:bg-claude-darkSurface bg-white dark:text-claude-darkText text-claude-text"
                     />
+                    <p className="mt-1 text-[11px] dark:text-claude-darkSecondaryText text-claude-secondaryText">
+                      {i18nService.t('authQtbApiBaseUrlHint')}
+                    </p>
                   </label>
 
                   <label className="block">

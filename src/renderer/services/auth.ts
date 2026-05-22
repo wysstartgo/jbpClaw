@@ -601,13 +601,16 @@ class AuthService {
         return;
       }
       if (modelsResult.success && modelsResult.models) {
-        const serverModels: Model[] = modelsResult.models.map((m: { modelId: string; modelName: string; provider: string; apiFormat: string; supportsImage?: boolean }) => ({
+        const serverModels: Model[] = modelsResult.models
+          .filter((m: { modelKind?: string }) => (m.modelKind ?? 'chat') === 'chat')
+          .map((m: { modelId: string; modelName: string; provider: string; apiFormat: string; modelKind?: string; supportsImage?: boolean }) => ({
           id: m.modelId,
           name: m.modelName,
           provider: m.provider,
           providerKey: ProviderName.QingShuServer,
           isServerModel: true,
           serverApiFormat: m.apiFormat,
+          modelKind: m.modelKind ?? 'chat',
           supportsImage: m.supportsImage ?? false,
         }));
         store.dispatch(setServerModels(serverModels));

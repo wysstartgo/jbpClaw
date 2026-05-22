@@ -139,6 +139,7 @@ type QtbModel = {
   modelName: string;
   provider: string;
   apiFormat: string;
+  modelKind?: string;
   supportsImage?: boolean;
 };
 
@@ -1294,15 +1295,16 @@ export const createQtbAuthAdapter = (deps: AuthAdapterDeps): AuthAdapter => {
           };
         }
 
-        if (body.data.length === 0) {
+        const chatModels = body.data.filter(model => (model.modelKind ?? 'chat') === 'chat');
+        if (chatModels.length === 0) {
           console.log('[QtbAuth] server models request returned an empty list');
         } else {
-          console.log(`[QtbAuth] loaded ${body.data.length} server models`);
+          console.log(`[QtbAuth] loaded ${chatModels.length} server chat models`);
         }
-        if (deps.updateServerModelMetadata(body.data)) {
+        if (deps.updateServerModelMetadata(chatModels)) {
           notifyServerModelMetadataUpdated(deps, 'QtbAuth');
         }
-        return { success: true, models: body.data };
+        return { success: true, models: chatModels };
       } catch (error) {
         console.error('[QtbAuth] server models request crashed:', error);
         return {

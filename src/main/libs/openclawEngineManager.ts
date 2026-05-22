@@ -21,6 +21,7 @@ import {
   listLocalOpenClawExtensionIds,
   syncLocalOpenClawExtensionsIntoRuntime,
 } from './openclawLocalExtensions';
+import { getOpenClawTokenProxyPort } from './openclawTokenProxy';
 import { appendPythonRuntimeToEnv } from './pythonRuntime';
 import { isSystemProxyEnabled, resolveSystemProxyUrlForTargets } from './systemProxy';
 
@@ -504,11 +505,15 @@ export class OpenClawEngineManager extends EventEmitter {
     const electronNodeRuntimePath = getElectronNodeRuntimePath();
     const cliShimDir = this.ensureBundledCliShims();
     const skillsRoot = getSkillsRoot().replace(/\\/g, '/');
+    const qingShuTokenProxyPort = getOpenClawTokenProxyPort();
 
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       SKILLS_ROOT: skillsRoot,
       LOBSTERAI_SKILLS_ROOT: skillsRoot,
+      ...(qingShuTokenProxyPort
+        ? { QINGSHU_IMAGE_PROXY_BASE_URL: `http://127.0.0.1:${qingShuTokenProxyPort}/v1` }
+        : {}),
       OPENCLAW_HOME: this.baseDir,
       OPENCLAW_STATE_DIR: this.stateDir,
       OPENCLAW_CONFIG_PATH: this.configPath,

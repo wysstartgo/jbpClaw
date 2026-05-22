@@ -1,6 +1,7 @@
 import type { AppUpdateCheckResult, AppUpdateInfo as RuntimeAppUpdateInfo, AppUpdateRuntimeState, AppUpdateSource } from '../../shared/appUpdate/constants';
 import type { NimQrLoginPollResult, NimQrLoginStartResult } from '../../shared/im/nimQrLogin';
 import type { PetCatalogEntry, PetConfig, PetImportRequest, PetImportResult, PetRuntimeState } from '../../shared/pet/types';
+import type { QingShuFilePublishResult } from '../../shared/qingshuFile/types';
 
 interface ApiResponse {
   ok: boolean;
@@ -514,6 +515,9 @@ interface IElectronAPI {
     syncCatalog: () => Promise<{ success: boolean; snapshot?: QingShuManagedCatalogSnapshot; error?: string }>;
     getCatalog: () => Promise<{ success: boolean; snapshot?: QingShuManagedCatalogSnapshot; error?: string }>;
   };
+  qingshuFile: {
+    publish: (filePath: string) => Promise<QingShuFilePublishResult>;
+  };
   mcp: {
     list: () => Promise<{ success: boolean; servers?: McpServerConfigIPC[]; error?: string }>;
     create: (data: any) => Promise<{ success: boolean; servers?: McpServerConfigIPC[]; error?: string }>;
@@ -944,7 +948,7 @@ interface IElectronAPI {
     logout: () => Promise<{ success: boolean }>;
     refreshToken: () => Promise<{ success: boolean; accessToken?: string }>;
     getAccessToken: () => Promise<string | null>;
-    getModels: () => Promise<{ success: boolean; models?: Array<{ modelId: string; modelName: string; provider: string; apiFormat: string }> }>;
+    getModels: () => Promise<{ success: boolean; models?: Array<{ modelId: string; modelName: string; provider: string; apiFormat: string; modelKind?: string; supportsImage?: boolean }> }>;
     getProfileSummary: () => Promise<{ success: boolean; data?: ProfileSummaryData }>;
     getPendingCallback: () => Promise<AuthCallbackPayload | null>;
     getPendingBridgeCode: () => Promise<{ code: string } | null>;

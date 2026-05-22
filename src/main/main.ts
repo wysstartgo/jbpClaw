@@ -31,6 +31,9 @@ import { CoworkIpcChannel } from '../shared/cowork/constants';
 import { PetStatus } from '../shared/pet/constants';
 import { type Platform as SharedPlatform,PlatformRegistry } from '../shared/platform';
 import { OpenClawProviderId, ProviderName, isQingShuServerProvider } from '../shared/providers';
+import { QingShuFileIpcChannel, QingShuFileToolName } from '../shared/qingshuFile/constants';
+import { QINGSHU_FILE_PUBLISH_PROMPT } from '../shared/qingshuFile/prompt';
+import type { QingShuFilePublishResult } from '../shared/qingshuFile/types';
 import {
   getQingShuManagedCapabilityErrorCode,
   QingShuManagedAccessState,
@@ -209,6 +212,7 @@ const IPC_MAX_DEPTH = 5;
 const IPC_MAX_KEYS = 80;
 const IPC_MAX_ITEMS = 40;
 const MAX_INLINE_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+const MAX_QINGSHU_FILE_UPLOAD_BYTES = 50 * 1024 * 1024;
 const ENGINE_NOT_READY_CODE = 'ENGINE_NOT_READY';
 const PowerSaveBlockerType = {
   PreventAppSuspension: 'prevent-app-suspension',
@@ -238,6 +242,22 @@ const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   '.webp': 'image/webp',
   '.bmp': 'image/bmp',
   '.svg': 'image/svg+xml',
+};
+const QINGSHU_FILE_MIME_BY_EXTENSION: Record<string, string> = {
+  ...IMAGE_MIME_BY_EXTENSION,
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.csv': 'text/csv',
+  '.txt': 'text/plain',
+  '.md': 'text/markdown',
+  '.json': 'application/json',
+  '.html': 'text/html',
+  '.htm': 'text/html',
 };
 
 const sanitizeExportFileName = (value: string): string => {
@@ -292,6 +312,11 @@ const inferImageMimeTypeFromFilePath = (filePath: string, fallback?: string): st
   }
   const extension = path.extname(filePath).toLowerCase();
   return IMAGE_MIME_BY_EXTENSION[extension] || 'application/octet-stream';
+};
+
+const inferQingShuUploadMimeType = (filePath: string): string => {
+  const extension = path.extname(filePath).toLowerCase();
+  return QINGSHU_FILE_MIME_BY_EXTENSION[extension] || 'application/octet-stream';
 };
 
 const resolveCoworkImageAttachmentsForRuntime = async (
@@ -921,6 +946,7 @@ let qingShuExtensionHost: QingShuExtensionHost | null = null;
 let qingShuGovernanceService: QingShuGovernanceService | null = null;
 let qingShuManagedCatalogService: QingShuManagedCatalogService | null = null;
 let qingShuManagedMcpServer: QingShuManagedMcpServer | null = null;
+let publishQingShuFileHandler: ((filePath?: string) => Promise<QingShuFilePublishResult>) | null = null;
 let appUpdateCoordinator: AppUpdateCoordinator | null = null;
 let openClawBootstrapPromise: Promise<OpenClawEngineStatus> | null = null;
 let openClawStatusForwarderBound = false;
@@ -1581,7 +1607,18 @@ const ensureQingShuManagedMcpServer = async (): Promise<void> => {
     return;
   }
   if (!qingShuManagedMcpServer) {
-    qingShuManagedMcpServer = new QingShuManagedMcpServer(qingShuManagedCatalogService);
+    qingShuManagedMcpServer = new QingShuManagedMcpServer(qingShuManagedCatalogService, {
+      [QingShuFileToolName.Publish]: async (args) => {
+        const filePath = typeof args.filePath === 'string' ? args.filePath : '';
+        const result = publishQingShuFileHandler
+          ? await publishQingShuFileHandler(filePath)
+          : { success: false, error: 'QingShu file publisher is not initialized' };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: result.success !== true,
+        };
+      },
+    });
   }
   await qingShuManagedMcpServer.start();
 };
@@ -1600,7 +1637,7 @@ const getQingShuManagedNativeMcpServerConfig = async (): Promise<ResolvedMcpServ
 
 const refreshQingShuManagedMcpRuntimeConfig = (reason: string): void => {
   void ensureQingShuManagedMcpServer()
-    .then(() => syncOpenClawConfig({ reason, restartGatewayIfRunning: false }))
+    .then(() => syncOpenClawConfig({ reason, restartGatewayIfRunning: true }))
     .catch((error) => {
       console.warn('[QingShuManagedMcp] failed to refresh native MCP config:', error);
     });
@@ -1754,6 +1791,12 @@ const getCoworkRunner = () => {
     // Provide MCP server configuration to the runner
     coworkRunner.setMcpServerProvider(() => {
       return getMcpStore().getEnabledServers();
+    });
+    coworkRunner.setQingShuFilePublisher(async (filePath?: string) => {
+      if (!publishQingShuFileHandler) {
+        return { success: false, error: 'QingShu file publisher is not initialized' };
+      }
+      return publishQingShuFileHandler(filePath);
     });
   }
   return coworkRunner;
@@ -2173,6 +2216,7 @@ function mergeCoworkSystemPrompt(
 ): string | undefined {
   const sections = [
     buildScheduledTaskEnginePrompt(engine),
+    QINGSHU_FILE_PUBLISH_PROMPT,
     systemPrompt?.trim() || '',
   ].filter(Boolean);
   return sections.length > 0 ? sections.join('\n\n') : undefined;
@@ -3357,6 +3401,94 @@ if (!gotTheLock) {
     return getCurrentAuthBackendConfig().apiBaseUrl;
   };
 
+  const publishQingShuFile = async (filePath?: string): Promise<QingShuFilePublishResult> => {
+    try {
+      if (typeof filePath !== 'string' || !filePath.trim()) {
+        return { success: false, error: 'Missing file path' };
+      }
+
+      const tokens = getAuthTokens();
+      if (!tokens?.accessToken) {
+        return { success: false, error: 'QingShu login is required before uploading files' };
+      }
+
+      const apiBaseUrl = getCurrentAuthApiBaseUrl();
+      if (!apiBaseUrl) {
+        return { success: false, error: 'QingShu API base URL is not configured' };
+      }
+
+      const resolvedPath = resolveShellFilePath(filePath);
+      const stat = await fs.promises.stat(resolvedPath);
+      if (!stat.isFile()) {
+        return { success: false, error: `Path is not a file: ${resolvedPath}` };
+      }
+      if (stat.size > MAX_QINGSHU_FILE_UPLOAD_BYTES) {
+        return {
+          success: false,
+          error: `File too large (max ${Math.floor(MAX_QINGSHU_FILE_UPLOAD_BYTES / (1024 * 1024))}MB)`,
+        };
+      }
+
+      const buffer = await fs.promises.readFile(resolvedPath);
+      const contentType = inferQingShuUploadMimeType(resolvedPath);
+      const formData = new FormData();
+      formData.append(
+        'file',
+        new Blob([buffer], { type: contentType }),
+        sanitizeAttachmentFileName(path.basename(resolvedPath)),
+      );
+
+      const uploadUrl = new URL('/api/qingshu-claw/files/upload', apiBaseUrl).toString();
+      const response = await session.defaultSession.fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${tokens.accessToken}`,
+          auth: `Bearer ${tokens.accessToken}`,
+        },
+        body: formData,
+      });
+
+      const body = await response.json().catch((): null => null) as {
+        code?: number;
+        msg?: string;
+        data?: {
+          fileId?: string;
+          shareUrl?: string;
+          originalFileName?: string;
+          contentType?: string;
+          size?: number;
+          checksum?: string;
+          expiresAt?: string;
+        };
+      } | null;
+
+      if (!response.ok || !body || body.code !== 200 || !body.data?.fileId || !body.data?.shareUrl) {
+        return {
+          success: false,
+          error: body?.msg || `QingShu file upload failed: ${response.status}`,
+        };
+      }
+
+      return {
+        success: true,
+        fileId: body.data.fileId,
+        shareUrl: body.data.shareUrl,
+        originalFileName: body.data.originalFileName || path.basename(resolvedPath),
+        contentType: body.data.contentType || contentType,
+        size: body.data.size ?? stat.size,
+        checksum: body.data.checksum,
+        expiresAt: body.data.expiresAt,
+      };
+    } catch (error) {
+      console.error('[QingShuFile] file upload failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to upload file',
+      };
+    }
+  };
+  publishQingShuFileHandler = publishQingShuFile;
+
   const resolveQingShuModuleFeatureFlags = (
     moduleId: string,
     enabledByDefault: boolean,
@@ -3499,7 +3631,7 @@ if (!gotTheLock) {
     }
     const openClawResult = await syncOpenClawConfig({
       reason,
-      restartGatewayIfRunning: false,
+      restartGatewayIfRunning: true,
     });
     if (!openClawResult.success) {
       console.warn(`[QingShuManaged] failed to sync OpenClaw config for "${reason}":`, openClawResult.error);
@@ -6330,6 +6462,11 @@ if (!gotTheLock) {
     }
   );
 
+  ipcMain.handle(
+    QingShuFileIpcChannel.Publish,
+    async (_event, filePath?: string): Promise<QingShuFilePublishResult> => publishQingShuFile(filePath),
+  );
+
   ipcMain.handle(SpeechIpcChannel.GetAvailability, async () => {
     if (!isMacSpeechInputEnabled()) {
       return {
@@ -7501,7 +7638,7 @@ end tell'`, { timeout: 5000 });
       await startOpenClawTokenProxy({
         getAuthTokens,
         refreshToken: refreshOnce,
-        getServerBaseUrl: getServerApiBaseUrl,
+        getServerBaseUrl: () => getCurrentAuthApiBaseUrl() || getServerApiBaseUrl(),
       });
       console.log('[Main] OpenClaw token proxy started');
     } catch (err) {

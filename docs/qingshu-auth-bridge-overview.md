@@ -222,12 +222,30 @@ Web 侧飞书登录走已有网页登录回调逻辑：
 - `GET /api/qingshu-claw/auth/profile-summary`
 - `GET /api/qingshu-claw/models/available`
 - `POST /api/qingshu-claw/proxy/v1/chat/completions`
+- `POST /api/qingshu-claw/proxy/v1/images/generations`
+- `POST /api/qingshu-claw/proxy/v1/images/edits`
 
 这些接口的共同特征：
 
 - 都由平台用户身份驱动
 - 都通过已有平台鉴权识别当前用户
 - 桌面端不直接复刻 Web 端业务页面，而是消费适配后的摘要接口
+
+### 6.1 青数后台 Base URL 真源
+
+`QingShuClaw` 中青数后台地址的唯一真源是客户端配置 `config.auth.qtbApiBaseUrl`，默认值定义在 `src/common/auth.ts` 的 `DEFAULT_QTB_API_BASE_URL`。
+
+这一路径同时影响：
+
+- 登录、刷新、用户资料、额度查询
+- 青数内置模型列表：`/api/qingshu-claw/models/available`
+- 青数内置模型调用：`/api/qingshu-claw/proxy/v1/chat/completions`
+- 青数图片生成/编辑代理：`/api/qingshu-claw/proxy/v1/images/generations`、`/api/qingshu-claw/proxy/v1/images/edits`
+- SkillHub managed catalog、managed tool、managed skill 包下载
+
+OpenClaw 配置里的 `models.providers.qingshu-server.baseUrl` 不是远端青数后台地址，而是 `QingShuClaw` 主进程启动的本机 token proxy，例如 `http://127.0.0.1:<port>/v1`。它由 `src/main/libs/openclawConfigSync.ts` 自动生成，`qingshu-image` 等 Skill 会优先使用环境变量 `QINGSHU_IMAGE_PROXY_BASE_URL`，缺失时从 `openclaw.json` 读取这个本机代理地址。
+
+因此切换测试、预发、生产环境时，应修改设置页“青数后台 API 地址”（即 `config.auth.qtbApiBaseUrl`），不要手动修改 `openclaw.json` 里的 `qingshu-server.baseUrl`。手动修改 `qingshu-server.baseUrl` 只会绕过本机 token proxy，导致登录态、套餐计量、图片代理和 SkillHub 能力不一致，并且下一次 OpenClaw 配置同步时也会被覆盖。
 
 ## 7. 双向免登方案
 
@@ -483,6 +501,8 @@ Web 侧：
 - `GET /api/qingshu-claw/auth/profile-summary`
 - `GET /api/qingshu-claw/models/available`
 - `POST /api/qingshu-claw/proxy/v1/chat/completions`
+- `POST /api/qingshu-claw/proxy/v1/images/generations`
+- `POST /api/qingshu-claw/proxy/v1/images/edits`
 
 ### 14.4 桥接免登接口
 
