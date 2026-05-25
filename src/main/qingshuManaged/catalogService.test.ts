@@ -161,4 +161,40 @@ describe('QingShuManagedCatalogService auth invalidation', () => {
     expect(fetchFn).toHaveBeenCalledTimes(2);
     expect(result.isError).toBe(false);
   });
+
+  test('sends trace metadata and auth headers when invoking managed tools', async () => {
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify({
+      code: 200,
+      data: {
+        toolName: 'claw.dictionary.search',
+        success: true,
+        summary: 'ok',
+        data: { items: [] },
+      },
+    }), { status: 200 }));
+    const service = new QingShuManagedCatalogService({
+      fetchFn,
+      getAuthAdapter: createAuthAdapter,
+      resolveApiBaseUrl: () => 'https://qingshu.example',
+      isAuthenticated: () => true,
+      getDeviceId: () => 'device-001',
+      skillManager: {
+        listSkills: () => [],
+      } as unknown as SkillManager,
+    });
+
+    await service.invokeManagedMcpTool('claw.dictionary.search', {
+      keyword: '老乡鸡',
+    });
+
+    const requestInit = fetchFn.mock.calls[0]?.[1];
+    expect(requestInit?.headers).toBeInstanceOf(Headers);
+    const headers = requestInit?.headers as Headers;
+    const requestId = headers.get('x-qingshu-request-id');
+    expect(requestId).toMatch(/^qingshu_tool_/);
+    expect(headers.get('traceId')).toBe(requestId);
+    expect(headers.get('x-qingshu-device-id')).toBe('device-001');
+    expect(headers.get('Authorization')).toBe('Bearer expired-token');
+    expect(headers.get('auth')).toBe('Bearer expired-token');
+  });
 });

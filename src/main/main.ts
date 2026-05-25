@@ -3754,6 +3754,7 @@ if (!gotTheLock) {
         getAuthAdapter: getCurrentAuthAdapter,
         resolveApiBaseUrl: getCurrentAuthApiBaseUrl,
         isAuthenticated: hasQingShuAuthSession,
+        getDeviceId: getOrCreateInstallationUuid,
         skillManager: getSkillManager(),
         store: getStore(),
         onAuthSessionInvalidated: clearLocalAuthSession,

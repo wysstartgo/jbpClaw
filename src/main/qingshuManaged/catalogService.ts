@@ -20,6 +20,7 @@ type QingShuManagedCatalogServiceDeps = {
   getAuthAdapter: () => AuthAdapter;
   resolveApiBaseUrl: () => string | null;
   isAuthenticated: () => boolean;
+  getDeviceId?: () => string | null;
   skillManager: SkillManager;
   store?: {
     get<T = unknown>(key: string): T | undefined;
@@ -63,6 +64,11 @@ const QINGSHU_AUTHENTICATION_FAILED_PATTERN = /authentication failed|please logi
 const QINGSHU_LOCAL_ONLY_TOOL_NAMES = new Set<string>([
   QingShuFileToolName.Publish,
 ]);
+const QINGSHU_MANAGED_TOOL_HEADERS = {
+  TraceId: 'traceId',
+  RequestId: 'x-qingshu-request-id',
+  DeviceId: 'x-qingshu-device-id',
+} as const;
 
 const emptySnapshot = (): QingShuManagedCatalogSnapshot => ({
   catalogVersion: '',
@@ -103,6 +109,12 @@ const buildManagedToolAlias = (toolName: string): string =>
 
 const summarizeToolArgs = (args: Record<string, unknown>): string =>
   clipText(stringifyToolPayload(args), 512);
+
+const summarizeToolPayload = (payload: unknown): string =>
+  clipText(stringifyToolPayload(payload), 1000);
+
+const createManagedToolRequestId = (): string =>
+  `qingshu_tool_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
 const isAbortError = (error: unknown): boolean =>
   error instanceof Error
@@ -383,17 +395,26 @@ export class QingShuManagedCatalogService {
 
     const toolAlias = buildManagedToolAlias(toolName);
     const backendPath = `/api/qingshu-claw/managed/tools/${encodeURIComponent(toolName)}/invoke`;
+    const requestId = createManagedToolRequestId();
+    const traceId = requestId;
+    const deviceId = this.deps.getDeviceId?.()?.trim() || null;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      [QINGSHU_MANAGED_TOOL_HEADERS.TraceId]: traceId,
+      [QINGSHU_MANAGED_TOOL_HEADERS.RequestId]: requestId,
+    };
+    if (deviceId) {
+      headers[QINGSHU_MANAGED_TOOL_HEADERS.DeviceId] = deviceId;
+    }
     console.log(
-      `[QingShuManaged] invoking MCP tool "${toolAlias}" mapped to "${toolName}" with args ${summarizeToolArgs(args)}`,
+      `[QingShuManaged] invoking MCP tool "${toolAlias}" mapped to "${toolName}" requestId=${requestId} traceId=${traceId} deviceId=${deviceId ?? 'unknown'} with args ${summarizeToolArgs(args)}`,
     );
     try {
       const body = await this.fetchResult<ManagedToolInvokeResponse>(
         backendPath,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers,
           signal: options?.signal,
           body: JSON.stringify({
             arguments: args,
@@ -408,7 +429,7 @@ export class QingShuManagedCatalogService {
         || (body.success ? 'Managed tool invocation succeeded' : body.errorMessage?.trim())
         || 'Managed tool invocation finished';
       console.log(
-        `[QingShuManaged] MCP tool "${toolAlias}" completed with success=${body.success === true} summary="${clipText(summaryText, 240)}"`,
+        `[QingShuManaged] MCP tool "${toolAlias}" completed requestId=${requestId} traceId=${traceId} deviceId=${deviceId ?? 'unknown'} success=${body.success === true} summary="${clipText(summaryText, 240)}" payload=${summarizeToolPayload(body.data ?? body.errorMessage ?? {})}`,
       );
 
       return {
@@ -424,7 +445,7 @@ export class QingShuManagedCatalogService {
       if (isAbortError(error)) {
         const message = `Managed tool invocation timed out after ${Math.floor(MANAGED_TOOL_TIMEOUT_MS / 1000)}s`;
         console.error(
-          `[QingShuManaged] MCP tool "${toolAlias}" mapped to "${toolName}" timed out via "${backendPath}":`,
+          `[QingShuManaged] MCP tool "${toolAlias}" mapped to "${toolName}" timed out requestId=${requestId} traceId=${traceId} deviceId=${deviceId ?? 'unknown'} via "${backendPath}":`,
           error,
         );
         return {
@@ -438,7 +459,7 @@ export class QingShuManagedCatalogService {
         };
       }
       console.error(
-        `[QingShuManaged] MCP tool "${toolAlias}" mapped to "${toolName}" failed via "${backendPath}":`,
+        `[QingShuManaged] MCP tool "${toolAlias}" mapped to "${toolName}" failed requestId=${requestId} traceId=${traceId} deviceId=${deviceId ?? 'unknown'} via "${backendPath}":`,
         error,
       );
       throw error;

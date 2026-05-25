@@ -8,6 +8,7 @@ release-repack*
 outputs/
 dist/
 dist-electron/
+main.js
 coverage/
 .nyc_output/
 .cache/
