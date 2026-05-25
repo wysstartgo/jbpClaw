@@ -298,6 +298,10 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke('cowork:session:get', sessionId),
     remoteManaged: (sessionId: string) =>
       ipcRenderer.invoke('cowork:session:remoteManaged', sessionId),
+    getSubTaskHistory: (options: { parentSessionId: string; agentId: string; sessionKey?: string }) =>
+      ipcRenderer.invoke('cowork:subTask:history', options),
+    listSubagentSessions: (parentSessionId: string) =>
+      ipcRenderer.invoke('cowork:subagent:list', { parentSessionId }),
     listSessions: (agentId?: string) =>
       ipcRenderer.invoke('cowork:session:list', agentId),
     exportResultImage: (options: { rect: { x: number; y: number; width: number; height: number }; defaultFileName?: string }) =>

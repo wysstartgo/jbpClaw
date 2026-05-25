@@ -667,6 +667,38 @@ interface IElectronAPI {
     editUserMessageAndRerun: (options: { sessionId: string; messageId: string; content: string; metadata?: CoworkMessage['metadata']; systemPrompt?: string; activeSkillIds?: string[]; imageAttachments?: Array<{ name: string; mimeType?: string; base64Data?: string; path?: string; sizeBytes?: number }> }) => Promise<{ success: boolean; session?: CoworkSession; error?: string; code?: string; engineStatus?: OpenClawEngineStatus }>;
     getSession: (sessionId: string) => Promise<{ success: boolean; session?: CoworkSession; error?: string }>;
     remoteManaged: (sessionId: string) => Promise<{ success: boolean; remoteManaged: boolean; error?: string }>;
+    getSubTaskHistory: (options: {
+      parentSessionId: string;
+      agentId: string;
+      sessionKey?: string;
+    }) => Promise<{
+      success: boolean;
+      messages?: Array<{
+        id: string;
+        runId: string;
+        type: string;
+        content: string;
+        metadata: string | null;
+        createdAt: number;
+        sequence: number;
+      }>;
+      error?: string;
+    }>;
+    listSubagentSessions: (parentSessionId: string) => Promise<{
+      success: boolean;
+      runs?: Array<{
+        id: string;
+        parentSessionId: string;
+        sessionKey: string | null;
+        agentId: string | null;
+        task: string | null;
+        label: string | null;
+        status: 'running' | 'done' | 'error';
+        createdAt: number;
+        endedAt: number | null;
+      }>;
+      error?: string;
+    }>;
     listSessions: (agentId?: string) => Promise<{ success: boolean; sessions?: CoworkSessionSummary[]; error?: string }>;
     exportResultImage: (options: {
       rect: { x: number; y: number; width: number; height: number };

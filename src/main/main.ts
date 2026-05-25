@@ -199,6 +199,8 @@ import { getAppsForFile, openFileWithApp } from './shellApps';
 import { SkillManager } from './skillManager';
 import { getSkillServiceManager } from './skillServices';
 import { SqliteStore } from './sqliteStore';
+import { SubagentMessageStore } from './subagentMessageStore';
+import { SubagentRunStore } from './subagentRunStore';
 import { createTray, destroyTray, updateTrayMenu } from './trayManager';
 import {
   AppWindowStoreKey,
@@ -949,6 +951,8 @@ let mcpBridgeSecret: string = require('crypto').randomUUID();
 let resolvedMcpServersCache: ResolvedMcpServer[] = [];
 let pluginManager: PluginManager | null = null;
 let imGatewayManager: IMGatewayManager | null = null;
+let subagentRunStore: SubagentRunStore | null = null;
+let subagentMessageStore: SubagentMessageStore | null = null;
 let storeInitPromise: Promise<SqliteStore> | null = null;
 let openClawEngineManager: OpenClawEngineManager | null = null;
 let openClawConfigSync: OpenClawConfigSync | null = null;
@@ -1204,6 +1208,20 @@ const getCoworkStore = () => {
     }
   }
   return coworkStore;
+};
+
+const getSubagentRunStore = (): SubagentRunStore => {
+  if (!subagentRunStore) {
+    subagentRunStore = new SubagentRunStore(getStore().getNativeDatabase());
+  }
+  return subagentRunStore;
+};
+
+const getSubagentMessageStore = (): SubagentMessageStore => {
+  if (!subagentMessageStore) {
+    subagentMessageStore = new SubagentMessageStore(getStore().getNativeDatabase());
+  }
+  return subagentMessageStore;
 };
 
 let agentManager: AgentManager | null = null;
@@ -4650,6 +4668,46 @@ if (!gotTheLock) {
         success: false,
         remoteManaged: false,
         error: error instanceof Error ? error.message : 'Failed to check remote managed session',
+      };
+    }
+  });
+
+  ipcMain.handle('cowork:subTask:history', async (_event, options: {
+    parentSessionId: string;
+    agentId: string;
+    sessionKey?: string;
+  }) => {
+    try {
+      const runs = getSubagentRunStore().listSubagentRuns(options.parentSessionId);
+      const run = runs.find((item) => {
+        if (options.sessionKey && item.sessionKey !== options.sessionKey) {
+          return false;
+        }
+        if (options.agentId && item.agentId !== options.agentId) {
+          return false;
+        }
+        return true;
+      });
+      if (!run) {
+        return { success: true, messages: [] };
+      }
+      return { success: true, messages: getSubagentMessageStore().getMessages(run.id) };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch subagent history',
+      };
+    }
+  });
+
+  ipcMain.handle('cowork:subagent:list', async (_event, options: { parentSessionId: string }) => {
+    try {
+      return { success: true, runs: getSubagentRunStore().listSubagentRuns(options.parentSessionId) };
+    } catch (error) {
+      return {
+        success: false,
+        runs: [],
+        error: error instanceof Error ? error.message : 'Failed to list subagent sessions',
       };
     }
   });
