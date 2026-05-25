@@ -126,6 +126,27 @@ test('createBackup rewrites the same backup file instead of creating a second sn
   reopened.close();
 });
 
+test('createBackup removes a stale previous backup file after a successful publish', async () => {
+  const userDataPath = makeTempDir();
+  const dbPath = path.join(userDataPath, 'source.sqlite');
+  const db = new Database(dbPath);
+  db.exec('CREATE TABLE demo (id INTEGER PRIMARY KEY, value TEXT NOT NULL);');
+  db.prepare('INSERT INTO demo (value) VALUES (?)').run('first');
+
+  const manager = new SqliteBackupManager(userDataPath);
+  await manager.createBackup({ db, trigger: SqliteBackupTrigger.Manual });
+
+  const backupPath = path.join(manager.getPaths().snapshotsDir, SQLITE_BACKUP_FILE_NAME);
+  const previousBackupPath = `${backupPath}.previous`;
+  fs.copyFileSync(backupPath, previousBackupPath);
+
+  db.prepare('UPDATE demo SET value = ? WHERE id = 1').run('second');
+  await manager.createBackup({ db, trigger: SqliteBackupTrigger.Periodic });
+  db.close();
+
+  expect(fs.existsSync(previousBackupPath)).toBe(false);
+});
+
 test('formatTimestampForLocalPath uses local timezone fields instead of UTC', () => {
   const sample = new Date(2026, 3, 20, 1, 2, 3, 45).getTime();
   expect(formatTimestampForLocalPath(sample)).toBe('2026-04-20T01-02-03-045');
@@ -163,6 +184,36 @@ test('shouldCreatePeriodicBackup returns true only when the latest snapshot is o
 
   expect(manager.shouldCreatePeriodicBackup(SQLITE_BACKUP_INTERVAL_MS * 2 - 1)).toBe(false);
   expect(manager.shouldCreatePeriodicBackup(SQLITE_BACKUP_INTERVAL_MS * 2)).toBe(true);
+});
+
+test('shouldCreatePeriodicBackup returns true when manifest exists but backup file is missing', () => {
+  const userDataPath = makeTempDir();
+  const manager = new SqliteBackupManager(userDataPath);
+  const paths = manager.getPaths();
+
+  fs.mkdirSync(paths.backupDir, { recursive: true });
+  fs.writeFileSync(
+    paths.manifestPath,
+    JSON.stringify({
+      version: 1,
+      updatedAt: SQLITE_BACKUP_INTERVAL_MS,
+      snapshots: [
+        {
+          id: '1',
+          fileName: SQLITE_BACKUP_FILE_NAME,
+          createdAt: SQLITE_BACKUP_INTERVAL_MS,
+          trigger: SqliteBackupTrigger.Periodic,
+          sizeBytes: 1,
+          checksumSha256: 'x',
+          quickCheck: 'ok',
+          restoreTested: false,
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  expect(manager.shouldCreatePeriodicBackup(SQLITE_BACKUP_INTERVAL_MS * 2 - 1)).toBe(true);
 });
 
 test('shouldCreatePeriodicBackup returns true when forced by QA startup env var', () => {
