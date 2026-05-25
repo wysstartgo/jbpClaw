@@ -37,17 +37,25 @@ import {
   selectRemoteManaged,
 } from '../../store/selectors/coworkSelectors';
 import {
+  activateArtifactBrowserTab,
+  activateArtifactFileListTab,
   addArtifact,
+  ArtifactSpecialTab,
+  openArtifactPreviewTab,
   selectSessionArtifacts,
+  selectIsPanelOpen,
+  togglePanel,
 } from '../../store/slices/artifactSlice';
 import type { QueuedCoworkInput } from '../../store/slices/coworkSlice';
 import { setActiveSkillIds } from '../../store/slices/skillSlice';
 import type { Artifact } from '../../types/artifact';
-import { PREVIEWABLE_ARTIFACT_TYPES } from '../../types/artifact';
+import { ArtifactTypeValue, PREVIEWABLE_ARTIFACT_TYPES } from '../../types/artifact';
 import type { CoworkImageAttachment, CoworkImageAttachmentPreview, CoworkMessage, CoworkMessageMetadata } from '../../types/cowork';
 import type { Skill } from '../../types/skill';
 import { getCompactFolderName } from '../../utils/path';
 import { parseUserMessageForDisplay } from '../../utils/userMessageDisplay';
+import { ArtifactPanel } from '../artifacts';
+import type { BrowserAnnotationPayload } from '../artifacts/ArtifactPanel';
 import Modal from '../common/Modal';
 import BranchIcon from '../icons/BranchIcon';
 import ComposeIcon from '../icons/ComposeIcon';
@@ -352,6 +360,27 @@ const PushPinIcon: React.FC<React.SVGProps<SVGSVGElement> & { slashed?: boolean 
       <path d="M12 12v9" />
     </g>
     {slashed && <path d="M5 5L19 19" />}
+  </svg>
+);
+
+const ArtifactPanelIcon: React.FC<React.SVGProps<SVGSVGElement> & { open?: boolean }> = ({
+  open,
+  ...props
+}) => (
+  <svg
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.25}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <rect x="1.5" y="2" width="13" height="12" rx="2" />
+    <path d={open ? 'M10.5 2v12' : 'M12.5 2v12'} />
+    <path d="M4 5h3.5" />
+    <path d="M4 8h3.5" />
+    <path d="M4 11h2.5" />
   </svg>
 );
 
@@ -993,8 +1022,14 @@ const CopyButton: React.FC<{
 const ArtifactBadge: React.FC<{
   artifact: Artifact;
   resolveLocalFilePath?: (href: string, text: string) => string | null;
-}> = ({ artifact, resolveLocalFilePath }) => {
+  onPreview?: (artifact: Artifact) => void;
+}> = ({ artifact, resolveLocalFilePath, onPreview }) => {
   const handleClick = async () => {
+    if (onPreview && PREVIEWABLE_ARTIFACT_TYPES.has(artifact.type)) {
+      onPreview(artifact);
+      return;
+    }
+
     if (artifact.filePath) {
       try {
         const filePath = resolveLocalFilePath
@@ -1580,6 +1615,7 @@ export const AssistantTurnBlock: React.FC<{
   turn: ConversationTurn;
   artifacts?: Artifact[];
   resolveLocalFilePath?: (href: string, text: string) => string | null;
+  onPreviewArtifact?: (artifact: Artifact) => void;
   mapDisplayText?: (value: string) => string;
   showTypingIndicator?: boolean;
   showCopyButtons?: boolean;
@@ -1591,6 +1627,7 @@ export const AssistantTurnBlock: React.FC<{
   turn,
   artifacts = [],
   resolveLocalFilePath,
+  onPreviewArtifact,
   mapDisplayText,
   showTypingIndicator = false,
   showCopyButtons = true,
@@ -1752,6 +1789,7 @@ export const AssistantTurnBlock: React.FC<{
                   key={artifact.id}
                   artifact={artifact}
                   resolveLocalFilePath={resolveLocalFilePath}
+                  onPreview={onPreviewArtifact}
                 />
               ))}
             </div>
@@ -1788,10 +1826,14 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
   const sessionArtifacts = useSelector((state: RootState) =>
     sessionId ? selectSessionArtifacts(state, sessionId) : []
   );
+  const isArtifactPanelOpen = useSelector((state: RootState) => selectIsPanelOpen(state, sessionId));
   const detailRootRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const promptInputRef = useRef<CoworkPromptInputRef>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const [activeArtifactSpecialTab, setActiveArtifactSpecialTab] = useState<ArtifactSpecialTab>(ArtifactSpecialTab.FileList);
+  const [artifactBrowserAddress, setArtifactBrowserAddress] = useState('');
+  const [artifactBrowserUrl, setArtifactBrowserUrl] = useState('');
   const [ttsAvailability, setTtsAvailability] = useState<TtsAvailability | null>(null);
   const [ttsPlayingMessageId, setTtsPlayingMessageId] = useState<string | null>(null);
   const lastAutoPlayedMessageIdRef = useRef<string | null>(null);
@@ -2572,6 +2614,48 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
     return true;
   }, [currentSession, isStreaming, onEditUserMessage]);
 
+  const handleOpenArtifactFileList = useCallback(() => {
+    if (!sessionId) return;
+    setActiveArtifactSpecialTab(ArtifactSpecialTab.FileList);
+    dispatch(activateArtifactFileListTab({ sessionId }));
+  }, [dispatch, sessionId]);
+
+  const handleOpenArtifactBrowser = useCallback(() => {
+    if (!sessionId) return;
+    setActiveArtifactSpecialTab(ArtifactSpecialTab.Browser);
+    dispatch(activateArtifactBrowserTab({ sessionId }));
+  }, [dispatch, sessionId]);
+
+  const handleToggleArtifactPanel = useCallback(() => {
+    if (!sessionId) return;
+    if (!isArtifactPanelOpen && sessionArtifacts.length === 0) {
+      handleOpenArtifactFileList();
+      return;
+    }
+    dispatch(togglePanel({ sessionId }));
+  }, [dispatch, handleOpenArtifactFileList, isArtifactPanelOpen, sessionArtifacts.length, sessionId]);
+
+  const handlePreviewArtifact = useCallback((artifact: Artifact) => {
+    if (!sessionId) return;
+    if (artifact.type === ArtifactTypeValue.LocalService) {
+      const url = artifact.url || artifact.content;
+      if (url) {
+        setArtifactBrowserAddress(url);
+        setArtifactBrowserUrl(url);
+      }
+      handleOpenArtifactBrowser();
+      return;
+    }
+    dispatch(addArtifact({ sessionId, artifact }));
+    dispatch(openArtifactPreviewTab({ sessionId, artifactId: artifact.id }));
+  }, [dispatch, handleOpenArtifactBrowser, sessionId]);
+
+  const handleBrowserAnnotationCaptured = useCallback((_payload: BrowserAnnotationPayload) => {
+    window.dispatchEvent(new CustomEvent(AppCustomEvent.ShowToast, {
+      detail: i18nService.t('artifactBrowserAnnotationCaptured'),
+    }));
+  }, []);
+
   const messages = currentSession?.messages;
   const displayItems = useMemo(() => messages ? buildDisplayItems(messages) : [], [messages]);
   const turns = useMemo(() => buildConversationTurns(displayItems), [displayItems]);
@@ -2733,6 +2817,7 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
                 turn={turn}
                 artifacts={turnArtifacts}
                 resolveLocalFilePath={resolveLocalFilePath}
+                onPreviewArtifact={handlePreviewArtifact}
                 mapDisplayText={mapDisplayText}
                 showTypingIndicator={showTypingIndicator}
                 showCopyButtons={!isStreaming}
@@ -2799,6 +2884,20 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
 
         {/* Right side: Folder + Menu */}
         <div className="non-draggable flex items-center gap-1">
+          <button
+            type="button"
+            onClick={handleToggleArtifactPanel}
+            className={`h-8 w-8 inline-flex items-center justify-center rounded-lg transition-colors ${
+              isArtifactPanelOpen
+                ? 'bg-primary/10 text-primary'
+                : 'text-secondary hover:bg-surface-raised hover:text-foreground'
+            }`}
+            aria-label={i18nService.t('artifactPanelToggle')}
+            title={i18nService.t('artifactPanelToggle')}
+          >
+            <ArtifactPanelIcon className="h-4 w-4" open={isArtifactPanelOpen} />
+          </button>
+
           {/* Folder button */}
           <button
             type="button"
@@ -2975,17 +3074,18 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
         </Modal>
       )}
       {/* Content Area */}
-      <div className="relative flex-1 min-h-0">
-        {/* Render the virtual rail connections layer if active */}
-        <div
-          ref={scrollContainerRef}
-          onScroll={handleMessagesScroll}
-          className={`h-full min-h-0 overflow-y-auto pt-3 pb-[180px] ${turns.length > 1 && isScrollable ? 'pr-8' : 'pr-3'}`}
-          style={{ scrollbarGutter: 'stable both-edges' }}
-        >
-          {renderConversationTurns()}
-          <div className="h-20" />
-        </div>
+      <div className="flex flex-1 min-h-0">
+        <div className="relative flex-1 min-w-0">
+          {/* Render the virtual rail connections layer if active */}
+          <div
+            ref={scrollContainerRef}
+            onScroll={handleMessagesScroll}
+            className={`h-full min-h-0 overflow-y-auto pt-3 pb-[180px] ${turns.length > 1 && isScrollable ? 'pr-8' : 'pr-3'}`}
+            style={{ scrollbarGutter: 'stable both-edges' }}
+          >
+            {renderConversationTurns()}
+            <div className="h-20" />
+          </div>
 
         {/* Turn Navigation Rail — to the left of scrollbar */}
         {shouldShowTurnNavigationRail && (
@@ -3192,6 +3292,22 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
             </div>
           </div>,
           document.body
+        )}
+        </div>
+
+        {isArtifactPanelOpen && currentSession && (
+          <ArtifactPanel
+            sessionId={currentSession.id}
+            artifacts={sessionArtifacts}
+            activeSpecialTab={activeArtifactSpecialTab}
+            browserAddress={artifactBrowserAddress}
+            browserUrl={artifactBrowserUrl}
+            onBrowserAddressChange={setArtifactBrowserAddress}
+            onBrowserUrlChange={setArtifactBrowserUrl}
+            onOpenFileListTab={handleOpenArtifactFileList}
+            onOpenBrowserTab={handleOpenArtifactBrowser}
+            onBrowserAnnotationCaptured={handleBrowserAnnotationCaptured}
+          />
         )}
       </div>
 
