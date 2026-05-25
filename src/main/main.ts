@@ -26,7 +26,7 @@ import { buildScheduledTaskEnginePrompt } from '../scheduledTask/enginePrompt';
 import { migrateScheduledTaskRunsToOpenclaw,migrateScheduledTasksToOpenclaw } from '../scheduledTask/migrate';
 import { type AppUpdateInfo,AppUpdateIpc, AppUpdateSource } from '../shared/appUpdate/constants';
 import { ArtifactIpcChannel } from '../shared/artifact/constants';
-import { ArtifactPreviewIpc } from '../shared/artifactPreview/constants';
+import { ArtifactBrowserPartition, ArtifactPreviewIpc } from '../shared/artifactPreview/constants';
 import { CoworkIpcChannel } from '../shared/cowork/constants';
 import { PetStatus } from '../shared/pet/constants';
 import { type Platform as SharedPlatform,PlatformRegistry } from '../shared/platform';
@@ -7032,6 +7032,28 @@ end tell'`, { timeout: 5000 });
   ipcMain.handle(ArtifactPreviewIpc.DestroySession, (_event, sessionId: string) => {
     destroyPreviewSession(sessionId);
     return { success: true };
+  });
+
+  ipcMain.handle(ArtifactPreviewIpc.ClearBrowserCookies, async () => {
+    try {
+      await session.fromPartition(ArtifactBrowserPartition.Default).clearStorageData({
+        storages: ['cookies'],
+      });
+      return { success: true };
+    } catch (error) {
+      console.error('[ArtifactBrowser] failed to clear browser cookies:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  ipcMain.handle(ArtifactPreviewIpc.ClearBrowserCache, async () => {
+    try {
+      await session.fromPartition(ArtifactBrowserPartition.Default).clearCache();
+      return { success: true };
+    } catch (error) {
+      console.error('[ArtifactBrowser] failed to clear browser cache:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
   });
 
   // App update state, download & install

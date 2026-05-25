@@ -777,6 +777,8 @@ interface IElectronAPI {
     createPreviewSession: (filePath: string) => Promise<{ success: boolean; sessionId?: string; url?: string; error?: string }>;
     createOfficePreviewSession: (filePath: string) => Promise<{ success: boolean; sessionId?: string; url?: string; error?: string }>;
     destroyPreviewSession: (sessionId: string) => Promise<{ success: boolean }>;
+    clearBrowserCookies: () => Promise<{ success: boolean; error?: string }>;
+    clearBrowserCache: () => Promise<{ success: boolean; error?: string }>;
   };
   autoLaunch: {
     get: () => Promise<{ enabled: boolean }>;

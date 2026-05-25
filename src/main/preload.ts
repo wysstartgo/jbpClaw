@@ -498,6 +498,8 @@ contextBridge.exposeInMainWorld('electron', {
     createPreviewSession: (filePath: string) => ipcRenderer.invoke(ArtifactPreviewIpc.CreateSession, filePath),
     createOfficePreviewSession: (filePath: string) => ipcRenderer.invoke(ArtifactPreviewIpc.CreateOfficeSession, filePath),
     destroyPreviewSession: (sessionId: string) => ipcRenderer.invoke(ArtifactPreviewIpc.DestroySession, sessionId),
+    clearBrowserCookies: () => ipcRenderer.invoke(ArtifactPreviewIpc.ClearBrowserCookies),
+    clearBrowserCache: () => ipcRenderer.invoke(ArtifactPreviewIpc.ClearBrowserCache),
   },
   autoLaunch: {
     get: () => ipcRenderer.invoke('app:getAutoLaunch'),
