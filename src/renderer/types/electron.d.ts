@@ -187,6 +187,7 @@ interface CoworkConfig {
   dreamingModel: string;
   dreamingTimezone: string;
   openClawSessionPolicy?: OpenClawSessionPolicyConfig;
+  toolResultMaxChars: number;
 }
 
 type CoworkConfigUpdate = Partial<Pick<
@@ -212,6 +213,7 @@ type CoworkConfigUpdate = Partial<Pick<
   | 'dreamingModel'
   | 'dreamingTimezone'
   | 'openClawSessionPolicy'
+  | 'toolResultMaxChars'
 >>;
 
 interface CoworkUserMemoryEntry {
@@ -674,15 +676,7 @@ interface IElectronAPI {
       sessionKey?: string;
     }) => Promise<{
       success: boolean;
-      messages?: Array<{
-        id: string;
-        runId: string;
-        type: string;
-        content: string;
-        metadata: string | null;
-        createdAt: number;
-        sequence: number;
-      }>;
+      messages?: CoworkMessage[];
       error?: string;
     }>;
     listSubagentSessions: (parentSessionId: string) => Promise<{

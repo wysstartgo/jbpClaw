@@ -113,6 +113,7 @@ export interface CoworkConfig {
   dreamingModel: string;
   dreamingTimezone: string;
   openClawSessionPolicy?: OpenClawSessionPolicyConfig;
+  toolResultMaxChars: number;
 }
 
 export type CoworkConfigUpdate = Partial<Pick<
@@ -138,6 +139,7 @@ export type CoworkConfigUpdate = Partial<Pick<
   | 'dreamingModel'
   | 'dreamingTimezone'
   | 'openClawSessionPolicy'
+  | 'toolResultMaxChars'
 >>;
 
 export interface CoworkApiConfig {
@@ -175,6 +177,17 @@ export interface CoworkMemoryStats {
   deleted: number;
   explicit: number;
   implicit: number;
+}
+
+export interface SubagentSessionSummary {
+  id: string;
+  agentId: string | null;
+  task: string | null;
+  label: string | null;
+  sessionKey: string | null;
+  parentSessionId: string;
+  status: 'running' | 'done' | 'error';
+  createdAt: number;
 }
 
 // Cowork pending permission request

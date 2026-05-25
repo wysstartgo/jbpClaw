@@ -28,7 +28,10 @@ import { type AppUpdateInfo,AppUpdateIpc, AppUpdateSource } from '../shared/appU
 import { ArtifactIpcChannel } from '../shared/artifact/constants';
 import { ArtifactBrowserPartition, ArtifactPreviewIpc } from '../shared/artifactPreview/constants';
 import { ClipboardIpc } from '../shared/clipboard/constants';
-import { CoworkIpcChannel } from '../shared/cowork/constants';
+import {
+  CoworkIpcChannel,
+  normalizeToolResultMaxChars,
+} from '../shared/cowork/constants';
 import { DialogIpc } from '../shared/dialog/constants';
 import { type ListLocalWebServicesOptions, type LocalWebService, LocalWebServicesIpc } from '../shared/localWebServices/constants';
 import { PetStatus } from '../shared/pet/constants';
@@ -1288,6 +1291,27 @@ const getSubagentMessageStore = (): SubagentMessageStore => {
   return subagentMessageStore;
 };
 
+const mapPersistedSubagentMessage = (message: ReturnType<SubagentMessageStore['getMessages']>[number]) => {
+  let metadata: Record<string, unknown> | undefined;
+  if (message.metadata) {
+    try {
+      const parsed = JSON.parse(message.metadata);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        metadata = parsed as Record<string, unknown>;
+      }
+    } catch {
+      metadata = undefined;
+    }
+  }
+  return {
+    id: message.id,
+    type: message.type,
+    content: message.content,
+    timestamp: message.createdAt,
+    metadata,
+  };
+};
+
 let agentManager: AgentManager | null = null;
 const getAgentManager = () => {
   if (!agentManager) {
@@ -2047,7 +2071,7 @@ const getCoworkEngineRouter = () => {
     if (!openClawRuntimeAdapter) {
       openClawRuntimeAdapter = new OpenClawRuntimeAdapter(getCoworkStore(), getOpenClawEngineManager(), {
         normalizeModelRef: normalizeOpenClawModelRef,
-      });
+      }, getSubagentRunStore(), getSubagentMessageStore());
       // Wire up channel session sync for IM conversations via OpenClaw
       try {
         const imManager = getIMGatewayManager();
@@ -4741,6 +4765,21 @@ if (!gotTheLock) {
     agentId: string;
     sessionKey?: string;
   }) => {
+    if (openClawRuntimeAdapter) {
+      try {
+        const messages = await openClawRuntimeAdapter.getSubTaskHistory(
+          options.parentSessionId,
+          options.agentId,
+          options.sessionKey,
+        );
+        return { success: true, messages };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch subagent history',
+        };
+      }
+    }
     try {
       const runs = getSubagentRunStore().listSubagentRuns(options.parentSessionId);
       const run = runs.find((item) => {
@@ -4755,7 +4794,10 @@ if (!gotTheLock) {
       if (!run) {
         return { success: true, messages: [] };
       }
-      return { success: true, messages: getSubagentMessageStore().getMessages(run.id) };
+      return {
+        success: true,
+        messages: getSubagentMessageStore().getMessages(run.id).map(mapPersistedSubagentMessage),
+      };
     } catch (error) {
       return {
         success: false,
@@ -4766,7 +4808,11 @@ if (!gotTheLock) {
 
   ipcMain.handle('cowork:subagent:list', async (_event, options: { parentSessionId: string }) => {
     try {
-      return { success: true, runs: getSubagentRunStore().listSubagentRuns(options.parentSessionId) };
+      return {
+        success: true,
+        runs: openClawRuntimeAdapter?.listSubagentRuns(options.parentSessionId)
+          ?? getSubagentRunStore().listSubagentRuns(options.parentSessionId),
+      };
     } catch (error) {
       return {
         success: false,
@@ -5438,6 +5484,7 @@ if (!gotTheLock) {
     embeddingVectorWeight?: number;
     embeddingRemoteBaseUrl?: string;
     embeddingRemoteApiKey?: string;
+    toolResultMaxChars?: number;
     openClawSessionPolicy?: { keepAlive?: '1d' | '7d' | '30d' | '365d' };
   }) => {
     try {
@@ -5476,6 +5523,10 @@ if (!gotTheLock) {
           ? config.skipMissedJobs
           : undefined;
       const normalizedEmbedding = normalizeEmbeddingConfig(config);
+      const normalizedToolResultMaxChars =
+        config.toolResultMaxChars !== undefined
+          ? normalizeToolResultMaxChars(config.toolResultMaxChars)
+          : undefined;
       const normalizedOpenClawSessionPolicy =
         config.openClawSessionPolicy && typeof config.openClawSessionPolicy === 'object'
           ? {
@@ -5499,6 +5550,7 @@ if (!gotTheLock) {
         memoryUserMemoriesMaxItems: normalizedMemoryUserMemoriesMaxItems,
         skipMissedJobs: normalizedSkipMissedJobs,
         ...normalizedEmbedding,
+        toolResultMaxChars: normalizedToolResultMaxChars,
         openClawSessionPolicy: normalizedOpenClawSessionPolicy,
       };
       const previousConfig = getCoworkStore().getConfig();
@@ -7515,10 +7567,10 @@ end tell'`, { timeout: 5000 });
         "img-src 'self' data: https: http: localfile:",
         // 允许连接到所有域名，不做限制
         "connect-src *",
-        "font-src 'self' data:",
+        "font-src 'self' data: https:",
         "media-src 'self'",
         "worker-src 'self' blob:",
-        "frame-src 'self'"
+        "frame-src 'self' file: http://127.0.0.1:*"
       ];
 
       callback({

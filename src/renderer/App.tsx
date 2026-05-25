@@ -32,6 +32,7 @@ import {
 import WindowTitleBar from './components/window/WindowTitleBar';
 import { defaultConfig, getProviderDisplayName } from './config';
 import { AppCustomEvent } from './constants/app';
+import { isPetFloatingRoute } from './pet/floatingRoute';
 import PetCompanion from './pet/PetCompanion';
 import { petService } from './pet/petService';
 import { usePetState } from './pet/usePetState';
@@ -1644,7 +1645,7 @@ const MainApp: React.FC = () => {
 };
 
 const App: React.FC = () => (
-  window.location.hash === '#pet-floating' ? <PetFloatingApp /> : <MainApp />
+  isPetFloatingRoute(window.location.hash) ? <PetFloatingApp /> : <MainApp />
 );
 
 export default App; 

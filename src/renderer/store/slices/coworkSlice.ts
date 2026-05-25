@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
+import { DEFAULT_TOOL_RESULT_MAX_CHARS } from '../../../shared/cowork/constants';
 import type {
   CoworkConfig,
   CoworkImageAttachment,
@@ -71,6 +72,7 @@ const defaultCoworkConfig: CoworkConfig = {
   openClawSessionPolicy: {
     keepAlive: '30d',
   },
+  toolResultMaxChars: DEFAULT_TOOL_RESULT_MAX_CHARS,
 };
 
 const defaultOpenClawKeepAlive = '30d' as const;

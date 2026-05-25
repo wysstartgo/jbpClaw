@@ -43,8 +43,11 @@ import {
 } from '../openclawHistory';
 import { buildOpenClawLocalTimeContextPrompt } from '../openclawLocalTimeContextPrompt';
 import { buildTransientSessionFromOpenClawTranscript } from '../openclawTranscript';
+import type { SubagentMessageStore } from '../../subagentMessageStore';
+import type { SubagentRunStore } from '../../subagentRunStore';
 import { mergeAgentInstructionPrompt, mergeAgentSkillIds } from './agentContext';
 import { AgentLifecyclePhase, type AgentLifecyclePhase as AgentLifecyclePhaseValue } from './constants';
+import { SubagentTracker } from './subagentTracker';
 import type {
   CoworkContinueOptions,
   CoworkRuntime,
@@ -1005,6 +1008,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
   private lastStoreUpdateTime: Map<string, number> = new Map();
   private pendingStoreUpdateTimer: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private static readonly STORE_UPDATE_THROTTLE_MS = 250;
+  private readonly subagentTracker: SubagentTracker | null;
 
   /**
    * Server-side agent timeout in seconds (mirrors agents.defaults.timeoutSeconds in openclaw config).
@@ -1018,11 +1022,16 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     store: CoworkStore,
     engineManager: OpenClawEngineManager,
     options: OpenClawRuntimeAdapterOptions = {},
+    subagentRunStore?: SubagentRunStore,
+    subagentMessageStore?: SubagentMessageStore,
   ) {
     super();
     this.store = store;
     this.engineManager = engineManager;
     this.options = options;
+    this.subagentTracker = subagentRunStore
+      ? new SubagentTracker(subagentRunStore, subagentMessageStore ?? null, () => this.gatewayClient)
+      : null;
   }
 
   private normalizeModelRef(modelRef: string): string {
@@ -2791,7 +2800,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
           OpenClawRuntimeAdapter.RECENT_RUN_ID_LIMIT,
         );
       }
-      this.handleAgentLifecycleEvent(sessionId, agentPayload.data);
+      this.handleAgentLifecycleEvent(sessionId, agentPayload.data, lifecycleRunId);
     }
   }
 
@@ -2927,7 +2936,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     return null;
   }
 
-  private handleAgentLifecycleEvent(sessionId: string, data: unknown): void {
+  private handleAgentLifecycleEvent(sessionId: string, data: unknown, eventRunId?: string): void {
     if (!isRecord(data)) return;
     const phase = getAgentLifecyclePhase(data);
     if (phase === AgentLifecyclePhase.Fallback) {
@@ -2937,6 +2946,9 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       this.store.updateSession(sessionId, { status: 'running' });
     }
     if (phase === AgentLifecyclePhase.End) {
+      if (eventRunId && this.subagentTracker?.tryMarkDoneFromAnnounceRunId(eventRunId)) {
+        return;
+      }
       // Deferred completion fallback: the gateway should send a `chat state=final`
       // event that triggers handleChatFinal(). But after the OpenClaw upgrade, this
       // event may not arrive reliably for IM channel sessions.  The agent lifecycle
@@ -3103,6 +3115,10 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       });
       turn.toolUseMessageIdByToolCallId.set(toolCallId, toolUseMessage.id);
       this.emit('message', sessionId, toolUseMessage);
+
+      if (toolNameRaw.toLowerCase() === 'sessions_spawn') {
+        this.subagentTracker?.onToolStart(toolCallId, toToolInputRecord(data.args), sessionId);
+      }
     }
 
     if (phase === 'update') {
@@ -3186,6 +3202,14 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
         this.emit('message', sessionId, resultMessage);
       }
       turn.toolResultTextByToolCallId.set(toolCallId, finalContent);
+
+      if (toolNameRaw.toLowerCase() === 'sessions_spawn' && finalContent) {
+        this.subagentTracker?.onSpawnResult(toolCallId, finalContent);
+      }
+
+      if (toolNameRaw.toLowerCase() === 'sessions_resume' || toolNameRaw.toLowerCase() === 'sessions_read') {
+        this.subagentTracker?.onResumeOrReadResult(toToolInputRecord(data.args));
+      }
     }
   }
 
@@ -4858,6 +4882,26 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     if (this.channelSessionSync) {
       this.channelSessionSync.onSessionDeleted(sessionId);
     }
+    this.subagentTracker?.onSessionDeleted(sessionId);
+  }
+
+  listSubagentRuns(parentSessionId: string) {
+    return this.subagentTracker?.listSubagentRuns(parentSessionId) ?? [];
+  }
+
+  async getSubTaskHistory(
+    parentSessionId: string,
+    agentId: string,
+    sessionKey?: string,
+  ): Promise<CoworkMessage[]> {
+    const messages = await this.subagentTracker?.getSubTaskHistory(parentSessionId, agentId, sessionKey) ?? [];
+    return messages.map((message) => ({
+      id: message.id,
+      type: message.type,
+      content: message.content,
+      timestamp: message.timestamp,
+      metadata: message.metadata,
+    }));
   }
 
   /**

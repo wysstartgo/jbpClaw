@@ -1,5 +1,4 @@
-import { EyeIcon, EyeSlashIcon, XCircleIcon as XCircleIconSolid } from '@heroicons/react/20/solid';
-import { ArrowTopRightOnSquareIcon,ChatBubbleLeftIcon, CheckCircleIcon, Cog6ToothIcon, CpuChipIcon, CubeIcon, EnvelopeIcon, InformationCircleIcon, SignalIcon, UserCircleIcon, XCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ChatBubbleLeftIcon, CpuChipIcon, CubeIcon, EnvelopeIcon, GlobeAltIcon, InformationCircleIcon, SunIcon, UserCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import React, { useCallback,useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
@@ -13,6 +12,17 @@ import {
   AppUpdateSource,
   AppUpdateStatus,
 } from '../../shared/appUpdate/constants';
+import {
+  type BrowserWebAccessConfig,
+  defaultBrowserWebAccessConfig,
+  normalizeBrowserWebAccessConfig,
+} from '../../shared/browserWebAccess/constants';
+import {
+  DEFAULT_TOOL_RESULT_MAX_CHARS,
+  MAX_TOOL_RESULT_MAX_CHARS,
+  MIN_TOOL_RESULT_MAX_CHARS,
+  normalizeToolResultMaxChars,
+} from '../../shared/cowork/constants';
 import { ProviderRegistry, resolveCodingPlanBaseUrl } from '../../shared/providers';
 import { type TtsAvailability, TtsEngine, TtsPrepareStatus, type TtsVoice } from '../../shared/tts/constants';
 import type { WakeInputStatus } from '../../shared/wakeInput/constants';
@@ -23,14 +33,11 @@ import {
   DEFAULT_VOICE_POST_PROCESS_CONFIG,
   DEFAULT_WAKE_INPUT_CONFIG,
   defaultConfig,
-  getCustomProviderDefaultName,
   getProviderDisplayName,
   getVisibleProviders,
-  isCustomProvider,
 } from '../config';
 import { APP_ID, APP_NAME, EXPORT_FORMAT_TYPE, EXPORT_PASSWORD } from '../constants/app';
 import PetSettingsSection from '../pet/PetSettingsSection';
-import { getProviderIcon } from '../providers/uiRegistry';
 import { apiService } from '../services/api';
 import { buildApiRequestHeaders } from '../services/apiRequestHeaders';
 import { configService } from '../services/config';
@@ -43,7 +50,6 @@ import {
   buildOpenAIResponsesUrl,
   getEffectiveProviderApiFormat as getEffectiveApiFormat,
   resolveProviderRequestCredential,
-  shouldShowProviderApiFormatSelector as shouldShowApiFormatSelector,
   shouldUseMaxCompletionTokensForOpenAI,
   shouldUseOpenAIResponsesForProvider,
 } from '../services/providerRequestConfig';
@@ -62,19 +68,69 @@ import DreamingSettingsSection from './cowork/DreamingSettingsSection';
 import EmbeddingSettingsSection from './cowork/EmbeddingSettingsSection';
 import ErrorMessage from './ErrorMessage';
 import BrainIcon from './icons/BrainIcon';
-import PencilIcon from './icons/PencilIcon';
+import PlugIcon from './icons/PlugIcon';
 import PlusCircleIcon from './icons/PlusCircleIcon';
-import {
-  GitHubCopilotIcon,
-} from './icons/providers';
-import TrashIcon from './icons/TrashIcon';
 import IMSettings from './im/IMSettings';
 import PluginsSettings from './plugins/PluginsSettings';
+import BrowserWebAccessSettings from './settings/BrowserWebAccessSettings';
+import ModelSettingsSection, { ModelEditorDialog } from './settings/ModelSettingsSection';
+import {
+  CONNECTIVITY_TEST_TOKEN_BUDGET,
+  CUSTOM_PROVIDER_KEYS,
+  getDefaultActiveProvider,
+  getDefaultProviders,
+  getProviderDefaultBaseUrl,
+  type Model,
+  type ProviderConfig,
+  providerKeys,
+  providerRequiresApiKey,
+  type ProvidersConfig,
+  type ProviderType,
+  resolveBaseUrl,
+  resolveModelSupportsImageForProvider,
+  shouldAutoSwitchProviderBaseUrl,
+} from './settings/modelProviderUtils';
 import EmailSkillConfig from './skills/EmailSkillConfig';
 import ThemedSelect from './ui/ThemedSelect';
 
-type TabType = 'general'| 'coworkAgentEngine' | 'model' | 'plugins' | 'coworkMemory' | 'coworkAgent' | 'shortcuts' | 'im' | 'email' | 'about';
+type TabType = 'general'| 'appearance' | 'coworkAgentEngine' | 'model' | 'browserWebAccess' | 'plugins' | 'coworkMemory' | 'coworkDreaming' | 'coworkAgent' | 'shortcuts' | 'im' | 'email' | 'about';
 type SettingsSection = 'pet';
+
+const SettingsSlidersIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M14 17H5" />
+    <path d="M19 7h-9" />
+    <circle cx="17" cy="17" r="3" />
+    <circle cx="7" cy="7" r="3" />
+  </svg>
+);
+
+const DreamingTabIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg
+    width="34"
+    height="34"
+    viewBox="0 0 34 34"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    aria-hidden="true"
+  >
+    <path
+      d="M27.9219 21.9648L29.014 22.4621L29.8552 20.6145L27.831 20.7683L27.9219 21.9648ZM16.0762 5.03516L17.1683 5.53234L18.0095 3.68449L15.9851 3.83862L16.0762 5.03516ZM27.9219 21.9648L26.8297 21.4676C25.1281 25.205 21.3674 27.8 17 27.8V29V30.2C22.3442 30.2 26.9378 27.0221 29.014 22.4621L27.9219 21.9648ZM17 29V27.8C11.0353 27.8 6.2 22.9647 6.2 17H5H3.8C3.8 24.2902 9.70984 30.2 17 30.2V29ZM5 17H6.2C6.2 11.3157 10.5923 6.65614 16.1673 6.23169L16.0762 5.03516L15.9851 3.83862C9.16855 4.35759 3.8 10.0512 3.8 17H5ZM16.0762 5.03516L14.984 4.53798C14.2262 6.20275 13.8 8.052 13.8 10H15H16.2C16.2 8.40537 16.5483 6.8944 17.1683 5.53234L16.0762 5.03516ZM15 10H13.8C13.8 17.2902 19.7098 23.2 27 23.2V22V20.8C21.0353 20.8 16.2 15.9647 16.2 10H15ZM27 22V23.2C27.3413 23.2 27.679 23.1868 28.0128 23.1614L27.9219 21.9648L27.831 20.7683C27.5562 20.7892 27.2791 20.8 27 20.8V22Z"
+      fill="currentColor"
+    />
+  </svg>
+);
 
 const parsePostProcessKeywordsInput = (value: string): string[] => {
   return value
@@ -102,44 +158,14 @@ interface SettingsProps extends SettingsOpenOptions {
 }
 
 
-const CUSTOM_PROVIDER_KEYS = [
-  'custom_0', 'custom_1', 'custom_2', 'custom_3', 'custom_4',
-  'custom_5', 'custom_6', 'custom_7', 'custom_8', 'custom_9',
-] as const;
-
-const providerKeys = [
-  'openai',
-  'gemini',
-  'anthropic',
-  'deepseek',
-  'moonshot',
-  'zhipu',
-  'minimax',
-  'volcengine',
-  'qwen',
-  'youdaozhiyun',
-  'qianfan',
-  'stepfun',
-  'xiaomi',
-  'openrouter',
-  'github-copilot',
-  'ollama',
-  'lm-studio',
-  ...CUSTOM_PROVIDER_KEYS,
-] as const;
-
-type ProviderType = (typeof providerKeys)[number];
 const CODING_PLAN_PROVIDER_KEYS = ['zhipu', 'qwen', 'volcengine', 'moonshot', 'qianfan', 'xiaomi'] as const;
 type CodingPlanProviderType = (typeof CODING_PLAN_PROVIDER_KEYS)[number];
 const isCodingPlanProvider = (provider: ProviderType): provider is CodingPlanProviderType => (
   (CODING_PLAN_PROVIDER_KEYS as readonly string[]).includes(provider)
 );
-type ProvidersConfig = NonNullable<AppConfig['providers']>;
-type ProviderConfig = ProvidersConfig[string];
 const isCodingPlanEnabled = (providerConfig: ProviderConfig): boolean => (
   Boolean((providerConfig as { codingPlanEnabled?: boolean }).codingPlanEnabled)
 );
-type Model = NonNullable<ProviderConfig['models']>[number];
 type ProviderConnectionTestResult = {
   success: boolean;
   message: string;
@@ -189,9 +215,6 @@ interface ProvidersImportPayload {
   providers?: Record<string, ProvidersImportEntry>;
 }
 
-const providerRequiresApiKey = (provider: ProviderType) => provider !== 'ollama' && provider !== 'lm-studio' && provider !== 'github-copilot';
-const normalizeBaseUrl = (baseUrl: string): string => baseUrl.trim().replace(/\/+$/, '').toLowerCase();
-
 type OpenAIOAuthPhase =
   | { kind: 'idle' }
   | { kind: 'pending' }
@@ -223,36 +246,6 @@ const MINIMAX_CODE_ENDPOINT_CN = 'https://api.minimaxi.com/oauth/code';
 const MINIMAX_CODE_ENDPOINT_GLOBAL = 'https://api.minimax.io/oauth/code';
 const MINIMAX_TOKEN_ENDPOINT_CN = 'https://api.minimaxi.com/oauth/token';
 const MINIMAX_TOKEN_ENDPOINT_GLOBAL = 'https://api.minimax.io/oauth/token';
-
-const CW_MIN = 32000;
-const CW_MAX = 2_000_000;
-const CW_LOG_MIN = Math.log(CW_MIN);
-const CW_LOG_MAX = Math.log(CW_MAX);
-const CW_DEFAULT = 200_000;
-const CW_SCALE_EXP = 1.5;
-const CW_MARKER_STOPS = [
-  { label: '32K', value: CW_MIN },
-  { label: '64K', value: 64000 },
-  { label: '200K', value: 200000 },
-  { label: '1M', value: 1000000 },
-  { label: '2M', value: CW_MAX },
-].map(marker => ({
-  ...marker,
-  pos: Math.pow(
-    (Math.log(Math.max(CW_MIN, Math.min(CW_MAX, marker.value))) - CW_LOG_MIN) / (CW_LOG_MAX - CW_LOG_MIN),
-    CW_SCALE_EXP,
-  ),
-}));
-
-function contextWindowToSlider(value: number): number {
-  const normalized = (Math.log(Math.max(CW_MIN, Math.min(CW_MAX, value))) - CW_LOG_MIN) / (CW_LOG_MAX - CW_LOG_MIN);
-  return Math.pow(normalized, CW_SCALE_EXP);
-}
-
-function sliderToContextWindow(value: number): number {
-  const logValue = Math.pow(Math.max(0, Math.min(1, value)), 1 / CW_SCALE_EXP);
-  return Math.round(Math.exp(CW_LOG_MIN + logValue * (CW_LOG_MAX - CW_LOG_MIN)) / 1000) * 1000;
-}
 
 type MiniMaxRegion = 'cn' | 'global';
 type MiniMaxOAuthPhase =
@@ -297,30 +290,6 @@ async function generateMiniMaxPkce(): Promise<{ verifier: string; challenge: str
   return { verifier, challenge, state };
 }
 
-const getProviderDefaultBaseUrl = (
-  provider: ProviderType,
-  apiFormat: 'anthropic' | 'openai' | 'gemini'
-): string | null => {
-  if (apiFormat === 'gemini') return null;
-  return ProviderRegistry.getSwitchableBaseUrl(provider, apiFormat) ?? null;
-};
-const resolveBaseUrl = (
-  provider: ProviderType,
-  baseUrl: string,
-  apiFormat: 'anthropic' | 'openai' | 'gemini'
-): string => {
-  if (baseUrl.trim()) {
-    if (shouldAutoSwitchProviderBaseUrl(provider, baseUrl) && (apiFormat === 'anthropic' || apiFormat === 'openai')) {
-      const switchedUrl = ProviderRegistry.getSwitchableBaseUrl(provider, apiFormat);
-      if (switchedUrl) return switchedUrl;
-    }
-    return baseUrl;
-  }
-  return getProviderDefaultBaseUrl(provider, apiFormat)
-    || defaultConfig.providers?.[provider]?.baseUrl
-    || '';
-};
-
 const getUpdateCheckStatusFromRuntimeStatus = (
   state: AppUpdateRuntimeState,
 ): 'idle' | 'checking' | 'upToDate' | 'error' | 'downloading' | 'ready' => {
@@ -339,51 +308,6 @@ const getUpdateCheckStatusFromRuntimeStatus = (
     default:
       return 'idle';
   }
-};
-
-const shouldAutoSwitchProviderBaseUrl = (provider: ProviderType, currentBaseUrl: string): boolean => {
-  const anthropicUrl = ProviderRegistry.getSwitchableBaseUrl(provider, 'anthropic');
-  const openaiUrl = ProviderRegistry.getSwitchableBaseUrl(provider, 'openai');
-  if (!anthropicUrl && !openaiUrl) {
-    return false;
-  }
-
-  const normalizedCurrent = normalizeBaseUrl(currentBaseUrl);
-  return (
-    (anthropicUrl ? normalizedCurrent === normalizeBaseUrl(anthropicUrl) : false)
-    || (openaiUrl ? normalizedCurrent === normalizeBaseUrl(openaiUrl) : false)
-  );
-};
-const CONNECTIVITY_TEST_TOKEN_BUDGET = 64;
-
-const resolveModelSupportsImageForProvider = (
-  providerName: string,
-  model: { id: string; supportsImage?: boolean },
-): boolean => ProviderRegistry.resolveModelSupportsImage(providerName, model.id, model.supportsImage);
-
-const getDefaultProviders = (): ProvidersConfig => {
-  const providers = (defaultConfig.providers ?? {}) as ProvidersConfig;
-  const entries = Object.entries(providers) as Array<[string, ProviderConfig]>;
-  const secureSuffix = i18nService.t('modelSuffixSecure');
-  return Object.fromEntries(
-    entries.map(([providerKey, providerConfig]) => [
-      providerKey,
-      {
-        ...providerConfig,
-        models: providerConfig.models?.map(model => ({
-          ...model,
-          name: model.name.replace('(Secure)', secureSuffix),
-          supportsImage: resolveModelSupportsImageForProvider(providerKey, model),
-        })),
-      },
-    ])
-  ) as ProvidersConfig;
-};
-
-const getDefaultActiveProvider = (): ProviderType => {
-  const providers = (defaultConfig.providers ?? {}) as ProvidersConfig;
-  const firstEnabledProvider = providerKeys.find(providerKey => providers[providerKey]?.enabled);
-  return firstEnabledProvider ?? providerKeys[0];
 };
 
 // System shortcuts that should not be captured (clipboard, undo, select-all, quit, etc.)
@@ -480,6 +404,10 @@ const Settings: React.FC<SettingsProps> = ({
   const [language, setLanguage] = useState<LanguageType>('zh');
   const [autoLaunch, setAutoLaunchState] = useState(false);
   const [useSystemProxy, setUseSystemProxy] = useState(false);
+  const [browserWebAccess, setBrowserWebAccess] = useState<BrowserWebAccessConfig>(() => ({
+    ...defaultBrowserWebAccessConfig,
+    webFetch: { ...defaultBrowserWebAccessConfig.webFetch },
+  }));
   const [speechStopCommand, setSpeechStopCommand] = useState(DEFAULT_SPEECH_INPUT_CONFIG.stopCommand);
   const [speechSubmitCommand, setSpeechSubmitCommand] = useState(DEFAULT_SPEECH_INPUT_CONFIG.submitCommand);
   const [speechAutoRestartAfterReply, setSpeechAutoRestartAfterReply] = useState(DEFAULT_SPEECH_INPUT_CONFIG.autoRestartAfterReply);
@@ -571,6 +499,7 @@ const Settings: React.FC<SettingsProps> = ({
   const [newModelId, setNewModelId] = useState('');
   const [newModelSupportsImage, setNewModelSupportsImage] = useState(false);
   const [newModelContextWindow, setNewModelContextWindow] = useState<number | undefined>(undefined);
+  const [newModelCustomParams, setNewModelCustomParams] = useState<string>('');
   const [modelFormError, setModelFormError] = useState<string | null>(null);
 
   // About tab
@@ -794,6 +723,9 @@ const Settings: React.FC<SettingsProps> = ({
   const [dreamingFrequency, setDreamingFrequency] = useState<string>(coworkConfig.dreamingFrequency ?? '0 3 * * *');
   const [dreamingModel, setDreamingModel] = useState<string>(coworkConfig.dreamingModel ?? '');
   const [dreamingTimezone, setDreamingTimezone] = useState<string>(coworkConfig.dreamingTimezone ?? '');
+  const [toolResultMaxChars, setToolResultMaxChars] = useState<number>(
+    normalizeToolResultMaxChars(coworkConfig.toolResultMaxChars, DEFAULT_TOOL_RESULT_MAX_CHARS)
+  );
   const [openClawSessionKeepAlive, setOpenClawSessionKeepAlive] = useState<OpenClawSessionKeepAliveValue>(
     coworkConfig.openClawSessionPolicy?.keepAlive ?? OpenClawSessionKeepAlive.ThirtyDays
   );
@@ -803,6 +735,7 @@ const Settings: React.FC<SettingsProps> = ({
   const [coworkMemoryQuery, setCoworkMemoryQuery] = useState<string>('');
   const [coworkMemoryEditingId, setCoworkMemoryEditingId] = useState<string | null>(null);
   const [coworkMemoryDraftText, setCoworkMemoryDraftText] = useState<string>('');
+  const [memoryTab, setMemoryTab] = useState<'entries' | 'embedding'>('entries');
   const [showMemoryModal, setShowMemoryModal] = useState<boolean>(false);
   const [bootstrapIdentity, setBootstrapIdentity] = useState<string>('');
   const [bootstrapUser, setBootstrapUser] = useState<string>('');
@@ -825,6 +758,7 @@ const Settings: React.FC<SettingsProps> = ({
     setDreamingFrequency(coworkConfig.dreamingFrequency ?? '0 3 * * *');
     setDreamingModel(coworkConfig.dreamingModel ?? '');
     setDreamingTimezone(coworkConfig.dreamingTimezone ?? '');
+    setToolResultMaxChars(normalizeToolResultMaxChars(coworkConfig.toolResultMaxChars, DEFAULT_TOOL_RESULT_MAX_CHARS));
     setOpenClawSessionKeepAlive(coworkConfig.openClawSessionPolicy?.keepAlive ?? OpenClawSessionKeepAlive.ThirtyDays);
   }, [
     coworkConfig.agentEngine,
@@ -841,6 +775,7 @@ const Settings: React.FC<SettingsProps> = ({
     coworkConfig.dreamingFrequency,
     coworkConfig.dreamingModel,
     coworkConfig.dreamingTimezone,
+    coworkConfig.toolResultMaxChars,
     coworkConfig.openClawSessionPolicy?.keepAlive,
   ]);
 
@@ -876,6 +811,7 @@ const Settings: React.FC<SettingsProps> = ({
       setTheme(config.theme);
       setLanguage(config.language);
       setUseSystemProxy(config.useSystemProxy ?? false);
+      setBrowserWebAccess(normalizeBrowserWebAccessConfig(config.browserWebAccess));
       setSpeechStopCommand(config.speechInput?.stopCommand ?? DEFAULT_SPEECH_INPUT_CONFIG.stopCommand);
       setSpeechSubmitCommand(config.speechInput?.submitCommand ?? DEFAULT_SPEECH_INPUT_CONFIG.submitCommand);
       setSpeechAutoRestartAfterReply(config.speechInput?.autoRestartAfterReply ?? DEFAULT_SPEECH_INPUT_CONFIG.autoRestartAfterReply);
@@ -1771,7 +1707,8 @@ const Settings: React.FC<SettingsProps> = ({
     || dreamingEnabled !== (coworkConfig.dreamingEnabled ?? false)
     || dreamingFrequency !== (coworkConfig.dreamingFrequency ?? '0 3 * * *')
     || dreamingModel !== (coworkConfig.dreamingModel ?? '')
-    || dreamingTimezone !== (coworkConfig.dreamingTimezone ?? '');
+    || dreamingTimezone !== (coworkConfig.dreamingTimezone ?? '')
+    || toolResultMaxChars !== normalizeToolResultMaxChars(coworkConfig.toolResultMaxChars, DEFAULT_TOOL_RESULT_MAX_CHARS);
   const isOpenClawAgentEngine = coworkAgentEngine === 'openclaw';
 
   const openClawProgressPercent = useMemo(() => {
@@ -2027,6 +1964,20 @@ const Settings: React.FC<SettingsProps> = ({
       const primaryProvider = firstEnabledProvider
         ? firstEnabledProvider[1]
         : normalizedProviders[activeProvider];
+      const normalizedBrowserWebAccess = normalizeBrowserWebAccessConfig({
+        ...browserWebAccess,
+        browserEnabled: true,
+        profileMode: defaultBrowserWebAccessConfig.profileMode,
+        followGlobalProxy: defaultBrowserWebAccessConfig.followGlobalProxy,
+        snapshotMode: defaultBrowserWebAccessConfig.snapshotMode,
+        executablePath: undefined,
+        cdpUrl: undefined,
+        attachOnly: undefined,
+        remoteCdpTimeoutMs: undefined,
+        remoteCdpHandshakeTimeoutMs: undefined,
+        extraArgs: [],
+        webFetch: defaultBrowserWebAccessConfig.webFetch,
+      });
 
       await configService.updateConfig({
         api: {
@@ -2042,6 +1993,7 @@ const Settings: React.FC<SettingsProps> = ({
         theme,
         language,
         useSystemProxy,
+        browserWebAccess: normalizedBrowserWebAccess,
         speechInput: {
           stopCommand: normalizedSpeechStopCommand,
           submitCommand: normalizedSpeechSubmitCommand,
@@ -2130,6 +2082,7 @@ const Settings: React.FC<SettingsProps> = ({
           dreamingFrequency,
           dreamingModel,
           dreamingTimezone,
+          toolResultMaxChars,
           openClawSessionPolicy: {
             keepAlive: openClawSessionKeepAlive,
           },
@@ -2221,10 +2174,11 @@ const Settings: React.FC<SettingsProps> = ({
     setNewModelId('');
     setNewModelSupportsImage(false);
     setNewModelContextWindow(undefined);
+    setNewModelCustomParams('');
     setModelFormError(null);
   };
 
-  const handleEditModel = (modelId: string, modelName: string, supportsImage?: boolean, contextWindow?: number) => {
+  const handleEditModel = (modelId: string, modelName: string, supportsImage?: boolean, contextWindow?: number, customParams?: Record<string, unknown>) => {
     setIsAddingModel(false);
     setIsEditingModel(true);
     setEditingModelId(modelId);
@@ -2232,6 +2186,7 @@ const Settings: React.FC<SettingsProps> = ({
     setNewModelId(modelId);
     setNewModelSupportsImage(!!supportsImage);
     setNewModelContextWindow(contextWindow);
+    setNewModelCustomParams(customParams ? JSON.stringify(customParams, null, 2) : '');
     setModelFormError(null);
   };
 
@@ -2282,6 +2237,22 @@ const Settings: React.FC<SettingsProps> = ({
       return;
     }
 
+    let parsedCustomParams: Record<string, unknown> | undefined;
+    const trimmedParams = newModelCustomParams.trim();
+    if (trimmedParams) {
+      try {
+        const parsed = JSON.parse(trimmedParams);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          setModelFormError(i18nService.t('customParamsInvalidJson'));
+          return;
+        }
+        parsedCustomParams = parsed as Record<string, unknown>;
+      } catch {
+        setModelFormError(i18nService.t('customParamsInvalidJson'));
+        return;
+      }
+    }
+
     const nextModel = {
       id: modelId,
       name: modelName,
@@ -2291,6 +2262,7 @@ const Settings: React.FC<SettingsProps> = ({
         newModelSupportsImage,
       ),
       ...(newModelContextWindow !== undefined ? { contextWindow: newModelContextWindow } : {}),
+      ...(parsedCustomParams ? { customParams: parsedCustomParams } : {}),
     };
     const updatedModels = isEditingModel && editingModelId
       ? currentModels.map(model => (model.id === editingModelId ? nextModel : model))
@@ -2311,6 +2283,7 @@ const Settings: React.FC<SettingsProps> = ({
     setNewModelId('');
     setNewModelSupportsImage(false);
     setNewModelContextWindow(undefined);
+    setNewModelCustomParams('');
     setModelFormError(null);
   };
 
@@ -2322,6 +2295,7 @@ const Settings: React.FC<SettingsProps> = ({
     setNewModelId('');
     setNewModelSupportsImage(false);
     setNewModelContextWindow(undefined);
+    setNewModelCustomParams('');
     setModelFormError(null);
   };
 
@@ -2763,14 +2737,17 @@ const Settings: React.FC<SettingsProps> = ({
   // 渲染标签页
   const sidebarTabs: { key: TabType; label: string; icon: React.ReactNode }[] = useMemo(() => {
     const allTabs = [
-      { key: 'general' as TabType,        label: i18nService.t('general'),        icon: <Cog6ToothIcon className="h-5 w-5" /> },
+      { key: 'general' as TabType,        label: i18nService.t('general'),        icon: <SettingsSlidersIcon className="h-5 w-5" /> },
+      { key: 'appearance' as TabType,     label: i18nService.t('appearance'),     icon: <SunIcon className="h-5 w-5" /> },
       { key: 'coworkAgentEngine' as TabType, label: i18nService.t('coworkAgentEngine'), icon: <CpuChipIcon className="h-5 w-5" /> },
-      { key: 'model' as TabType,          label: i18nService.t('model'),          icon: <CubeIcon className="h-5 w-5" /> },
+      { key: 'model' as TabType,          label: i18nService.t('settingsCustomModel'), icon: <CubeIcon className="h-5 w-5" /> },
       { key: 'im' as TabType,             label: i18nService.t('imBot'),          icon: <ChatBubbleLeftIcon className="h-5 w-5" /> },
+      { key: 'browserWebAccess' as TabType, label: i18nService.t('browserWebAccessTab'), icon: <GlobeAltIcon className="h-5 w-5" /> },
       { key: 'email' as TabType,          label: i18nService.t('emailTab'),       icon: <EnvelopeIcon className="h-5 w-5" /> },
-      { key: 'plugins' as TabType,        label: i18nService.t('pluginsTab'),     icon: <CubeIcon className="h-5 w-5" /> },
       { key: 'coworkMemory' as TabType,   label: i18nService.t('coworkMemoryTitle'), icon: <BrainIcon className="h-5 w-5" /> },
+      { key: 'coworkDreaming' as TabType, label: i18nService.t('coworkMemoryTabDreaming'), icon: <DreamingTabIcon className="h-5 w-5" /> },
       { key: 'coworkAgent' as TabType,    label: i18nService.t('coworkAgentTab'),    icon: <UserCircleIcon className="h-5 w-5" /> },
+      { key: 'plugins' as TabType,        label: i18nService.t('pluginsTab'),     icon: <PlugIcon className="h-5 w-5" /> },
       { key: 'shortcuts' as TabType,      label: i18nService.t('shortcuts'),      icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><rect x="2" y="4" width="20" height="14" rx="2" /><line x1="6" y1="8" x2="8" y2="8" /><line x1="10" y1="8" x2="12" y2="8" /><line x1="14" y1="8" x2="16" y2="8" /><line x1="6" y1="12" x2="8" y2="12" /><line x1="10" y1="12" x2="14" y2="12" /><line x1="16" y1="12" x2="18" y2="12" /><line x1="8" y1="15.5" x2="16" y2="15.5" /></svg> },
       { key: 'about' as TabType,          label: i18nService.t('about'),          icon: <InformationCircleIcon className="h-5 w-5" /> },
     ];
@@ -3400,7 +3377,12 @@ const Settings: React.FC<SettingsProps> = ({
               </div>
             </div>
 
-            {/* Appearance Section */}
+          </div>
+        );
+
+      case 'appearance':
+        return (
+          <div className="space-y-8">
             <div>
               <h4 className="text-sm font-medium mb-3" style={{ color: 'var(--lobster-text-primary)' }}>
                 {i18nService.t('appearance')}
@@ -3666,107 +3648,174 @@ const Settings: React.FC<SettingsProps> = ({
                     </button>
                   </label>
                 </div>
+
               </div>
             )}
+            <div className="space-y-4 rounded-xl border px-4 py-4 border-border">
+              <div>
+                <label htmlFor="tool-result-max-chars" className="block text-sm font-medium text-foreground">
+                  {i18nService.t('toolResultMaxChars')}
+                </label>
+                <div className="mt-1 text-xs text-secondary">
+                  {i18nService.t('toolResultMaxCharsDescription')}
+                </div>
+                <input
+                  id="tool-result-max-chars"
+                  type="number"
+                  min={MIN_TOOL_RESULT_MAX_CHARS}
+                  max={MAX_TOOL_RESULT_MAX_CHARS}
+                  step={10000}
+                  value={toolResultMaxChars}
+                  onChange={(event) => setToolResultMaxChars(
+                    normalizeToolResultMaxChars(event.target.value, DEFAULT_TOOL_RESULT_MAX_CHARS)
+                  )}
+                  className="mt-3 w-[220px] px-3 py-2 border border-border rounded-xl bg-input-bg text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
+                />
+                <div className="mt-1 text-xs text-secondary">
+                  {i18nService.t('toolResultMaxCharsRangeHint')
+                    .replace('{min}', String(MIN_TOOL_RESULT_MAX_CHARS))
+                    .replace('{max}', String(MAX_TOOL_RESULT_MAX_CHARS))}
+                </div>
+              </div>
+            </div>
           </div>
         );
 
-      case 'coworkMemory':
+      case 'coworkMemory': {
+        const memoryTabs = [
+          { key: 'entries' as const, titleKey: 'coworkMemoryTabEntries' },
+          { key: 'embedding' as const, titleKey: 'coworkMemoryTabEmbedding' },
+        ];
         return (
-          <div className="space-y-6">
-            <div className="space-y-4 rounded-xl border px-4 py-4 border-border">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <div className="text-sm font-medium text-foreground">
-                    {i18nService.t('coworkMemoryCrudTitle')}
-                  </div>
-                  <div className="text-xs text-secondary">
-                    {i18nService.t('coworkMemoryManageHint')}
-                  </div>
-                </div>
+          <div className="flex h-full flex-col space-y-4">
+            <div
+              className="flex flex-wrap gap-2 border-b border-border pb-3 shrink-0"
+              role="tablist"
+              aria-label={i18nService.t('coworkMemoryTitle')}
+            >
+              {memoryTabs.map((tab) => (
                 <button
                   type="button"
-                  onClick={handleOpenCoworkMemoryModal}
-                  className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm transition-colors active:scale-[0.98]"
+                  key={tab.key}
+                  role="tab"
+                  aria-selected={memoryTab === tab.key}
+                  onClick={() => setMemoryTab(tab.key)}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                    memoryTab === tab.key
+                      ? 'bg-primary-muted text-primary'
+                      : 'text-secondary hover:text-foreground hover:bg-surface-raised'
+                  }`}
                 >
-                  <PlusCircleIcon className="h-4 w-4 mr-1.5" />
-                  {i18nService.t('coworkMemoryCrudCreate')}
+                  {i18nService.t(tab.titleKey)}
                 </button>
-              </div>
+              ))}
+            </div>
 
-              {coworkMemoryStats && (
-                <div className="text-xs text-secondary">
-                  {`${i18nService.t('coworkMemoryTotalLabel')}: ${coworkMemoryStats.total}`}
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {memoryTab === 'entries' && (
+                <div className="space-y-4 rounded-xl border px-4 py-4 border-border">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-foreground">
+                        {i18nService.t('coworkMemoryCrudTitle')}
+                      </div>
+                      <div className="text-xs text-secondary">
+                        {i18nService.t('coworkMemoryManageHint')}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleOpenCoworkMemoryModal}
+                      className="inline-flex items-center justify-center px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm transition-colors active:scale-[0.98]"
+                    >
+                      <PlusCircleIcon className="h-4 w-4 mr-1.5" />
+                      {i18nService.t('coworkMemoryCrudCreate')}
+                    </button>
+                  </div>
+
+                  {coworkMemoryStats && (
+                    <div className="text-xs text-secondary">
+                      {`${i18nService.t('coworkMemoryTotalLabel')}: ${coworkMemoryStats.total}`}
+                    </div>
+                  )}
+
+                  <input
+                    type="text"
+                    value={coworkMemoryQuery}
+                    onChange={(event) => setCoworkMemoryQuery(event.target.value)}
+                    placeholder={i18nService.t('coworkMemorySearchPlaceholder')}
+                    className="w-full rounded-lg border px-3 py-2 text-sm border-border bg-surface"
+                  />
+
+                  <div className="rounded-lg border border-border">
+                    {coworkMemoryListLoading ? (
+                      <div className="px-3 py-3 text-xs text-secondary">
+                        {i18nService.t('loading')}
+                      </div>
+                    ) : coworkMemoryEntries.length === 0 ? (
+                      <div className="px-3 py-3 text-xs text-secondary">
+                        {i18nService.t('coworkMemoryEmpty')}
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-border">
+                        {coworkMemoryEntries.map((entry) => (
+                          <div key={entry.id} className="px-3 py-3 text-xs hover:bg-surface-raised transition-colors">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-foreground break-words">
+                                  {entry.text}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditCoworkMemoryEntry(entry)}
+                                  className="rounded border px-2 py-1 border-border text-foreground hover:bg-surface-raised transition-colors"
+                                >
+                                  {i18nService.t('edit')}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { void handleDeleteCoworkMemoryEntry(entry); }}
+                                  className="rounded border px-2 py-1 text-red-500 border-border hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-60 transition-colors"
+                                  disabled={coworkMemoryListLoading}
+                                >
+                                  {i18nService.t('delete')}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
-              <input
-                type="text"
-                value={coworkMemoryQuery}
-                onChange={(event) => setCoworkMemoryQuery(event.target.value)}
-                placeholder={i18nService.t('coworkMemorySearchPlaceholder')}
-                className="w-full rounded-lg border px-3 py-2 text-sm border-border bg-surface"
-              />
-
-              <div className="rounded-lg border border-border">
-                {coworkMemoryListLoading ? (
-                  <div className="px-3 py-3 text-xs text-secondary">
-                    {i18nService.t('loading')}
-                  </div>
-                ) : coworkMemoryEntries.length === 0 ? (
-                  <div className="px-3 py-3 text-xs text-secondary">
-                    {i18nService.t('coworkMemoryEmpty')}
-                  </div>
-                ) : (
-                  <div className="divide-y divide-border">
-                    {coworkMemoryEntries.map((entry) => (
-                      <div key={entry.id} className="px-3 py-3 text-xs hover:bg-surface-raised transition-colors">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-foreground break-words">
-                              {entry.text}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => handleEditCoworkMemoryEntry(entry)}
-                              className="rounded border px-2 py-1 border-border text-foreground hover:bg-surface-raised transition-colors"
-                            >
-                              {i18nService.t('edit')}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { void handleDeleteCoworkMemoryEntry(entry); }}
-                              className="rounded border px-2 py-1 text-red-500 border-border hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-60 transition-colors"
-                              disabled={coworkMemoryListLoading}
-                            >
-                              {i18nService.t('delete')}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {memoryTab === 'embedding' && (
+                <EmbeddingSettingsSection
+                  embeddingEnabled={embeddingEnabled}
+                  embeddingProvider={embeddingProvider}
+                  embeddingModel={embeddingModel}
+                  embeddingVectorWeight={embeddingVectorWeight}
+                  embeddingRemoteBaseUrl={embeddingRemoteBaseUrl}
+                  embeddingRemoteApiKey={embeddingRemoteApiKey}
+                  onEmbeddingEnabledChange={setEmbeddingEnabled}
+                  onEmbeddingProviderChange={setEmbeddingProvider}
+                  onEmbeddingModelChange={setEmbeddingModel}
+                  onEmbeddingVectorWeightChange={setEmbeddingVectorWeight}
+                  onEmbeddingRemoteBaseUrlChange={setEmbeddingRemoteBaseUrl}
+                  onEmbeddingRemoteApiKeyChange={setEmbeddingRemoteApiKey}
+                />
+              )}
             </div>
+          </div>
+        );
+      }
 
-            <EmbeddingSettingsSection
-              embeddingEnabled={embeddingEnabled}
-              embeddingProvider={embeddingProvider}
-              embeddingModel={embeddingModel}
-              embeddingVectorWeight={embeddingVectorWeight}
-              embeddingRemoteBaseUrl={embeddingRemoteBaseUrl}
-              embeddingRemoteApiKey={embeddingRemoteApiKey}
-              onEmbeddingEnabledChange={setEmbeddingEnabled}
-              onEmbeddingProviderChange={setEmbeddingProvider}
-              onEmbeddingModelChange={setEmbeddingModel}
-              onEmbeddingVectorWeightChange={setEmbeddingVectorWeight}
-              onEmbeddingRemoteBaseUrlChange={setEmbeddingRemoteBaseUrl}
-              onEmbeddingRemoteApiKeyChange={setEmbeddingRemoteApiKey}
-            />
-
+      case 'coworkDreaming':
+        return (
+          <div className="min-h-full">
             <DreamingSettingsSection
               dreamingEnabled={dreamingEnabled}
               dreamingFrequency={dreamingFrequency}
@@ -3777,1096 +3826,73 @@ const Settings: React.FC<SettingsProps> = ({
               onDreamingModelChange={setDreamingModel}
               onDreamingTimezoneChange={setDreamingTimezone}
             />
-
           </div>
+        );
+
+      case 'browserWebAccess':
+        return (
+          <BrowserWebAccessSettings
+            value={browserWebAccess}
+            onChange={setBrowserWebAccess}
+          />
         );
 
       case 'model':
         return (
-          <div className="flex h-full">
-            {/* Provider List - Left Side */}
-            <div className="w-2/5 border-r border-border pr-3 space-y-1.5 overflow-y-auto">
-              <div className="flex items-center justify-between mb-2 px-1">
-                <h3 className="text-sm font-medium text-foreground">
-                  {i18nService.t('modelProviders')}
-                </h3>
-                <div className="flex items-center space-x-1">
-                  <button
-                    type="button"
-                    onClick={handleImportProvidersClick}
-                    disabled={isImportingProviders || isExportingProviders}
-                    className="inline-flex items-center px-2 py-1 text-[11px] font-medium rounded-lg border border-border text-foreground hover:bg-surface-raised disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-[0.98]"
-                  >
-                    {i18nService.t('import')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExportProviders}
-                    disabled={isImportingProviders || isExportingProviders}
-                    className="inline-flex items-center px-2 py-1 text-[11px] font-medium rounded-lg border border-border text-foreground hover:bg-surface-raised disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-[0.98]"
-                  >
-                    {i18nService.t('export')}
-                  </button>
-                </div>
-              </div>
-              <input
-                ref={importInputRef}
-                type="file"
-                accept="application/json"
-                className="hidden"
-                onChange={handleImportProviders}
-              />
-              {Object.entries(visibleProviders).map(([provider, config]) => {
-                const providerKey = provider as ProviderType;
-                const isCustom = isCustomProvider(provider);
-                const missingApiKey = providerRequiresApiKey(providerKey)
-                  && !(providerKey === 'openai' && config.authType === 'oauth' && hasOpenAIOAuthCredential)
-                  && !config.apiKey.trim();
-                const canToggleProvider = config.enabled || !missingApiKey;
-                const displayLabel = isCustom
-                  ? ((config as ProviderConfig).displayName || getCustomProviderDefaultName(provider))
-                  : (ProviderRegistry.get(providerKey)?.label ?? getProviderDisplayName(provider));
-                return (
-                  <div
-                    key={provider}
-                    onClick={() => handleProviderChange(providerKey)}
-                    className={`group flex items-center p-2 rounded-xl cursor-pointer transition-colors ${
-                      activeProvider === provider
-                        ? 'bg-primary-muted border border-primary shadow-subtle'
-                        : 'bg-surface hover:bg-surface-raised border border-transparent'
-                    }`}
-                  >
-                    <div className="flex flex-1 items-center min-w-0">
-                      <div className="mr-2 flex h-7 w-7 items-center justify-center shrink-0">
-                        <span className="text-foreground">
-                          {getProviderIcon(provider)}
-                        </span>
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className={`text-sm font-medium truncate ${
-                          activeProvider === provider
-                            ? 'text-primary'
-                            : 'text-foreground'
-                        }`}>
-                          {displayLabel}
-                        </span>
-                        {isCustom && (
-                          <span className="text-[9px] leading-tight mt-0.5 text-primary">
-                            {i18nService.t('customBadge')}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center ml-2 gap-1">
-                      {isCustom && (
-                        <button
-                          type="button"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-claude-secondaryText hover:text-red-500 dark:text-claude-darkSecondaryText dark:hover:text-red-400 p-0.5"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteCustomProvider(providerKey);
-                          }}
-                          title={i18nService.t('deleteCustomProvider')}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-                          </svg>
-                        </button>
-                      )}
-                      <div
-                        title={!canToggleProvider ? i18nService.t('configureApiKey') : undefined}
-                        className={`w-7 h-4 rounded-full flex items-center transition-colors ${
-                          config.enabled ? 'bg-primary' : 'bg-gray-400 dark:bg-gray-600'
-                        } ${
-                          canToggleProvider ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
-                        }`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!canToggleProvider) {
-                            return;
-                          }
-                          toggleProviderEnabled(providerKey);
-                        }}
-                      >
-                        <div
-                          className={`w-3 h-3 rounded-full bg-white shadow-md transform transition-transform ${
-                            config.enabled ? 'translate-x-3.5' : 'translate-x-0.5'
-                          }`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              {/* Add Custom Provider Button */}
-              {CUSTOM_PROVIDER_KEYS.some(k => !providers[k]) && (
-              <button
-                type="button"
-                onClick={handleAddCustomProvider}
-                className="w-full flex items-center justify-center p-2 rounded-xl border border-dashed border-claude-border dark:border-claude-darkBorder text-claude-secondaryText dark:text-claude-darkSecondaryText hover:border-claude-accent hover:text-claude-accent transition-colors text-sm"
-              >
-                {i18nService.t('addCustomProvider')}
-              </button>
-              )}
-            </div>
-
-            {/* Provider Settings - Right Side */}
-            <div className="w-3/5 pl-4 pr-2 space-y-4 overflow-y-auto [scrollbar-gutter:stable]">
-              <div className="flex items-center justify-between pb-2 border-b border-border">
-                <div className="flex items-center gap-2 min-w-0">
-                  <h3 className="text-base font-medium text-foreground truncate">
-                    {isCustomProvider(activeProvider)
-                      ? ((providers[activeProvider] as ProviderConfig)?.displayName || getCustomProviderDefaultName(activeProvider))
-                      : (ProviderRegistry.get(activeProvider)?.label ?? getProviderDisplayName(activeProvider))
-                    } {i18nService.t('providerSettings')}
-                  </h3>
-                  {!isCustomProvider(activeProvider) && ProviderRegistry.get(activeProvider)?.website && (
-                    <button
-                      type="button"
-                      onClick={() => void window.electron.shell.openExternal(ProviderRegistry.get(activeProvider)!.website!)}
-                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-secondary hover:bg-surface-raised hover:text-primary transition-colors"
-                      title={i18nService.t('visitOfficialSite')}
-                    >
-                      <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
-                      <span>{i18nService.t('visitOfficialSite')}</span>
-                    </button>
-                  )}
-                </div>
-                <div
-                  className={`px-2 py-0.5 rounded-lg text-xs font-medium ${
-                    providers[activeProvider].enabled
-                      ? 'bg-green-500/20 text-green-600 dark:text-green-400'
-                      : 'bg-red-500/20 text-red-600 dark:text-red-400'
-                  }`}
-                >
-                  {providers[activeProvider].enabled ? i18nService.t('providerStatusOn') : i18nService.t('providerStatusOff')}
-                </div>
-              </div>
-
-              {/* MiniMax OAuth auth section */}
-              {activeProvider === 'minimax' && (
-                <div className="space-y-3">
-                  {/* Auth type tabs */}
-                  <div>
-                    <div className="flex rounded-xl overflow-hidden border border-border mb-3">
-                      <button
-                        type="button"
-                        onClick={() => setProviders(prev => ({ ...prev, minimax: { ...prev.minimax, authType: 'oauth' } }))}
-                        className={`flex-1 py-1.5 text-xs font-medium transition-colors ${providers.minimax.authType === 'oauth' ? 'bg-primary text-white' : 'text-secondary hover:bg-surface-raised'}`}
-                      >
-                        {i18nService.t('minimaxOAuthTabOAuth')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setProviders(prev => ({ ...prev, minimax: { ...prev.minimax, authType: 'apikey' } }));
-                          setMinimaxOAuthPhase({ kind: 'idle' });
-                        }}
-                        className={`flex-1 py-1.5 text-xs font-medium transition-colors ${providers.minimax.authType !== 'oauth' ? 'bg-primary text-white' : 'text-secondary hover:bg-surface-raised'}`}
-                      >
-                        {i18nService.t('minimaxOAuthTabApiKey')}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* API Key mode */}
-                  {providers.minimax.authType !== 'oauth' && (
-                    <div>
-                      <div className="mb-1 flex items-center justify-between">
-                        <label htmlFor="minimax-apiKey" className="block text-xs font-medium text-foreground">
-                          {i18nService.t('apiKey')}
-                        </label>
-                        {ProviderRegistry.get('minimax')?.apiKeyUrl && (
-                          <button
-                            type="button"
-                            onClick={() => void window.electron.shell.openExternal(ProviderRegistry.get('minimax')!.apiKeyUrl!)}
-                            className="text-[11px] text-primary hover:underline transition-colors"
-                          >
-                            {i18nService.t('getApiKey')}
-                          </button>
-                        )}
-                      </div>
-                      <div className="relative">
-                        <input
-                          type={showApiKey ? 'text' : 'password'}
-                          id="minimax-apiKey"
-                          value={providers.minimax.apiKey}
-                          onChange={(e) => handleProviderConfigChange('minimax', 'apiKey', e.target.value)}
-                          className="block w-full rounded-xl bg-surface-inset border-border border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-3 py-2 pr-16 text-xs"
-                          placeholder={i18nService.t('apiKeyPlaceholder')}
-                        />
-                        <div className="absolute right-2 inset-y-0 flex items-center gap-1">
-                          {providers.minimax.apiKey && (
-                            <button
-                              type="button"
-                              onClick={() => handleProviderConfigChange('minimax', 'apiKey', '')}
-                              className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
-                              title={i18nService.t('clear') || 'Clear'}
-                            >
-                              <XCircleIconSolid className="h-4 w-4" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setShowApiKey(!showApiKey)}
-                            className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
-                            title={showApiKey ? (i18nService.t('hide') || 'Hide') : (i18nService.t('show') || 'Show')}
-                          >
-                            {showApiKey ? <EyeIcon className="h-4 w-4" /> : <EyeSlashIcon className="h-4 w-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* OAuth mode */}
-                  {providers.minimax.authType === 'oauth' && (
-                    <div className="space-y-2">
-                      {/* Already logged in */}
-                      {minimaxOAuthPhase.kind === 'idle' && providers.minimax.apiKey && (
-                        <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20 space-y-2">
-                          <p className="text-xs text-green-600 dark:text-green-400 font-medium">
-                            {i18nService.t('minimaxOAuthLoggedIn')}
-                          </p>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleMiniMaxDeviceLogin(minimaxOAuthRegion)}
-                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-border text-foreground hover:bg-surface-raised transition-colors"
-                            >
-                              {i18nService.t('minimaxOAuthRelogin')}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleMiniMaxOAuthLogout}
-                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors"
-                            >
-                              {i18nService.t('minimaxOAuthLogout')}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Not logged in yet — show region selector + login button */}
-                      {minimaxOAuthPhase.kind === 'idle' && !providers.minimax.apiKey && (
-                        <div className="space-y-2">
-                          <div>
-                            <label className="block text-xs font-medium text-foreground mb-1">
-                              {i18nService.t('minimaxOAuthRegionLabel')}
-                            </label>
-                            <div className="flex rounded-xl overflow-hidden border border-border">
-                              <button
-                                type="button"
-                                onClick={() => setMinimaxOAuthRegion('cn')}
-                                className={`flex-1 py-1.5 text-xs font-medium transition-colors ${minimaxOAuthRegion === 'cn' ? 'bg-primary text-white' : 'text-secondary hover:bg-surface-raised'}`}
-                              >
-                                {i18nService.t('minimaxOAuthRegionCN')}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setMinimaxOAuthRegion('global')}
-                                className={`flex-1 py-1.5 text-xs font-medium transition-colors ${minimaxOAuthRegion === 'global' ? 'bg-primary text-white' : 'text-secondary hover:bg-surface-raised'}`}
-                              >
-                                {i18nService.t('minimaxOAuthRegionGlobal')}
-                              </button>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleMiniMaxDeviceLogin(minimaxOAuthRegion)}
-                            className="w-full py-2 text-xs font-medium rounded-xl bg-primary text-white hover:bg-primary-hover transition-colors"
-                          >
-                            {i18nService.t('minimaxOAuthLogin')}
-                          </button>
-                          <p className="text-[11px] text-secondary">
-                            {i18nService.t('minimaxOAuthHint')}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Requesting code */}
-                      {minimaxOAuthPhase.kind === 'requesting_code' && (
-                        <div className="p-3 rounded-xl bg-surface-inset border border-border">
-                          <p className="text-xs text-secondary">
-                            {i18nService.t('minimaxOAuthLoggingIn')}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Pending — show user code */}
-                      {minimaxOAuthPhase.kind === 'pending' && (
-                        <div className="p-3 rounded-xl bg-surface-inset border border-border space-y-2">
-                          <p className="text-xs text-foreground font-medium">
-                            {i18nService.t('minimaxOAuthOpenBrowserHint')}
-                          </p>
-                          <div>
-                            <span className="text-[11px] text-secondary">
-                              {i18nService.t('minimaxOAuthUserCode')}:&nbsp;
-                            </span>
-                            <code className="text-xs font-mono text-primary">
-                              {minimaxOAuthPhase.userCode}
-                            </code>
-                          </div>
-                          <a
-                            href={minimaxOAuthPhase.verificationUri}
-                            onClick={(e) => { e.preventDefault(); void window.electron.shell.openExternal(minimaxOAuthPhase.verificationUri); }}
-                            className="block text-[11px] text-primary underline truncate"
-                          >
-                            {minimaxOAuthPhase.verificationUri}
-                          </a>
-                          <p className="text-[11px] text-secondary">
-                            {i18nService.t('minimaxOAuthStatusPending')}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={handleCancelMiniMaxLogin}
-                            className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-border text-foreground hover:bg-surface-raised transition-colors"
-                          >
-                            {i18nService.t('minimaxOAuthCancel')}
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Success */}
-                      {minimaxOAuthPhase.kind === 'success' && (
-                        <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20">
-                          <p className="text-xs text-green-600 dark:text-green-400 font-medium">
-                            {i18nService.t('minimaxOAuthStatusSuccess')}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Error */}
-                      {minimaxOAuthPhase.kind === 'error' && (
-                        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 space-y-2">
-                          <p className="text-xs text-red-600 dark:text-red-400 font-medium">
-                            {i18nService.t('minimaxOAuthStatusError')}
-                          </p>
-                          <p className="text-[11px] text-red-600/80 dark:text-red-400/80 break-words">
-                            {minimaxOAuthPhase.message}
-                          </p>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleMiniMaxDeviceLogin(minimaxOAuthRegion)}
-                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-primary text-white hover:bg-primary-hover transition-colors"
-                            >
-                              {i18nService.t('minimaxOAuthRelogin')}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setMinimaxOAuthPhase({ kind: 'idle' })}
-                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-border text-foreground hover:bg-surface-raised transition-colors"
-                            >
-                              {i18nService.t('minimaxOAuthCancel')}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeProvider === 'github-copilot' && (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-foreground mb-2">
-                      {i18nService.t('githubCopilotAuth')}
-                    </label>
-
-                    {(copilotAuthStatus === 'idle' || copilotAuthStatus === 'error') && !providers['github-copilot'].apiKey && (
-                      <div className="space-y-2">
-                        <button
-                          type="button"
-                          onClick={() => void handleCopilotSignIn()}
-                          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-xs font-medium hover:bg-primary-hover transition-colors"
-                        >
-                          <GitHubCopilotIcon className="w-4 h-4" />
-                          {i18nService.t('githubCopilotSignIn')}
-                        </button>
-                        {copilotError && (
-                          <p className="text-xs text-red-500 dark:text-red-400">{copilotError}</p>
-                        )}
-                      </div>
-                    )}
-
-                    {copilotAuthStatus === 'requesting' && (
-                      <div className="p-3 rounded-xl bg-surface-inset border border-border">
-                        <p className="text-xs text-secondary">
-                          {i18nService.t('githubCopilotRequesting')}
-                        </p>
-                      </div>
-                    )}
-
-                    {(copilotAuthStatus === 'awaiting_user' || copilotAuthStatus === 'polling') && (
-                      <div className="space-y-3">
-                        <div className="p-3 rounded-xl bg-surface-inset border border-border">
-                          <p className="text-xs text-secondary mb-2">
-                            {i18nService.t('githubCopilotEnterCode')}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <code className="text-lg font-mono font-bold tracking-widest text-foreground">
-                              {copilotUserCode}
-                            </code>
-                            <button
-                              type="button"
-                              onClick={() => navigator.clipboard.writeText(copilotUserCode)}
-                              className="px-2 py-0.5 rounded text-[10px] text-secondary hover:text-primary border border-border transition-colors"
-                            >
-                              {i18nService.t('copy')}
-                            </button>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => void window.electron.shell.openExternal(copilotVerificationUri)}
-                            className="mt-2 text-xs text-primary hover:underline break-all text-left"
-                          >
-                            {copilotVerificationUri}
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <p className="text-xs text-secondary">
-                            {i18nService.t('githubCopilotWaiting')}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => void handleCopilotCancelAuth()}
-                            className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-border text-foreground hover:bg-surface-raised transition-colors"
-                          >
-                            {i18nService.t('minimaxOAuthCancel')}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {(copilotAuthStatus === 'authenticated' || providers['github-copilot'].apiKey) && copilotAuthStatus !== 'requesting' && copilotAuthStatus !== 'awaiting_user' && copilotAuthStatus !== 'polling' && (
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-green-500/10 border border-green-500/20">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                          <span className="text-xs text-green-600 dark:text-green-400">
-                            {copilotGithubUser
-                              ? `${i18nService.t('githubCopilotConnected')} @${copilotGithubUser}`
-                              : i18nService.t('githubCopilotConnected')}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => void handleCopilotSignOut()}
-                          className="text-xs text-foreground hover:text-red-500 transition-colors"
-                        >
-                          {i18nService.t('githubCopilotSignOut')}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {activeProvider === 'openai' && (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-foreground mb-2">
-                      {i18nService.t('openaiAuthMethodLabel')}
-                    </label>
-                    <div className="flex rounded-xl overflow-hidden border border-border mb-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setProviders(prev => ({
-                            ...prev,
-                            openai: {
-                              ...prev.openai,
-                              authType: 'apikey',
-                            },
-                          }));
-                          setOpenaiOAuthPhase({ kind: 'idle' });
-                        }}
-                        className={`flex-1 py-1.5 text-xs font-medium transition-colors ${!isOpenAIOAuthMode ? 'bg-primary text-white' : 'text-secondary hover:bg-surface-raised'}`}
-                      >
-                        {i18nService.t('openaiOAuthTabApiKey')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setProviders(prev => ({
-                          ...prev,
-                          openai: {
-                            ...prev.openai,
-                            authType: 'oauth',
-                          },
-                        }))}
-                        className={`flex-1 py-1.5 text-xs font-medium transition-colors ${isOpenAIOAuthMode ? 'bg-primary text-white' : 'text-secondary hover:bg-surface-raised'}`}
-                      >
-                        {i18nService.t('openaiOAuthTabOAuth')}
-                      </button>
-                    </div>
-                  </div>
-
-                  {isOpenAIOAuthMode && (
-                    <div className="space-y-2">
-                      {openaiOAuthPhase.kind === 'idle' && openaiOAuthStatus?.loggedIn && (
-                        <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20 space-y-2">
-                          <p className="text-xs text-green-600 dark:text-green-400 font-medium">
-                            {i18nService.t('openaiOAuthLoggedIn')}
-                            {openaiOAuthStatus.email ? ` (${openaiOAuthStatus.email})` : ''}
-                          </p>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => { void handleOpenAIOAuthLogin(); }}
-                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-border text-foreground hover:bg-surface-raised transition-colors"
-                            >
-                              {i18nService.t('openaiOAuthRelogin')}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { void handleOpenAIOAuthLogout(); }}
-                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors"
-                            >
-                              {i18nService.t('openaiOAuthLogout')}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {openaiOAuthPhase.kind === 'idle' && openaiOAuthStatus && !openaiOAuthStatus.loggedIn && (
-                        <div className="space-y-2">
-                          <button
-                            type="button"
-                            onClick={() => { void handleOpenAIOAuthLogin(); }}
-                            className="w-full py-2 text-xs font-medium rounded-xl bg-primary text-white hover:bg-primary-hover transition-colors"
-                          >
-                            {i18nService.t('openaiOAuthLogin')}
-                          </button>
-                          <p className="text-[11px] text-secondary">
-                            {i18nService.t('openaiOAuthHint')}
-                          </p>
-                        </div>
-                      )}
-
-                      {openaiOAuthPhase.kind === 'pending' && (
-                        <div className="p-3 rounded-xl bg-surface-inset border border-border space-y-2">
-                          <p className="text-xs text-foreground font-medium">
-                            {i18nService.t('openaiOAuthOpenBrowserHint')}
-                          </p>
-                          <p className="text-[11px] text-secondary">
-                            {i18nService.t('openaiOAuthStatusPending')}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => { void handleCancelOpenAIOAuthLogin(); }}
-                            className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-border text-foreground hover:bg-surface-raised transition-colors"
-                          >
-                            {i18nService.t('openaiOAuthCancel')}
-                          </button>
-                        </div>
-                      )}
-
-                      {openaiOAuthPhase.kind === 'success' && (
-                        <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20">
-                          <p className="text-xs text-green-600 dark:text-green-400 font-medium">
-                            {i18nService.t('openaiOAuthStatusSuccess')}
-                            {openaiOAuthPhase.email ? ` (${openaiOAuthPhase.email})` : ''}
-                          </p>
-                        </div>
-                      )}
-
-                      {openaiOAuthPhase.kind === 'error' && (
-                        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 space-y-2">
-                          <p className="text-xs text-red-600 dark:text-red-400 font-medium">
-                            {i18nService.t('openaiOAuthStatusError')}
-                          </p>
-                          <p className="text-[11px] text-red-600/80 dark:text-red-400/80 break-words">
-                            {openaiOAuthPhase.message}
-                          </p>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => { void handleOpenAIOAuthLogin(); }}
-                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-primary text-white hover:bg-primary-hover transition-colors"
-                            >
-                              {i18nService.t('openaiOAuthRelogin')}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setOpenaiOAuthPhase({ kind: 'idle' })}
-                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-border text-foreground hover:bg-surface-raised transition-colors"
-                            >
-                              {i18nService.t('openaiOAuthCancel')}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Standard API key section for non-MiniMax providers */}
-              {providerRequiresApiKey(activeProvider) && activeProvider !== 'minimax' && !isOpenAIOAuthMode && (
-                <div>
-                  <div className="mb-1 flex items-center justify-between">
-                    <label htmlFor={`${activeProvider}-apiKey`} className="block text-xs font-medium text-foreground">
-                      {i18nService.t('apiKey')}
-                    </label>
-                    {!isCustomProvider(activeProvider) && ProviderRegistry.get(activeProvider)?.apiKeyUrl && (
-                      <button
-                        type="button"
-                        onClick={() => void window.electron.shell.openExternal(ProviderRegistry.get(activeProvider)!.apiKeyUrl!)}
-                        className="text-[11px] text-primary hover:underline transition-colors"
-                      >
-                        {i18nService.t('getApiKey')}
-                      </button>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <input
-                      type={showApiKey ? 'text' : 'password'}
-                      id={`${activeProvider}-apiKey`}
-                      value={providers[activeProvider].apiKey}
-                      onChange={(e) => handleProviderConfigChange(activeProvider, 'apiKey', e.target.value)}
-                      className="block w-full rounded-xl bg-surface-inset border-border border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-3 py-2 pr-16 text-xs"
-                      placeholder={i18nService.t('apiKeyPlaceholder')}
-                    />
-                    <div className="absolute right-2 inset-y-0 flex items-center gap-1">
-                      {providers[activeProvider].apiKey && (
-                        <button
-                          type="button"
-                          onClick={() => handleProviderConfigChange(activeProvider, 'apiKey', '')}
-                          className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
-                          title={i18nService.t('clear') || 'Clear'}
-                        >
-                          <XCircleIconSolid className="h-4 w-4" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setShowApiKey(!showApiKey)}
-                        className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
-                        title={showApiKey ? (i18nService.t('hide') || 'Hide') : (i18nService.t('show') || 'Show')}
-                      >
-                        {showApiKey ? <EyeIcon className="h-4 w-4" /> : <EyeSlashIcon className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {isCustomProvider(activeProvider) && (
-                <div>
-                  <label htmlFor={`${activeProvider}-displayName`} className="block text-xs font-medium dark:text-claude-darkText text-claude-text mb-1">
-                    {i18nService.t('customDisplayName')}
-                  </label>
-                  <input
-                    type="text"
-                    id={`${activeProvider}-displayName`}
-                    value={(providers[activeProvider] as ProviderConfig)?.displayName ?? ''}
-                    onChange={(e) => handleProviderConfigChange(activeProvider, 'displayName', e.target.value)}
-                    className="block w-full rounded-xl bg-claude-surfaceInset dark:bg-claude-darkSurfaceInset dark:border-claude-darkBorder border-claude-border border focus:border-claude-accent focus:ring-1 focus:ring-claude-accent/30 dark:text-claude-darkText text-claude-text px-3 py-2 text-xs"
-                    placeholder={i18nService.t('customDisplayNamePlaceholder')}
-                  />
-                </div>
-              )}
-
-              {!(activeProvider === 'minimax' && providers.minimax.authType === 'oauth') && !isOpenAIOAuthMode && (
-              <div>
-                <label htmlFor={`${activeProvider}-baseUrl`} className="block text-xs font-medium text-foreground mb-1">
-                  {i18nService.t('baseUrl')}
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    id={`${activeProvider}-baseUrl`}
-                    value={
-                      (() => {
-                        const fmt = getEffectiveApiFormat(activeProvider, providers[activeProvider].apiFormat);
-                        if (fmt !== 'gemini') {
-                          const cpUrl = (providers[activeProvider] as { codingPlanEnabled?: boolean }).codingPlanEnabled
-                            ? ProviderRegistry.getCodingPlanUrl(activeProvider, fmt)
-                            : undefined;
-                          if (cpUrl) return cpUrl;
-                        }
-                        return providers[activeProvider].baseUrl;
-                      })()
-                    }
-                    onChange={(e) => handleProviderConfigChange(activeProvider, 'baseUrl', e.target.value)}
-                    disabled={isBaseUrlLocked}
-                    className={`block w-full rounded-xl bg-surface-inset border-border border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-3 py-2 pr-8 text-xs ${isBaseUrlLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    placeholder={getProviderDefaultBaseUrl(activeProvider, getEffectiveApiFormat(activeProvider, providers[activeProvider].apiFormat)) || defaultConfig.providers?.[activeProvider]?.baseUrl || i18nService.t('baseUrlPlaceholder')}
-                  />
-                  {providers[activeProvider].baseUrl && !isBaseUrlLocked && (
-                    <div className="absolute right-2 inset-y-0 flex items-center">
-                      <button
-                        type="button"
-                        onClick={() => handleProviderConfigChange(activeProvider, 'baseUrl', '')}
-                        className="p-0.5 rounded text-secondary hover:text-primary transition-colors"
-                        title={i18nService.t('clear') || 'Clear'}
-                      >
-                        <XCircleIconSolid className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {isCustomProvider(activeProvider) && (
-                <div className="mt-1.5 space-y-0.5 text-[11px] text-secondary">
-                  <p>
-                    <span className="text-sm text-muted mr-1">•</span>
-                    {i18nService.t('baseUrlHint1')}
-                    <code className="ml-1 text-primary break-all">{i18nService.t('baseUrlHintExample1')}</code>
-                  </p>
-                  <p>
-                    <span className="text-sm text-muted mr-1">•</span>
-                    {i18nService.t('baseUrlHint2')}
-                    <code className="ml-1 text-primary break-all">{i18nService.t('baseUrlHintExample2')}</code>
-                  </p>
-                </div>
-                )}
-                {/* GLM Coding Plan 提示 */}
-                {activeProvider === 'zhipu' && providers.zhipu.codingPlanEnabled && (
-                  <div className="mt-1.5 p-2 rounded-lg bg-primary-muted border border-primary-muted">
-                    <p className="text-[11px] text-primary dark:text-primary">
-                      <span className="font-medium">GLM Coding Plan:</span> {i18nService.t('zhipuCodingPlanEndpointHint')}
-                    </p>
-                  </div>
-                )}
-                {/* Qwen Coding Plan 提示 */}
-                {activeProvider === 'qwen' && providers.qwen.codingPlanEnabled && (
-                  <div className="mt-1.5 p-2 rounded-lg bg-primary-muted border border-primary-muted">
-                    <p className="text-[11px] text-primary dark:text-primary">
-                      <span className="font-medium">Coding Plan:</span> {i18nService.t('qwenCodingPlanEndpointHint')}
-                    </p>
-                  </div>
-                )}
-                {/* Volcengine Coding Plan 提示 */}
-                {activeProvider === 'volcengine' && providers.volcengine.codingPlanEnabled && (
-                  <div className="mt-1.5 p-2 rounded-lg bg-primary-muted border border-primary-muted">
-                    <p className="text-[11px] text-primary dark:text-primary">
-                      <span className="font-medium">Coding Plan:</span> {i18nService.t('volcengineCodingPlanEndpointHint')}
-                    </p>
-                  </div>
-                )}
-                {/* Moonshot Coding Plan 提示 */}
-                {activeProvider === 'moonshot' && providers.moonshot.codingPlanEnabled && (
-                  <div className="mt-1.5 p-2 rounded-lg bg-primary-muted border border-primary-muted">
-                    <p className="text-[11px] text-primary dark:text-primary">
-                      <span className="font-medium">Coding Plan:</span> {i18nService.t('moonshotCodingPlanEndpointHint')}
-                    </p>
-                  </div>
-                )}
-                {/* Qianfan Coding Plan 提示 */}
-                {activeProvider === 'qianfan' && providers.qianfan.codingPlanEnabled && (
-                  <div className="mt-1.5 p-2 rounded-lg bg-primary-muted border border-primary-muted">
-                    <p className="text-[11px] text-primary dark:text-primary">
-                      <span className="font-medium">Coding Plan:</span> {i18nService.t('qianfanCodingPlanEndpointHint')}
-                    </p>
-                  </div>
-                )}
-                {/* Xiaomi Coding Plan 提示 */}
-                {activeProvider === 'xiaomi' && isCodingPlanEnabled(providers.xiaomi) && (
-                  <div className="mt-1.5 p-2 rounded-lg bg-primary-muted border border-primary-muted">
-                    <p className="text-[11px] text-primary dark:text-primary">
-                      <span className="font-medium">Coding Plan:</span> {i18nService.t('xiaomiCodingPlanEndpointHint')}
-                    </p>
-                  </div>
-                )}
-              </div>
-              )}
-
-              {/* API 格式选择器 */}
-              {shouldShowApiFormatSelector(activeProvider) && !(activeProvider === 'minimax' && providers.minimax.authType === 'oauth') && (
-                <div>
-                  <label htmlFor={`${activeProvider}-apiFormat`} className="block text-xs font-medium text-foreground mb-1">
-                    {i18nService.t('apiFormat')}
-                  </label>
-                  <div className="flex items-center space-x-4">
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name={`${activeProvider}-apiFormat`}
-                        value="anthropic"
-                        checked={getEffectiveApiFormat(activeProvider, providers[activeProvider].apiFormat) !== 'openai'}
-                        onChange={() => handleProviderConfigChange(activeProvider, 'apiFormat', 'anthropic')}
-                        className="h-3.5 w-3.5 text-primary focus:ring-primary bg-surface"
-                      />
-                      <span className="ml-2 text-xs text-foreground">
-                        {i18nService.t('apiFormatNative')}
-                      </span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name={`${activeProvider}-apiFormat`}
-                        value="openai"
-                        checked={getEffectiveApiFormat(activeProvider, providers[activeProvider].apiFormat) === 'openai'}
-                        onChange={() => handleProviderConfigChange(activeProvider, 'apiFormat', 'openai')}
-                        className="h-3.5 w-3.5 text-primary focus:ring-primary bg-surface"
-                      />
-                      <span className="ml-2 text-xs text-foreground">
-                        {i18nService.t('apiFormatOpenAI')}
-                      </span>
-                    </label>
-                  </div>
-                  <p className="mt-1 text-xs text-secondary">
-                    {i18nService.t('apiFormatHint')}
-                  </p>
-                </div>
-              )}
-
-              {/* GLM Coding Plan 开关 (仅 Zhipu) */}
-              {activeProvider === 'zhipu' && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-surface border border-border">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-medium text-foreground">
-                        GLM Coding Plan
-                      </span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary-muted text-primary">
-                        Beta
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-secondary">
-                      {i18nService.t('zhipuCodingPlanHint')}
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer ml-3">
-                    <input
-                      type="checkbox"
-                      checked={providers.zhipu.codingPlanEnabled ?? false}
-                      onChange={(e) => handleProviderConfigChange('zhipu', 'codingPlanEnabled', e.target.checked ? 'true' : 'false')}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/50 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
-                  </label>
-                </div>
-              )}
-
-              {/* Qwen Coding Plan 开关 (仅 Qwen) */}
-              {activeProvider === 'qwen' && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-surface border border-border">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-medium text-foreground">
-                        Coding Plan
-                      </span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary-muted text-primary">
-                        {i18nService.t('codingPlanSubscriptionBadge')}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-secondary">
-                      {i18nService.t('qwenCodingPlanHint')}
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer ml-3">
-                    <input
-                      type="checkbox"
-                      checked={providers.qwen.codingPlanEnabled ?? false}
-                      onChange={(e) => handleProviderConfigChange('qwen', 'codingPlanEnabled', e.target.checked ? 'true' : 'false')}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/50 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
-                  </label>
-                </div>
-              )}
-
-              {/* Volcengine Coding Plan 开关 (仅 Volcengine) */}
-              {activeProvider === 'volcengine' && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-surface border border-border">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-medium text-foreground">
-                        Coding Plan
-                      </span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary-muted text-primary">
-                        Beta
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-secondary">
-                      {i18nService.t('volcengineCodingPlanHint')}
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer ml-3">
-                    <input
-                      type="checkbox"
-                      checked={providers.volcengine.codingPlanEnabled ?? false}
-                      onChange={(e) => handleProviderConfigChange('volcengine', 'codingPlanEnabled', e.target.checked ? 'true' : 'false')}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/50 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
-                  </label>
-                </div>
-              )}
-
-              {/* Moonshot Coding Plan 开关 (仅 Moonshot) */}
-              {activeProvider === 'moonshot' && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-surface border border-border">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-medium text-foreground">
-                        Coding Plan
-                      </span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary-muted text-primary">
-                        Beta
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-secondary">
-                      {i18nService.t('moonshotCodingPlanHint')}
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer ml-3">
-                    <input
-                      type="checkbox"
-                      checked={providers.moonshot.codingPlanEnabled ?? false}
-                      onChange={(e) => handleProviderConfigChange('moonshot', 'codingPlanEnabled', e.target.checked ? 'true' : 'false')}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/50 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
-                  </label>
-                </div>
-              )}
-
-              {/* Qianfan Coding Plan 开关 (仅 Qianfan) */}
-              {activeProvider === 'qianfan' && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-surface border border-border">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-medium text-foreground">
-                        Coding Plan
-                      </span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary-muted text-primary">
-                        Beta
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-secondary">
-                      {i18nService.t('qianfanCodingPlanHint')}
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer ml-3">
-                    <input
-                      type="checkbox"
-                      checked={providers.qianfan.codingPlanEnabled ?? false}
-                      onChange={(e) => handleProviderConfigChange('qianfan', 'codingPlanEnabled', e.target.checked ? 'true' : 'false')}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/50 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
-                  </label>
-                </div>
-              )}
-
-              {/* Xiaomi Coding Plan 开关 (仅 Xiaomi) */}
-              {activeProvider === 'xiaomi' && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-surface border border-border">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-medium text-foreground">
-                        Coding Plan
-                      </span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary-muted text-primary">
-                        Beta
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-secondary">
-                      {i18nService.t('xiaomiCodingPlanHint')}
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer ml-3">
-                    <input
-                      type="checkbox"
-                      checked={isCodingPlanEnabled(providers.xiaomi)}
-                      onChange={(e) => handleProviderConfigChange('xiaomi', 'codingPlanEnabled', e.target.checked ? 'true' : 'false')}
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/50 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
-                  </label>
-                </div>
-              )}
-
-              {/* 测试连接按钮 */}
-              {!(activeProvider === 'minimax' && providers.minimax.authType === 'oauth') && (
-              <div className="flex items-center space-x-3">
-                <button
-                  type="button"
-                  onClick={handleTestConnection}
-                  disabled={isTesting || (providerRequiresApiKey(activeProvider) && !providers[activeProvider].apiKey && !isOpenAIOAuthMode)}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-xl border border-border text-foreground hover:bg-surface-raised disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-[0.98]"
-                >
-                  <SignalIcon className="h-3.5 w-3.5 mr-1.5" />
-                  {isTesting ? i18nService.t('testing') : i18nService.t('testConnection')}
-                </button>
-              </div>
-              )}
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <h3 className="text-xs font-medium text-foreground">
-                    {i18nService.t('availableModels')}
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={handleAddModel}
-                    className="inline-flex items-center text-xs text-primary hover:text-primary-hover"
-                  >
-                    <PlusCircleIcon className="h-3.5 w-3.5 mr-1" />
-                    {i18nService.t('addModel')}
-                  </button>
-                </div>
-
-                {/* Models List */}
-                <div className="space-y-1.5 max-h-60 overflow-y-auto">
-                  {(providers[activeProvider].models ?? []).map(model => (
-                    <div
-                      key={model.id}
-                      className="bg-surface p-2 rounded-xl border-border border transition-colors hover:border-primary group"
-                    >
-                      <div className="flex items-center justify-between gap-2 min-w-0">
-                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-green-400"></div>
-                          <div className="min-w-0">
-                            <div className="text-foreground font-medium text-[11px] truncate">{model.name}</div>
-                            <div className="text-[10px] text-secondary truncate">{model.id}</div>
-                          </div>
-                        </div>
-                        <div className="flex items-center shrink-0 space-x-1">
-                          {model.supportsImage && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary-muted text-primary">
-                              {i18nService.t('imageInput')}
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleEditModel(model.id, model.name, model.supportsImage, model.contextWindow)}
-                            className="p-0.5 text-secondary hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <PencilIcon className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteModel(model.id)}
-                            className="p-0.5 text-secondary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <TrashIcon className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  {(!providers[activeProvider].models || providers[activeProvider].models.length === 0) && (
-                    <div className="bg-surface p-2.5 rounded-xl border border-border-subtle text-center">
-                      <p className="text-[11px] text-secondary">{i18nService.t('noModelsAvailable')}</p>
-                      <button
-                        type="button"
-                        onClick={handleAddModel}
-                        className="mt-1.5 inline-flex items-center text-[11px] font-medium text-primary hover:text-primary-hover"
-                      >
-                        <PlusCircleIcon className="h-3 w-3 mr-1" />
-                        {i18nService.t('addFirstModel')}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+          <ModelSettingsSection
+            providers={providers}
+            activeProvider={activeProvider}
+            visibleProviders={visibleProviders}
+            showApiKey={showApiKey}
+            setShowApiKey={setShowApiKey}
+            isImportingProviders={isImportingProviders}
+            isExportingProviders={isExportingProviders}
+            minimaxIsOAuthMode={providers.minimax.authType === 'oauth'}
+            openaiIsOAuthMode={isOpenAIOAuthMode}
+            isBaseUrlLocked={isBaseUrlLocked}
+            minimaxOAuthPhase={minimaxOAuthPhase}
+            minimaxOAuthRegion={minimaxOAuthRegion}
+            setMinimaxOAuthRegion={setMinimaxOAuthRegion}
+            setMinimaxOAuthPhase={setMinimaxOAuthPhase}
+            openaiOAuthPhase={openaiOAuthPhase}
+            setOpenaiOAuthPhase={setOpenaiOAuthPhase}
+            openaiOAuthStatus={openaiOAuthStatus}
+            copilotAuthStatus={copilotAuthStatus}
+            copilotUserCode={copilotUserCode}
+            copilotVerificationUri={copilotVerificationUri}
+            copilotGithubUser={copilotGithubUser}
+            copilotError={copilotError}
+            isTesting={isTesting}
+            testResult={testResult}
+            isTestResultModalOpen={isTestResultModalOpen}
+            setIsTestResultModalOpen={setIsTestResultModalOpen}
+            pendingDeleteProvider={pendingDeleteProvider}
+            setPendingDeleteProvider={setPendingDeleteProvider}
+            importInputRef={importInputRef}
+            handleImportProvidersClick={handleImportProvidersClick}
+            handleExportProviders={handleExportProviders}
+            handleImportProviders={handleImportProviders}
+            handleProviderChange={handleProviderChange}
+            toggleProviderEnabled={toggleProviderEnabled}
+            handleAddCustomProvider={handleAddCustomProvider}
+            handleDeleteCustomProvider={handleDeleteCustomProvider}
+            confirmDeleteCustomProvider={confirmDeleteCustomProvider}
+            handleProviderConfigChange={handleProviderConfigChange}
+            setProviders={setProviders}
+            handleMiniMaxDeviceLogin={handleMiniMaxDeviceLogin}
+            handleCancelMiniMaxLogin={handleCancelMiniMaxLogin}
+            handleMiniMaxOAuthLogout={handleMiniMaxOAuthLogout}
+            handleOpenAIOAuthLogin={handleOpenAIOAuthLogin}
+            handleCancelOpenAIOAuthLogin={handleCancelOpenAIOAuthLogin}
+            handleOpenAIOAuthLogout={handleOpenAIOAuthLogout}
+            handleCopilotSignIn={handleCopilotSignIn}
+            handleCopilotSignOut={handleCopilotSignOut}
+            handleCopilotCancelAuth={handleCopilotCancelAuth}
+            handleTestConnection={handleTestConnection}
+            handleAddModel={handleAddModel}
+            handleEditModel={handleEditModel}
+            handleDeleteModel={handleDeleteModel}
+          />
         );
 
       case 'coworkAgent':
@@ -5172,306 +4198,26 @@ const Settings: React.FC<SettingsProps> = ({
 
         </div>
 
-        {isTestResultModalOpen && testResult && (
-          <div
-            className="absolute inset-0 z-30 flex items-center justify-center bg-black/35 px-4 rounded-2xl"
-            onClick={() => setIsTestResultModalOpen(false)}
-          >
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-label={i18nService.t('connectionTestResult')}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md rounded-2xl bg-background border-border border shadow-modal p-4"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-semibold text-foreground">
-                  {i18nService.t('connectionTestResult')}
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => setIsTestResultModalOpen(false)}
-                  className="p-1 text-secondary hover:text-foreground rounded-md hover:bg-surface-raised"
-                >
-                  <XMarkIcon className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2 text-xs text-secondary">
-                <span>{ProviderRegistry.get(testResult.provider)?.label ?? testResult.provider}</span>
-                <span className="text-[11px]">•</span>
-                <span className={`inline-flex items-center gap-1 ${testResult.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                  {testResult.success ? (
-                    <CheckCircleIcon className="h-4 w-4" />
-                  ) : (
-                    <XCircleIcon className="h-4 w-4" />
-                  )}
-                  {testResult.success ? i18nService.t('connectionSuccess') : i18nService.t('connectionFailed')}
-                </span>
-              </div>
-
-              <p className="mt-3 text-xs leading-5 text-foreground whitespace-pre-wrap break-words max-h-56 overflow-y-auto">
-                {testResult.message}
-              </p>
-
-              <div className="mt-4 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setIsTestResultModalOpen(false)}
-                  className="px-3 py-1.5 text-xs font-medium rounded-xl border border-border text-foreground hover:bg-surface-raised transition-colors active:scale-[0.98]"
-                >
-                  {i18nService.t('close')}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {pendingDeleteProvider && (
-          <div
-            className="absolute inset-0 z-20 flex items-center justify-center bg-black/35 px-4 rounded-2xl"
-            onClick={() => setPendingDeleteProvider(null)}
-          >
-            <div
-              role="dialog"
-              aria-modal="true"
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-sm rounded-2xl dark:bg-claude-darkSurface bg-claude-bg dark:border-claude-darkBorder border-claude-border border shadow-modal p-4"
-            >
-              <p className="text-sm dark:text-claude-darkText text-claude-text">
-                {i18nService.t('confirmDeleteCustomProvider')}
-              </p>
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPendingDeleteProvider(null)}
-                  className="px-3 py-1.5 text-xs font-medium rounded-xl border dark:border-claude-darkBorder border-claude-border dark:text-claude-darkText text-claude-text dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover transition-colors active:scale-[0.98]"
-                >
-                  {i18nService.t('cancel')}
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmDeleteCustomProvider}
-                  className="px-3 py-1.5 text-xs font-medium rounded-xl bg-red-500 hover:bg-red-600 text-white transition-colors active:scale-[0.98]"
-                >
-                  {i18nService.t('deleteCustomProvider')}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {(isAddingModel || isEditingModel) && (
-          <div
-            className="absolute inset-0 z-20 flex items-center justify-center bg-black/35 px-4 rounded-2xl"
-            onClick={handleCancelModelEdit}
-          >
-              <div
-                role="dialog"
-                aria-modal="true"
-                aria-label={isEditingModel ? i18nService.t('editModel') : i18nService.t('addNewModel')}
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={handleModelDialogKeyDown}
-                className="w-full max-w-md rounded-2xl bg-background border-border border shadow-modal p-4"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-semibold text-foreground">
-                    {isEditingModel ? i18nService.t('editModel') : i18nService.t('addNewModel')}
-                  </h4>
-                  <button
-                    type="button"
-                    onClick={handleCancelModelEdit}
-                    className="p-1 text-secondary hover:text-foreground rounded-md hover:bg-surface-raised"
-                  >
-                    <XMarkIcon className="h-4 w-4" />
-                  </button>
-                </div>
-
-                {modelFormError && (
-                  <p className="mb-3 text-xs text-red-600 dark:text-red-400">
-                    {modelFormError}
-                  </p>
-                )}
-
-                <div className="space-y-3">
-                  {activeProvider === 'ollama' ? (
-                    <>
-                      <div>
-                        <label className="block text-xs font-medium text-secondary mb-1">
-                          {i18nService.t('ollamaModelName')}
-                        </label>
-                        <input
-                          autoFocus
-                          type="text"
-                          value={newModelId}
-                          onChange={(e) => {
-                            setNewModelId(e.target.value);
-                            if (!newModelName || newModelName === newModelId) {
-                              setNewModelName(e.target.value);
-                            }
-                            if (modelFormError) {
-                              setModelFormError(null);
-                            }
-                          }}
-                          className="block w-full rounded-xl bg-surface-inset border-border border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-3 py-2 text-xs"
-                          placeholder={i18nService.t('ollamaModelNamePlaceholder')}
-                        />
-                        <p className="mt-1 text-[11px] text-muted">
-                          {i18nService.t('ollamaModelNameHint')}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-secondary mb-1">
-                          {i18nService.t('ollamaDisplayName')}
-                        </label>
-                        <input
-                          type="text"
-                          value={newModelName === newModelId ? '' : newModelName}
-                          onChange={(e) => {
-                            setNewModelName(e.target.value || newModelId);
-                            if (modelFormError) {
-                              setModelFormError(null);
-                            }
-                          }}
-                          className="block w-full rounded-xl bg-surface-inset border-border border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-3 py-2 text-xs"
-                          placeholder={i18nService.t('ollamaDisplayNamePlaceholder')}
-                        />
-                        <p className="mt-1 text-[11px] text-muted">
-                          {i18nService.t('ollamaDisplayNameHint')}
-                        </p>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div>
-                        <label className="block text-xs font-medium text-secondary mb-1">
-                          {i18nService.t('modelName')}
-                        </label>
-                        <input
-                          autoFocus
-                          type="text"
-                          value={newModelName}
-                          onChange={(e) => {
-                            setNewModelName(e.target.value);
-                            if (modelFormError) {
-                              setModelFormError(null);
-                            }
-                          }}
-                          className="block w-full rounded-xl bg-surface-inset border-border border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-3 py-2 text-xs"
-                          placeholder="GPT-4"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-secondary mb-1">
-                          {i18nService.t('modelId')}
-                        </label>
-                        <input
-                          type="text"
-                          value={newModelId}
-                          onChange={(e) => {
-                            setNewModelId(e.target.value);
-                            if (modelFormError) {
-                              setModelFormError(null);
-                            }
-                          }}
-                          className="block w-full rounded-xl bg-surface-inset border-border border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-3 py-2 text-xs"
-                          placeholder="gpt-4"
-                        />
-                      </div>
-                    </>
-                  )}
-                  <div className="flex items-center space-x-2">
-                    <input
-                      id={`${activeProvider}-supportsImage`}
-                      type="checkbox"
-                      checked={newModelSupportsImage}
-                      onChange={(e) => setNewModelSupportsImage(e.target.checked)}
-                      className="h-3.5 w-3.5 text-primary focus:ring-primary bg-surface border-border rounded"
-                    />
-                    <label
-                      htmlFor={`${activeProvider}-supportsImage`}
-                      className="text-xs text-secondary"
-                    >
-                      {i18nService.t('supportsImageInput')}
-                    </label>
-                  </div>
-                  <div className="space-y-2 rounded-xl border border-border bg-surface/50 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <label className="text-xs font-medium text-secondary">
-                          {i18nService.t('contextWindow')}
-                        </label>
-                        <p className="mt-1 text-[11px] text-muted">
-                          {i18nService.t('contextWindowHint')}
-                        </p>
-                      </div>
-                      <input
-                        type="number"
-                        min={CW_MIN}
-                        max={CW_MAX}
-                        step={1000}
-                        value={newModelContextWindow ?? CW_DEFAULT}
-                        onChange={(e) => {
-                          const nextValue = Number.parseInt(e.target.value, 10);
-                          if (!Number.isNaN(nextValue)) {
-                            setNewModelContextWindow(Math.max(CW_MIN, Math.min(CW_MAX, nextValue)));
-                          }
-                        }}
-                        className="w-24 rounded-lg bg-surface-inset border-border border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground px-2.5 py-1 text-xs text-center tabular-nums"
-                      />
-                    </div>
-                    <div className="relative h-3">
-                      <div className="absolute top-1/2 left-0 right-0 h-[3px] -translate-y-1/2 rounded-full bg-border" />
-                      {CW_MARKER_STOPS.map((marker) => (
-                        <div
-                          key={marker.label}
-                          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[7px] h-[7px] rounded-full bg-white border-[1.5px] border-border z-[1]"
-                          style={{ left: `${marker.pos * 100}%` }}
-                        />
-                      ))}
-                      <input
-                        type="range"
-                        min={0}
-                        max={1}
-                        step={0.001}
-                        value={contextWindowToSlider(newModelContextWindow ?? CW_DEFAULT)}
-                        onChange={(e) => setNewModelContextWindow(sliderToContextWindow(Number(e.target.value)))}
-                        className="absolute inset-0 w-full h-full appearance-none cursor-pointer bg-transparent z-[2] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-[0_1px_3px_rgba(0,0,0,0.2)] [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-runnable-track]:bg-transparent"
-                      />
-                    </div>
-                    <div className="relative h-4">
-                      {CW_MARKER_STOPS.map((marker) => (
-                        <span
-                          key={marker.label}
-                          className="absolute text-[9px] text-muted select-none -translate-x-1/2"
-                          style={{ left: `${marker.pos * 100}%` }}
-                        >
-                          {marker.label}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-end space-x-2 mt-4">
-                  <button
-                    type="button"
-                    onClick={handleCancelModelEdit}
-                    className="px-3 py-1.5 text-xs text-foreground hover:bg-surface-raised rounded-xl border border-border"
-                  >
-                    {i18nService.t('cancel')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveNewModel}
-                    className="px-3 py-1.5 text-xs text-white bg-primary hover:bg-primary-hover rounded-xl active:scale-[0.98]"
-                  >
-                    {i18nService.t('save')}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+        <ModelEditorDialog
+          activeProvider={activeProvider}
+          isAddingModel={isAddingModel}
+          isEditingModel={isEditingModel}
+          newModelName={newModelName}
+          setNewModelName={setNewModelName}
+          newModelId={newModelId}
+          setNewModelId={setNewModelId}
+          newModelSupportsImage={newModelSupportsImage}
+          setNewModelSupportsImage={setNewModelSupportsImage}
+          newModelContextWindow={newModelContextWindow}
+          setNewModelContextWindow={setNewModelContextWindow}
+          newModelCustomParams={newModelCustomParams}
+          setNewModelCustomParams={setNewModelCustomParams}
+          modelFormError={modelFormError}
+          setModelFormError={setModelFormError}
+          handleSaveNewModel={handleSaveNewModel}
+          handleCancelModelEdit={handleCancelModelEdit}
+          handleModelDialogKeyDown={handleModelDialogKeyDown}
+        />
 
           {/* Memory Modal */}
           {showMemoryModal && (

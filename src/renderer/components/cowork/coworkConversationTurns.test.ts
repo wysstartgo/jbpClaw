@@ -135,6 +135,59 @@ describe('coworkConversationTurns', () => {
     expect(hasRenderableAssistantContent(turns[0]!)).toBe(true);
   });
 
+  test('filters silent NO_REPLY assistant messages from display items', () => {
+    const items = buildDisplayItems([
+      createMessage({
+        id: 'assistant-silent',
+        type: 'assistant',
+        content: '`NO_REPLY`',
+      }),
+      createMessage({
+        id: 'assistant-visible',
+        type: 'assistant',
+        content: '可见回答',
+      }),
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      type: 'message',
+      message: { id: 'assistant-visible' },
+    });
+  });
+
+  test('starts a new orphan turn after context compaction system message', () => {
+    const turns = buildConversationTurns(buildDisplayItems([
+      createMessage({
+        id: 'assistant-before',
+        type: 'assistant',
+        content: '压缩前回答',
+      }),
+      createMessage({
+        id: 'compaction',
+        type: 'system',
+        content: '上下文压缩完成',
+        metadata: {
+          kind: 'context_compaction',
+          status: 'completed',
+        },
+      }),
+      createMessage({
+        id: 'assistant-after',
+        type: 'assistant',
+        content: '压缩后回答',
+      }),
+    ]));
+
+    expect(turns).toHaveLength(2);
+    expect(turns[0]?.assistantItems.map((item) => (
+      item.type === 'assistant' || item.type === 'system' ? item.message.id : item.type
+    ))).toEqual(['assistant-before']);
+    expect(turns[1]?.assistantItems.map((item) => (
+      item.type === 'assistant' || item.type === 'system' ? item.message.id : item.type
+    ))).toEqual(['compaction', 'assistant-after']);
+  });
+
   test('strips trailing media tokens from tool result display text', () => {
     const message = createMessage({
       id: 'tool-result-media',

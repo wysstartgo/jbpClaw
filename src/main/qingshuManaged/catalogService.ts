@@ -187,6 +187,16 @@ export class QingShuManagedCatalogService {
         }
       }
 
+      const disabledCount = this.deps.skillManager.disableManagedSkillsNotInCatalog(
+        new Set(skillMap.keys()),
+      );
+      if (disabledCount > 0) {
+        console.log(
+          '[QingShuManaged] disabled %d local managed skills that are absent from the latest catalog',
+          disabledCount,
+        );
+      }
+
       const catalogVersion = [
         ...agents.map((agent) => agent.catalogVersion || ''),
         ...Array.from(skillMap.values()).map((skill) => skill.catalogVersion || ''),

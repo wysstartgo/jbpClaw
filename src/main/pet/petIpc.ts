@@ -6,6 +6,7 @@ import {
   PetAssetPolicy,
   PetIpcChannel,
   PetMode,
+  PetRendererRoute,
   PetSource,
   PetStatus,
 } from '../../shared/pet/constants';
@@ -37,8 +38,17 @@ type PetRuntimeProjection = {
 const sendStateToAllWindows = (state: PetRuntimeState): void => {
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue;
-    if (win.webContents.getURL().includes('#pet-floating')) continue;
+    if (isPetFloatingWindowUrl(win.webContents.getURL())) continue;
     win.webContents.send(PetIpcChannel.StateChanged, state);
+  }
+};
+
+const isPetFloatingWindowUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return parsed.hash.replace(/^#\/?/, '') === PetRendererRoute.Floating;
+  } catch {
+    return url.includes(`#${PetRendererRoute.Floating}`) || url.includes(`#/${PetRendererRoute.Floating}`);
   }
 };
 

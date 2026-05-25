@@ -1,6 +1,6 @@
 import { ShieldCheckIcon } from '@heroicons/react/24/outline';
-import React, { useCallback, useEffect, useRef,useState } from 'react';
-import { useDispatch,useSelector } from 'react-redux';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 
 import type { CoworkRuntimeImageAttachment } from '../../../common/coworkImageAttachments';
 import { stripCoworkImageAttachmentPayloads } from '../../../common/coworkImageAttachments';
@@ -18,7 +18,7 @@ import { addMessage, clearCurrentSession, dequeueCoworkInput, requeueCoworkInput
 import { selectAgentSelectedModel, setSelectedModel } from '../../store/slices/modelSlice';
 import { clearSelection,selectAction, setActions } from '../../store/slices/quickActionSlice';
 import { clearActiveSkills, setActiveSkillIds } from '../../store/slices/skillSlice';
-import type { CoworkImageAttachment, CoworkImageAttachmentPreview, CoworkMessage, CoworkMessageMetadata, CoworkSession, OpenClawEngineStatus } from '../../types/cowork';
+import type { CoworkImageAttachment, CoworkImageAttachmentPreview, CoworkMessage, CoworkMessageMetadata, CoworkSession, OpenClawEngineStatus, SubagentSessionSummary } from '../../types/cowork';
 import { toOpenClawModelRef } from '../../utils/openclawModelRef';
 import ComposeIcon from '../icons/ComposeIcon';
 import SidebarToggleIcon from '../icons/SidebarToggleIcon';
@@ -26,9 +26,11 @@ import ModelSelector from '../ModelSelector';
 import { PromptPanel,QuickActionBar } from '../quick-actions';
 import type { SettingsOpenOptions } from '../Settings';
 import WindowTitleBar from '../window/WindowTitleBar';
+import { CoworkUiEvent } from './constants';
 import CoworkPromptInput, { type CoworkPromptInputRef } from './CoworkPromptInput';
 import CoworkSessionDetail from './CoworkSessionDetail';
 import { buildCoworkContinuationSystemPrompt, buildCoworkSystemPrompt } from './skillSystemPrompt';
+import SubagentSessionDetail from './SubagentSessionDetail';
 
 const hasInlineImagePayload = (attachment: CoworkImageAttachmentPreview): attachment is CoworkRuntimeImageAttachment => (
   typeof (attachment as CoworkRuntimeImageAttachment).base64Data === 'string'
@@ -50,6 +52,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
   const [isInitialized, setIsInitialized] = useState(false);
   const [openClawStatus, setOpenClawStatus] = useState<OpenClawEngineStatus | null>(null);
   const [isRestartingGateway, setIsRestartingGateway] = useState(false);
+  const [viewingSubagent, setViewingSubagent] = useState<SubagentSessionSummary | null>(null);
   // Track if we're starting/continuing a session to prevent duplicate submissions
   const isStartingRef = useRef(false);
   const isContinuingRef = useRef(false);
@@ -192,6 +195,19 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
       unsubscribeOpenClawStatus();
     };
   }, [dispatch]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SubagentSessionSummary | null>).detail;
+      setViewingSubagent(detail ?? null);
+    };
+    window.addEventListener(CoworkUiEvent.SelectSubagent, handler);
+    return () => window.removeEventListener(CoworkUiEvent.SelectSubagent, handler);
+  }, []);
+
+  useEffect(() => {
+    setViewingSubagent(null);
+  }, [currentSession?.id]);
 
   const handleStartSession = async (prompt: string, skillPrompt?: string, imageAttachments?: CoworkImageAttachment[]): Promise<boolean | void> => {
     if (isOpenClawEngine && openClawStatus && !isOpenClawReadyForSession(openClawStatus)) {
@@ -640,6 +656,26 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
 
   // When there's a current session, show the session detail view
   if (currentSession) {
+    if (viewingSubagent) {
+      return (
+        <div className="flex-1 flex flex-col h-full">
+          {engineStatusBanner}
+          <SubagentSessionDetail
+            subagent={viewingSubagent}
+            onBack={() => {
+              setViewingSubagent(null);
+              window.dispatchEvent(new CustomEvent(CoworkUiEvent.SelectSubagent, { detail: null }));
+            }}
+            isSidebarCollapsed={isSidebarCollapsed}
+            onToggleSidebar={onToggleSidebar}
+            onNewChat={onNewChat}
+            updateBadge={updateBadge}
+          />
+          {screenBottomPet}
+        </div>
+      );
+    }
+
     return (
       <div className="flex-1 flex flex-col h-full">
         {engineStatusBanner}

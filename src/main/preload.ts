@@ -341,6 +341,7 @@ contextBridge.exposeInMainWorld('electron', {
       embeddingVectorWeight?: number;
       embeddingRemoteBaseUrl?: string;
       embeddingRemoteApiKey?: string;
+      toolResultMaxChars?: number;
       dreamingEnabled?: boolean;
       dreamingFrequency?: string;
       dreamingModel?: string;

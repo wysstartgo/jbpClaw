@@ -33,6 +33,8 @@ const mockElectron = vi.hoisted(() => {
 
     setVisibleOnAllWorkspaces(): void {}
 
+    setAlwaysOnTop(): void {}
+
     setMenu(): void {}
 
     showInactive(): void {}

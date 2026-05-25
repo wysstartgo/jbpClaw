@@ -9,6 +9,10 @@ import { z } from 'zod';
 
 import { stripCoworkImageAttachmentPayloads } from '../../common/coworkImageAttachments';
 import { SCHEDULED_TASK_SWITCH_MESSAGE } from '../../scheduledTask/enginePrompt';
+import {
+  DEFAULT_TOOL_RESULT_MAX_CHARS,
+  normalizeToolResultMaxChars,
+} from '../../shared/cowork/constants';
 import { QingShuFileToolName } from '../../shared/qingshuFile/constants';
 import { QINGSHU_FILE_PUBLISH_PROMPT } from '../../shared/qingshuFile/prompt';
 import type { QingShuFilePublishResult } from '../../shared/qingshuFile/types';
@@ -31,7 +35,6 @@ const LOCAL_HISTORY_MAX_MESSAGE_CHARS = 4000;
 const STREAM_UPDATE_THROTTLE_MS = 90;
 const STREAMING_TEXT_MAX_CHARS = 120_000;
 const STREAMING_THINKING_MAX_CHARS = 60_000;
-const TOOL_RESULT_MAX_CHARS = 120_000;
 const FINAL_RESULT_MAX_CHARS = 120_000;
 const STDERR_TAIL_MAX_CHARS = 24_000;
 const SDK_STARTUP_TIMEOUT_MS = 30_000;
@@ -3297,15 +3300,19 @@ export class CoworkRunner extends EventEmitter {
   }
 
   private formatToolResultContent(record: Record<string, unknown>): string {
+    const maxChars = normalizeToolResultMaxChars(
+      this.store.getConfig().toolResultMaxChars,
+      DEFAULT_TOOL_RESULT_MAX_CHARS
+    );
     const raw = record.content ?? record;
     const text = this.extractText(raw);
     if (text !== null) {
-      return this.truncateLargeContent(text, TOOL_RESULT_MAX_CHARS);
+      return this.truncateLargeContent(text, maxChars);
     }
     try {
-      return this.truncateLargeContent(JSON.stringify(raw, null, 2), TOOL_RESULT_MAX_CHARS);
+      return this.truncateLargeContent(JSON.stringify(raw, null, 2), maxChars);
     } catch {
-      return this.truncateLargeContent(String(raw), TOOL_RESULT_MAX_CHARS);
+      return this.truncateLargeContent(String(raw), maxChars);
     }
   }
 

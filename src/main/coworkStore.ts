@@ -7,6 +7,10 @@ import type Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
 
 import type { Platform } from '../shared/platform';
+import {
+  DEFAULT_TOOL_RESULT_MAX_CHARS,
+  normalizeToolResultMaxChars,
+} from '../shared/cowork/constants';
 import { QingShuObjectSourceType, type QingShuObjectSourceType as QingShuObjectSourceTypeValue } from '../shared/qingshuManaged/constants';
 import {
   type CoworkMemoryGuardLevel,
@@ -558,6 +562,7 @@ export interface CoworkConfig {
   dreamingModel: string;
   dreamingTimezone: string;
   openClawSessionPolicy: OpenClawSessionPolicyConfig;
+  toolResultMaxChars: number;
 }
 
 export type CoworkConfigUpdate = Partial<Pick<
@@ -583,6 +588,7 @@ export type CoworkConfigUpdate = Partial<Pick<
   | 'dreamingModel'
   | 'dreamingTimezone'
   | 'openClawSessionPolicy'
+  | 'toolResultMaxChars'
 >>;
 
 export interface ApplyTurnMemoryUpdatesOptions {
@@ -1439,6 +1445,7 @@ export class CoworkStore {
       'dreamingModel',
       'dreamingTimezone',
       'openClawSessionPolicy',
+      'toolResultMaxChars',
     ] as const;
     const configRows = this.getAll<ConfigRow>(
       `SELECT key, value FROM cowork_config WHERE key IN (${configKeys.map(() => '?').join(', ')})`,
@@ -1486,6 +1493,7 @@ export class CoworkStore {
       dreamingModel: configByKey.get('dreamingModel') || DEFAULT_DREAMING_MODEL,
       dreamingTimezone: configByKey.get('dreamingTimezone') || DEFAULT_DREAMING_TIMEZONE,
       openClawSessionPolicy,
+      toolResultMaxChars: normalizeToolResultMaxChars(configByKey.get('toolResultMaxChars'), DEFAULT_TOOL_RESULT_MAX_CHARS),
     };
   }
 
@@ -1704,6 +1712,16 @@ export class CoworkStore {
           value = excluded.value,
           updated_at = excluded.updated_at
       `, [JSON.stringify(normalizeOpenClawSessionPolicyConfig(config.openClawSessionPolicy)), now]);
+    }
+
+    if (config.toolResultMaxChars !== undefined) {
+      this.run(`
+        INSERT INTO cowork_config (key, value, updated_at)
+        VALUES ('toolResultMaxChars', ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+          value = excluded.value,
+          updated_at = excluded.updated_at
+      `, [String(normalizeToolResultMaxChars(config.toolResultMaxChars)), now]);
     }
 
     this.saveDb();

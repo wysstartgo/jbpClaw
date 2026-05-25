@@ -2269,6 +2269,26 @@ export class SkillManager {
     return this.getSkillById(descriptor.skillId);
   }
 
+  disableManagedSkillsNotInCatalog(activeSkillIds: Set<string>): number {
+    let disabledCount = 0;
+    for (const skill of this.listSkills()) {
+      if (skill.sourceType !== QingShuObjectSourceType.QingShuManaged) {
+        continue;
+      }
+      if (activeSkillIds.has(skill.id)) {
+        continue;
+      }
+      if (skill.enabled) {
+        this.setSkillEnabledState(skill.id, false);
+        disabledCount += 1;
+      }
+    }
+    if (disabledCount > 0) {
+      this.notifySkillsChanged();
+    }
+    return disabledCount;
+  }
+
   async syncManagedSkillPackage(
     descriptor: QingShuManagedSkillDescriptor,
   ): Promise<ManagedSkillSyncResult> {

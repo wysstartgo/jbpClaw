@@ -1,7 +1,7 @@
 import { BrowserWindow, screen } from 'electron';
 import path from 'path';
 
-import { PetIpcChannel, PetMode, PetStatus } from '../../shared/pet/constants';
+import { PetIpcChannel, PetMode, PetRendererRoute, PetStatus } from '../../shared/pet/constants';
 import type { PetConfig, PetRuntimeState } from '../../shared/pet/types';
 import { PetConfigStore } from './petConfigStore';
 
@@ -114,6 +114,7 @@ export class PetWindowController {
       resizable: false,
       movable: true,
       alwaysOnTop: true,
+      focusable: false,
       skipTaskbar: true,
       show: false,
       hasShadow: false,
@@ -127,6 +128,7 @@ export class PetWindowController {
       },
     });
 
+    this.window.setAlwaysOnTop(true, 'floating');
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     this.window.setMenu(null);
     this.window.once('ready-to-show', () => {
@@ -139,11 +141,11 @@ export class PetWindowController {
     });
 
     if (this.options.isDev && this.options.devServerUrl) {
-      this.window.loadURL(`${this.options.devServerUrl}#pet-floating`).catch((error) => {
+      this.window.loadURL(`${this.options.devServerUrl}#${PetRendererRoute.Floating}`).catch((error) => {
         console.error('[PetWindow] failed to load dev URL:', error);
       });
     } else {
-      this.window.loadFile(path.join(__dirname, '..', 'dist', 'index.html'), { hash: 'pet-floating' });
+      this.window.loadFile(path.join(__dirname, '..', 'dist', 'index.html'), { hash: PetRendererRoute.Floating });
     }
   }
 

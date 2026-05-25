@@ -321,7 +321,9 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
     };
   }, [selectedArtifact?.filePath]);
 
-  const handleClose = useCallback(() => dispatch(closePanel()), [dispatch]);
+  const handleClose = useCallback(() => {
+    dispatch(closePanel({ sessionId: effectiveSessionId ?? undefined }));
+  }, [dispatch, effectiveSessionId]);
   const handleSelectArtifact = useCallback((id: string) => {
     const artifact = artifacts.find((item) => item.id === id);
     if (artifact?.type === ArtifactTypeValue.LocalService) {

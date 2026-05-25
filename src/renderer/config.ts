@@ -1,5 +1,9 @@
 import type { AuthConfig } from '../common/auth';
 import { DEFAULT_AUTH_CONFIG } from '../common/auth';
+import {
+  type BrowserWebAccessConfig,
+  defaultBrowserWebAccessConfig,
+} from '../shared/browserWebAccess/constants';
 import type { PetConfig } from '../shared/pet/types';
 import type { ProviderConfig } from '../shared/providers';
 import { ProviderRegistry } from '../shared/providers';
@@ -44,6 +48,8 @@ export interface AppConfig {
   language: 'zh' | 'en';
   // 是否使用系统代理
   useSystemProxy: boolean;
+  // 浏览器与网页访问配置
+  browserWebAccess: BrowserWebAccessConfig;
   // 客户端宠物伙伴配置，由 pet IPC 作为写入真源。
   pet?: PetConfig;
   // 语言初始化标记 (用于判断是否是首次启动)
@@ -155,6 +161,7 @@ export const defaultConfig: AppConfig = {
   theme: 'system',
   language: 'zh',
   useSystemProxy: false,
+  browserWebAccess: defaultBrowserWebAccessConfig,
   app: {
     port: 3000,
     isDevelopment: process.env.NODE_ENV === 'development',

@@ -23,6 +23,12 @@ export const PetIpcChannel = {
 
 export type PetIpcChannel = typeof PetIpcChannel[keyof typeof PetIpcChannel];
 
+export const PetRendererRoute = {
+  Floating: 'pet-floating',
+} as const;
+
+export type PetRendererRoute = typeof PetRendererRoute[keyof typeof PetRendererRoute];
+
 export const PetMode = {
   Embedded: 'embedded',
   Floating: 'floating',

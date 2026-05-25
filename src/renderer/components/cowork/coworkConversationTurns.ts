@@ -2,6 +2,7 @@ import type { CoworkMessage } from '../../types/cowork';
 
 const TOOL_USE_ERROR_TAG_PATTERN = /^<tool_use_error>([\s\S]*?)<\/tool_use_error>$/i;
 const ANSI_ESCAPE_PATTERN = /\u001B\[[0-?]*[ -/]*[@-~]/g;
+const SILENT_TOKEN_RE = /^[`*_~"'""''()[\]{}<>.,!?;:，。！？；：\s-]{0,8}NO_REPLY[`*_~"'""''()[\]{}<>.,!?;:，。！？；：\s-]{0,8}$/i;
 export const MEDIA_TOKEN_DISPLAY_RE = /\n?MEDIA:\s*`?[^`\n]+?`?\s*$/gim;
 export const TOOL_RESULT_DISPLAY_MAX_CHARS = 40_000;
 
@@ -83,12 +84,24 @@ export const getToolResultDisplay = (message: CoworkMessage): string => {
   return '';
 };
 
+export const isSilentAssistantMessage = (message: CoworkMessage): boolean => (
+  message.type === 'assistant' && SILENT_TOKEN_RE.test(message.content.trim())
+);
+
+const isContextCompactionMessage = (message: CoworkMessage): boolean => (
+  message.type === 'system' && message.metadata?.kind === 'context_compaction'
+);
+
 export const buildDisplayItems = (messages: CoworkMessage[]): DisplayItem[] => {
   const items: DisplayItem[] = [];
   const groupsByToolUseId = new Map<string, ToolGroupItem>();
   let pendingAdjacentGroup: ToolGroupItem | null = null;
 
   for (const message of messages) {
+    if (isSilentAssistantMessage(message)) {
+      continue;
+    }
+
     if (message.type === 'tool_use') {
       const group: ToolGroupItem = { type: 'tool_group', toolUse: message };
       items.push(group);
@@ -157,13 +170,18 @@ export const buildConversationTurns = (items: DisplayItem[]): ConversationTurn[]
       continue;
     }
 
-    const turn = ensureTurn();
     if (item.type === 'tool_group') {
+      const turn = ensureTurn();
       turn.assistantItems.push({ type: 'tool_group', group: item });
       continue;
     }
 
     const message = item.message;
+    if (isContextCompactionMessage(message) && currentTurn?.assistantItems.length) {
+      currentTurn = null;
+    }
+    const turn = ensureTurn();
+
     if (message.type === 'assistant') {
       turn.assistantItems.push({ type: 'assistant', message });
       continue;
@@ -194,6 +212,9 @@ export const buildConversationTurns = (items: DisplayItem[]): ConversationTurn[]
 };
 
 const isRenderableAssistantOrSystemMessage = (message: CoworkMessage): boolean => {
+  if (isSilentAssistantMessage(message)) {
+    return false;
+  }
   if (hasText(message.content) || hasText(message.metadata?.error)) {
     return true;
   }

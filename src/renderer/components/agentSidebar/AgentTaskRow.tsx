@@ -20,6 +20,7 @@ interface AgentTaskRowProps {
   isSelected: boolean;
   isSelectionDisabled?: boolean;
   showBatchOption?: boolean;
+  hasActiveSubagent?: boolean;
   onSelect: () => void;
   onDelete: () => Promise<void>;
   onShare: () => Promise<void>;
@@ -42,6 +43,7 @@ const AgentTaskRow: React.FC<AgentTaskRowProps> = ({
   isSelected,
   isSelectionDisabled = false,
   showBatchOption = false,
+  hasActiveSubagent = false,
   onSelect,
   onDelete,
   onShare,
@@ -186,7 +188,7 @@ const AgentTaskRow: React.FC<AgentTaskRowProps> = ({
       } pr-2.5 text-[14px] font-normal transition-colors ${
         isSelectionDisabled
           ? 'cursor-default text-foreground/30'
-          : task.isSelected
+          : task.isSelected && !hasActiveSubagent
             ? 'bg-black/[0.06] text-foreground dark:bg-white/[0.07]'
             : 'cursor-pointer text-foreground/80 hover:bg-black/[0.03] hover:text-foreground dark:hover:bg-white/[0.04]'
       }`}
