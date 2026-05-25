@@ -1,11 +1,14 @@
 import {
   normalizeFilePathForDedup,
+  normalizeLocalServiceUrlForDedup,
   parseCodeBlockArtifacts,
   parseFileLinksFromMessage,
   parseFilePathsFromText,
+  parseLocalServiceUrlsFromText,
   parseMediaTokensFromText,
   parseToolArtifact,
   stripFileLinksFromText,
+  stripLocalServiceUrlsFromText,
 } from '../../services/artifactParser';
 import type { Artifact } from '../../types/artifact';
 import type { CoworkMessage } from '../../types/cowork';
@@ -23,6 +26,7 @@ export const collectCoworkSessionArtifacts = (
 ): Artifact[] => {
   const artifacts: Artifact[] = [];
   const seenFilePaths = new Set<string>();
+  const seenLocalServiceUrls = new Set<string>();
   const toolResultsByUseId = new Map<string, CoworkMessage>();
 
   for (const message of messages) {
@@ -38,6 +42,11 @@ export const collectCoworkSessionArtifacts = (
       const normalized = normalizeFilePathForDedup(artifact.filePath);
       if (seenFilePaths.has(normalized)) return;
       seenFilePaths.add(normalized);
+    }
+    if (artifact.url) {
+      const normalized = normalizeLocalServiceUrlForDedup(artifact.url);
+      if (seenLocalServiceUrls.has(normalized)) return;
+      seenLocalServiceUrls.add(normalized);
     }
     artifacts.push(artifact);
   };
@@ -63,7 +72,11 @@ export const collectCoworkSessionArtifacts = (
         pushArtifact(artifact);
       }
 
-      const contentWithoutFileLinks = stripFileLinksFromText(message.content);
+      for (const artifact of parseLocalServiceUrlsFromText(message.content, message.id, sessionId)) {
+        pushArtifact(artifact);
+      }
+
+      const contentWithoutFileLinks = stripLocalServiceUrlsFromText(stripFileLinksFromText(message.content));
       for (const artifact of parseFilePathsFromText(contentWithoutFileLinks, message.id, sessionId)) {
         pushArtifact(artifact);
       }
@@ -78,6 +91,9 @@ export const collectCoworkSessionArtifacts = (
         pushArtifact(artifact);
       }
       for (const artifact of parseFilePathsFromText(displayText, message.id, sessionId, 'artifact-toolresult')) {
+        pushArtifact(artifact);
+      }
+      for (const artifact of parseLocalServiceUrlsFromText(displayText, message.id, sessionId)) {
         pushArtifact(artifact);
       }
     }

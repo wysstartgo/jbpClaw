@@ -4,9 +4,11 @@ import {
   normalizeFilePathForDedup,
   parseFileLinksFromMessage,
   parseFilePathsFromText,
+  parseLocalServiceUrlsFromText,
   parseMediaTokensFromText,
   parseToolArtifact,
   stripFileLinksFromText,
+  stripLocalServiceUrlsFromText,
 } from './artifactParser';
 
 describe('normalizeFilePathForDedup', () => {
@@ -53,6 +55,50 @@ describe('parseFileLinksFromMessage', () => {
     const artifacts = parseFileLinksFromMessage(content, 'msg1', 'sess1');
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0].filePath).toBe('D:/my folder/文件.pptx');
+  });
+});
+
+describe('parseLocalServiceUrlsFromText', () => {
+  test('parses localhost service URLs', () => {
+    const content = '服务已启动：http://localhost:4173/login-react.html';
+    const artifacts = parseLocalServiceUrlsFromText(content, 'msg1', 'sess1');
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]).toMatchObject({
+      type: 'local-service',
+      url: 'http://localhost:4173/login-react.html',
+      title: 'login-react.html',
+    });
+  });
+
+  test('uses markdown link text as title', () => {
+    const content = '[登录页面](http://localhost:4173/login-react.html)';
+    const artifacts = parseLocalServiceUrlsFromText(content, 'msg1', 'sess1');
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0].title).toBe('登录页面');
+  });
+
+  test('deduplicates repeated markdown and bare URLs', () => {
+    const content = '[http://localhost:4173/](http://localhost:4173/)\nhttp://localhost:4173/';
+    const artifacts = parseLocalServiceUrlsFromText(content, 'msg1', 'sess1');
+
+    expect(artifacts).toHaveLength(1);
+  });
+
+  test('ignores remote URLs', () => {
+    const artifacts = parseLocalServiceUrlsFromText('https://example.com/app', 'msg1', 'sess1');
+
+    expect(artifacts).toHaveLength(0);
+  });
+
+  test('strips local service URLs before file path scanning', () => {
+    const content = '服务已启动：[预览页面](http://localhost:4173/login-react.html)，另见 /tmp/report.pdf';
+    const stripped = stripLocalServiceUrlsFromText(content);
+    const artifacts = parseFilePathsFromText(stripped, 'msg1', 'sess1');
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0].filePath).toBe('/tmp/report.pdf');
   });
 });
 

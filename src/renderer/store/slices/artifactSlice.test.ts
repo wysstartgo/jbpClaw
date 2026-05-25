@@ -2,6 +2,8 @@ import { describe, expect, test } from 'vitest';
 
 import type { Artifact } from '../../types/artifact';
 import reducer, {
+  activateArtifactBrowserTab,
+  activateArtifactFileListTab,
   addArtifact,
   closeArtifactPreviewTab,
   clearSessionArtifacts,
@@ -208,6 +210,47 @@ describe('artifactSlice', () => {
       }),
     ]);
     expect(replaced.selectedArtifactId).toBe('tool-artifact');
+  });
+
+  test('deduplicates local service artifacts by normalized URL', () => {
+    const first = reducer(undefined, addArtifact({
+      sessionId: 'session-1',
+      artifact: makeArtifact({
+        id: 'local-service-1',
+        type: 'local-service',
+        title: 'localhost:4173',
+        content: 'http://localhost:4173/',
+        url: 'http://localhost:4173/',
+        filePath: undefined,
+      }),
+    }));
+
+    const next = reducer(first, addArtifact({
+      sessionId: 'session-1',
+      artifact: makeArtifact({
+        id: 'local-service-2',
+        type: 'local-service',
+        title: 'localhost:4173',
+        content: 'http://LOCALHOST:4173',
+        url: 'http://LOCALHOST:4173',
+        filePath: undefined,
+      }),
+    }));
+
+    expect(next.artifactsBySession['session-1']).toHaveLength(1);
+    expect(next.artifactsBySession['session-1'][0]).toMatchObject({
+      id: 'local-service-2',
+      url: 'http://LOCALHOST:4173',
+    });
+  });
+
+  test('opens special tabs with per-session panel state', () => {
+    const fileList = reducer(undefined, activateArtifactFileListTab({ sessionId: 'session-1' }));
+    const browser = reducer(fileList, activateArtifactBrowserTab({ sessionId: 'session-2' }));
+
+    expect(fileList.panelOpenBySession['session-1']).toBe(true);
+    expect(browser.panelOpenBySession['session-1']).toBe(true);
+    expect(browser.panelOpenBySession['session-2']).toBe(true);
   });
 
   test('panel width is clamped', () => {

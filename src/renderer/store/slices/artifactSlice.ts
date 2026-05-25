@@ -1,7 +1,7 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-import { normalizeFilePathForDedup } from '../../services/artifactParser';
-import type { Artifact } from '../../types/artifact';
+import { normalizeFilePathForDedup, normalizeLocalServiceUrlForDedup } from '../../services/artifactParser';
+import { type Artifact, ArtifactTypeValue } from '../../types/artifact';
 import type { RootState } from '../index';
 
 const DEFAULT_PANEL_WIDTH = 560;
@@ -14,6 +14,13 @@ export const ArtifactContentView = {
   Code: 'code',
 } as const;
 export type ArtifactContentView = typeof ArtifactContentView[keyof typeof ArtifactContentView];
+
+export const ArtifactSpecialTab = {
+  FileList: 'fileList',
+  Browser: 'browser',
+} as const;
+export type ArtifactSpecialTab = typeof ArtifactSpecialTab[keyof typeof ArtifactSpecialTab];
+
 export type ArtifactActiveTab = ArtifactContentView;
 
 export interface ArtifactPreviewTab {
@@ -27,6 +34,7 @@ interface ArtifactState {
   artifactsBySession: Record<string, Artifact[]>;
   previewTabsBySession: Record<string, ArtifactPreviewTab[]>;
   activePreviewTabIdBySession: Record<string, string | null>;
+  panelOpenBySession: Record<string, boolean>;
   selectedArtifactId: string | null;
   isPanelOpen: boolean;
   activeTab: ArtifactActiveTab;
@@ -38,6 +46,7 @@ const initialState: ArtifactState = {
   artifactsBySession: {},
   previewTabsBySession: {},
   activePreviewTabIdBySession: {},
+  panelOpenBySession: {},
   selectedArtifactId: null,
   isPanelOpen: false,
   activeTab: ArtifactContentView.Preview,
@@ -69,6 +78,14 @@ const activatePreviewTab = (state: ArtifactState, sessionId: string, tabId: stri
   state.activeTab = tab?.contentView ?? ArtifactContentView.Preview;
   state.panelView = 'preview';
   state.isPanelOpen = true;
+  state.panelOpenBySession[sessionId] = true;
+};
+
+const setPanelOpen = (state: ArtifactState, sessionId: string | undefined, isOpen: boolean): void => {
+  state.isPanelOpen = isOpen;
+  if (sessionId) {
+    state.panelOpenBySession[sessionId] = isOpen;
+  }
 };
 
 const openPreviewTab = (state: ArtifactState, sessionId: string, artifactId: string): void => {
@@ -165,6 +182,20 @@ const artifactSlice = createSlice({
         }
       }
 
+      if (artifact.type === ArtifactTypeValue.LocalService) {
+        const normalizedUrl = normalizeLocalServiceUrlForDedup(artifact.url || artifact.content);
+        const duplicate = artifacts.findIndex((item) => (
+          item.type === ArtifactTypeValue.LocalService
+          && normalizeLocalServiceUrlForDedup(item.url || item.content) === normalizedUrl
+        ));
+        if (duplicate >= 0) {
+          const old = artifacts[duplicate];
+          artifacts[duplicate] = artifact;
+          replacePreviewTabArtifactId(state, sessionId, old.id, artifact.id);
+          return;
+        }
+      }
+
       artifacts.push(artifact);
     },
     selectArtifact(state, action: PayloadAction<string | null>) {
@@ -193,6 +224,16 @@ const artifactSlice = createSlice({
     activateArtifactPreviewTab(state, action: PayloadAction<{ sessionId: string; tabId: string }>) {
       activatePreviewTab(state, action.payload.sessionId, action.payload.tabId);
     },
+    activateArtifactFileListTab(state, action: PayloadAction<{ sessionId: string }>) {
+      activatePreviewTab(state, action.payload.sessionId, null);
+      state.panelView = 'files';
+      setPanelOpen(state, action.payload.sessionId, true);
+    },
+    activateArtifactBrowserTab(state, action: PayloadAction<{ sessionId: string }>) {
+      activatePreviewTab(state, action.payload.sessionId, null);
+      state.panelView = 'preview';
+      setPanelOpen(state, action.payload.sessionId, true);
+    },
     closeArtifactPreviewTab(state, action: PayloadAction<{ sessionId: string; tabId: string }>) {
       const { sessionId, tabId } = action.payload;
       const tabs = state.previewTabsBySession[sessionId] ?? [];
@@ -218,11 +259,13 @@ const artifactSlice = createSlice({
         state.activeTab = action.payload.contentView;
       }
     },
-    togglePanel(state) {
-      state.isPanelOpen = !state.isPanelOpen;
+    togglePanel(state, action: PayloadAction<{ sessionId?: string } | undefined>) {
+      const sessionId = action.payload?.sessionId;
+      const nextOpen = !(sessionId ? state.panelOpenBySession[sessionId] ?? state.isPanelOpen : state.isPanelOpen);
+      setPanelOpen(state, sessionId, nextOpen);
     },
-    closePanel(state) {
-      state.isPanelOpen = false;
+    closePanel(state, action: PayloadAction<{ sessionId?: string } | undefined>) {
+      setPanelOpen(state, action.payload?.sessionId, false);
     },
     setActiveTab(state, action: PayloadAction<ArtifactActiveTab>) {
       state.activeTab = action.payload;
@@ -246,6 +289,7 @@ const artifactSlice = createSlice({
       delete state.artifactsBySession[action.payload];
       delete state.previewTabsBySession[action.payload];
       delete state.activePreviewTabIdBySession[action.payload];
+      delete state.panelOpenBySession[action.payload];
       state.selectedArtifactId = null;
       state.activeTab = ArtifactContentView.Preview;
     },
@@ -258,6 +302,8 @@ export const {
   selectArtifact,
   openArtifactPreviewTab,
   activateArtifactPreviewTab,
+  activateArtifactFileListTab,
+  activateArtifactBrowserTab,
   closeArtifactPreviewTab,
   setPreviewTabContentView,
   togglePanel,
@@ -281,7 +327,10 @@ export const selectSelectedArtifact = (state: RootState): Artifact | null => {
   return null;
 };
 
-export const selectIsPanelOpen = (state: RootState): boolean => state.artifact.isPanelOpen;
+export const selectIsPanelOpen = (state: RootState, sessionId?: string): boolean => {
+  if (!sessionId) return state.artifact.isPanelOpen;
+  return state.artifact.panelOpenBySession[sessionId] ?? state.artifact.isPanelOpen;
+};
 export const selectPanelWidth = (state: RootState): number => state.artifact.panelWidth;
 export const selectPanelView = (state: RootState): ArtifactPanelView => state.artifact.panelView;
 export const selectActiveTab = (state: RootState): ArtifactActiveTab => state.artifact.activeTab;

@@ -77,6 +77,7 @@ const TYPE_ICON_MAP: Record<ArtifactType, React.FC<{ className?: string }>> = {
   markdown: MarkdownIcon,
   text: TextIcon,
   document: DocumentIcon,
+  'local-service': GlobeIcon,
 };
 
 const TYPE_LABEL_KEY: Record<ArtifactType, string> = {
@@ -89,6 +90,7 @@ const TYPE_LABEL_KEY: Record<ArtifactType, string> = {
   markdown: 'artifactTypeMarkdown',
   text: 'artifactTypeText',
   document: 'artifactTypeDocument',
+  'local-service': 'artifactTypeLocalService',
 };
 
 interface ArtifactPreviewCardProps {

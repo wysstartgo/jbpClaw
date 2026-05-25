@@ -15,6 +15,7 @@ const TYPE_ICONS: Record<ArtifactType, string> = {
   markdown: '📝',
   text: '📄',
   document: '📑',
+  'local-service': '🌐',
 };
 
 const TYPE_ORDER: Record<ArtifactType, number> = {
@@ -24,6 +25,7 @@ const TYPE_ORDER: Record<ArtifactType, number> = {
   mermaid: 3,
   react: 4,
   document: 4,
+  'local-service': 4,
   markdown: 5,
   text: 6,
   code: 7,
@@ -39,6 +41,7 @@ const TYPE_LABEL_KEYS: Record<ArtifactType, string> = {
   markdown: 'artifactTypeMarkdown',
   text: 'artifactTypeText',
   code: 'artifactCode',
+  'local-service': 'artifactTypeLocalService',
 };
 
 function getShortPath(filePath: string): string {

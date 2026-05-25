@@ -70,6 +70,26 @@ describe('collectCoworkSessionArtifacts', () => {
     });
   });
 
+  test('collects localhost service URLs as local-service artifacts', () => {
+    const messages: CoworkMessage[] = [
+      makeMessage({
+        id: 'assistant-1',
+        type: 'assistant',
+        content: '服务已启动：[预览页面](http://localhost:4173/login-react.html)',
+      }),
+    ];
+
+    const artifacts = collectCoworkSessionArtifacts(messages, 'session-1');
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]).toMatchObject({
+      id: 'artifact-local-service-assistant-1-0',
+      type: 'local-service',
+      title: '预览页面',
+      url: 'http://localhost:4173/login-react.html',
+    });
+  });
+
   test('keeps codeblock artifacts and ignores thinking messages', () => {
     const messages: CoworkMessage[] = [
       makeMessage({
