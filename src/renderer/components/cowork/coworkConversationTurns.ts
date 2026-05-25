@@ -2,6 +2,7 @@ import type { CoworkMessage } from '../../types/cowork';
 
 const TOOL_USE_ERROR_TAG_PATTERN = /^<tool_use_error>([\s\S]*?)<\/tool_use_error>$/i;
 const ANSI_ESCAPE_PATTERN = /\u001B\[[0-?]*[ -/]*[@-~]/g;
+export const MEDIA_TOKEN_DISPLAY_RE = /\n?MEDIA:\s*`?[^`\n]+?`?\s*$/gim;
 export const TOOL_RESULT_DISPLAY_MAX_CHARS = 40_000;
 
 export type ToolGroupItem = {
@@ -32,7 +33,8 @@ export const hasText = (value: unknown): value is string =>
 const normalizeToolResultText = (value: string): string => {
   const withoutAnsi = value.replace(ANSI_ESCAPE_PATTERN, '');
   const errorTagMatch = withoutAnsi.trim().match(TOOL_USE_ERROR_TAG_PATTERN);
-  return errorTagMatch ? errorTagMatch[1].trim() : withoutAnsi;
+  const cleaned = errorTagMatch ? errorTagMatch[1].trim() : withoutAnsi;
+  return cleaned.replace(MEDIA_TOKEN_DISPLAY_RE, '').trimEnd();
 };
 
 const formatStructuredText = (value: string): string => {
@@ -196,7 +198,7 @@ const isRenderableAssistantOrSystemMessage = (message: CoworkMessage): boolean =
     return true;
   }
   if (message.metadata?.isThinking) {
-    return Boolean(message.metadata?.isStreaming);
+    return true;
   }
   return false;
 };

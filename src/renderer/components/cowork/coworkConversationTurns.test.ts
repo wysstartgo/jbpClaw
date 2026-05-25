@@ -114,7 +114,7 @@ describe('coworkConversationTurns', () => {
     expect(turns[1]?.assistantItems.map((item) => item.type)).toEqual(['assistant']);
   });
 
-  test('treats streaming thinking as renderable assistant content', () => {
+  test('treats thinking as renderable assistant content after streaming ends', () => {
     const turns = buildConversationTurns(buildDisplayItems([
       createMessage({
         id: 'user-1',
@@ -124,14 +124,25 @@ describe('coworkConversationTurns', () => {
       createMessage({
         id: 'thinking-1',
         type: 'assistant',
+        content: '我需要先分析约束。',
         metadata: {
           isThinking: true,
-          isStreaming: true,
+          isStreaming: false,
         },
       }),
     ]));
 
     expect(hasRenderableAssistantContent(turns[0]!)).toBe(true);
+  });
+
+  test('strips trailing media tokens from tool result display text', () => {
+    const message = createMessage({
+      id: 'tool-result-media',
+      type: 'tool_result',
+      content: 'saved image\nMEDIA: `/tmp/chart.png`',
+    });
+
+    expect(getToolResultDisplay(message)).toBe('saved image');
   });
 
   test('normalizes tool result error tags before visibility checks', () => {
