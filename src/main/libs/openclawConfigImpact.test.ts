@@ -173,6 +173,15 @@ describe('OpenClaw config impact classification', () => {
     });
   });
 
+  test('classifies forced IM sync as restart even without fingerprint diff', () => {
+    const fingerprint = createStableConfigFingerprint({ feishu: { instances: [] } });
+
+    expect(classifyImOpenClawConfigChange(fingerprint, fingerprint, { forceRestart: true })).toEqual({
+      impact: OpenClawConfigImpact.Restart,
+      reasons: [OpenClawConfigImpactReason.ImForceRestart],
+    });
+  });
+
   test('classifies plugin install, uninstall, toggle, and config changes as restart', () => {
     expect(classifyPluginConfigChange(OpenClawPluginChangeAction.Install).impact)
       .toBe(OpenClawConfigImpact.Restart);
