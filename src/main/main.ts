@@ -129,6 +129,13 @@ import {
   buildManagedSessionKey,
   OpenClawChannelSessionSync,
 } from './libs/openclawChannelSessionSync';
+import {
+  classifyAppConfigChange,
+  classifyCoworkConfigChange,
+  OpenClawConfigImpact,
+  OpenClawConfigImpactReason,
+  removeImpactDecisionReasons,
+} from './libs/openclawConfigImpact';
 import type { ResolvedMcpServer } from './libs/openclawConfigSync';
 import { OpenClawConfigSync } from './libs/openclawConfigSync';
 import { OpenClawEngineManager, type OpenClawEngineStatus } from './libs/openclawEngineManager';
@@ -3136,15 +3143,33 @@ if (!gotTheLock) {
   });
 
   ipcMain.handle('store:set', async (_event, key, value) => {
+    const previousAppConfig = key === 'app_config'
+      ? getStore().get<AppConfigSettings>('app_config')
+      : undefined;
     getStore().set(key, value);
     if (key === 'app_config') {
       refreshEndpointsTestMode(getStore());
-      const syncResult = await syncOpenClawConfig({
-        reason: 'app-config-change',
-        restartGatewayIfRunning: false,
-      });
-      if (!syncResult.success) {
-        console.error('[OpenClaw] Failed to sync config after app_config update:', syncResult.error);
+      const impactDecision = classifyAppConfigChange(previousAppConfig, value);
+      const proxyChanged = impactDecision.reasons.includes(OpenClawConfigImpactReason.AppUseSystemProxy);
+      const actionDecision = removeImpactDecisionReasons(impactDecision, [
+        OpenClawConfigImpactReason.AppUseSystemProxy,
+      ]);
+
+      // System proxy changes are handled by the app_config watcher after the
+      // OS-level env/proxy preference has been applied. Avoid a duplicate sync
+      // here that would restart the gateway twice.
+      if (proxyChanged && getOpenClawEngineManager().getStatus().phase === 'running') {
+        return;
+      }
+
+      if (actionDecision.impact !== OpenClawConfigImpact.None) {
+        const syncResult = await syncOpenClawConfig({
+          reason: 'app-config-change',
+          restartGatewayIfRunning: actionDecision.impact === OpenClawConfigImpact.Restart,
+        });
+        if (!syncResult.success) {
+          console.error('[OpenClaw] Failed to sync config after app_config update:', syncResult.error);
+        }
       }
     }
   });
@@ -5368,15 +5393,11 @@ if (!gotTheLock) {
       const switchedToOpenClaw = normalizedAgentEngine === 'openclaw'
         && previousConfig.agentEngine !== 'openclaw';
 
-      const shouldSyncOpenClawConfig = normalizedExecutionMode !== undefined
-        || normalizedAgentEngine !== undefined
-        || normalizedOpenClawSessionPolicy?.keepAlive !== undefined
-        || normalizedConfig.workingDirectory !== undefined
-        || Object.values(normalizedEmbedding).some((value) => value !== undefined);
-      if (shouldSyncOpenClawConfig) {
+      const impactDecision = classifyCoworkConfigChange(previousConfig, nextConfig);
+      if (impactDecision.impact !== OpenClawConfigImpact.None) {
         const syncResult = await syncOpenClawConfig({
           reason: 'cowork-config-change',
-          restartGatewayIfRunning: true,
+          restartGatewayIfRunning: impactDecision.impact === OpenClawConfigImpact.Restart,
         });
         if (!syncResult.success && nextConfig.agentEngine === 'openclaw') {
           return {
