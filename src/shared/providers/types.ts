@@ -6,6 +6,7 @@ export interface ProviderModelConfig {
   supportsImage?: boolean;
   contextWindow?: number;
   openClawProviderId?: string;
+  customParams?: Record<string, unknown>;
 }
 
 export interface ProviderConfig {

@@ -34,7 +34,7 @@ type AuthAdapterDeps = {
   clearAuthTokens: () => void;
   normalizeQuota: NormalizeQuotaFn;
   updateServerModelMetadata: (
-    models: Array<{ modelId: string; supportsImage?: boolean }>
+    models: Array<{ modelId: string; supportsImage?: boolean; contextWindow?: number }>
   ) => boolean;
   clearServerModelMetadata: () => void;
 };
@@ -141,6 +141,7 @@ type QtbModel = {
   apiFormat: string;
   modelKind?: string;
   supportsImage?: boolean;
+  contextWindow?: number;
 };
 
 function notifyServerModelMetadataUpdated(deps: AuthAdapterDeps, tag: string): void {

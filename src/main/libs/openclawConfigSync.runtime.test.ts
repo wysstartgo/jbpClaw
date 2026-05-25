@@ -24,7 +24,13 @@ const mockRuntimeState = vi.hoisted(() => ({
     apiType: 'anthropic' | 'openai';
     authType?: 'apikey' | 'oauth';
     codingPlanEnabled: boolean;
-    models: Array<{ id: string; name: string; supportsImage?: boolean }>;
+    models: Array<{
+      id: string;
+      name: string;
+      supportsImage?: boolean;
+      contextWindow?: number;
+      customParams?: Record<string, unknown>;
+    }>;
   }>,
   rawApiConfig: {
     config: {
@@ -1028,6 +1034,42 @@ describe('OpenClawConfigSync runtime config output', () => {
     } finally {
       setSystemProxyEnabled(false);
     }
+  });
+
+  test('writes model custom params as OpenClaw extra_body defaults', async () => {
+    const { ProviderName } = await import('../../shared/providers');
+    mockRuntimeState.enabledProviders = [
+      {
+        providerName: ProviderName.DeepSeek,
+        baseURL: 'https://api.deepseek.com',
+        apiKey: 'sk-deepseek',
+        apiType: 'openai',
+        codingPlanEnabled: false,
+        models: [{
+          id: 'deepseek-v4-flash',
+          name: 'DeepSeek V4 Flash',
+          supportsImage: false,
+          customParams: {
+            thinking: { type: 'enabled', budget_tokens: 1024 },
+          },
+        }],
+      },
+    ];
+
+    const sync = await createSync();
+    const result = sync.sync('model-custom-params');
+    expect(result.ok).toBe(true);
+
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    expect(config.agents.defaults.models).toMatchObject({
+      'deepseek/deepseek-v4-flash': {
+        params: {
+          extra_body: {
+            thinking: { type: 'enabled', budget_tokens: 1024 },
+          },
+        },
+      },
+    });
   });
 
   test('writes MiniMax OAuth providers with oauth auth metadata', async () => {

@@ -22,6 +22,12 @@ type ProviderConfig = Omit<SharedProviderConfig, 'apiFormat' | 'models'> & {
   models?: ProviderModelInputConfig[];
 };
 
+type ServerModelMetadata = {
+  modelId: string;
+  supportsImage?: boolean;
+  contextWindow?: number;
+};
+
 type AppConfig = {
   model?: {
     defaultModel?: string;
@@ -77,8 +83,8 @@ export function setQingShuInvocationContextGetter(getter: () => {
 }
 
 // Cached server model metadata (populated when auth:getModels is called)
-// Keyed by modelId → { supportsImage }
-let serverModelMetadataCache: Map<string, { supportsImage?: boolean }> = new Map();
+// Keyed by modelId → { supportsImage, contextWindow }
+let serverModelMetadataCache: Map<string, Omit<ServerModelMetadata, 'modelId'>> = new Map();
 
 function summarizeAccessTokenForLog(accessToken?: string | null): Record<string, unknown> {
   const summary: Record<string, unknown> = {
@@ -105,12 +111,16 @@ function summarizeAccessTokenForLog(accessToken?: string | null): Record<string,
   return summary;
 }
 
-export function updateServerModelMetadata(models: Array<{ modelId: string; supportsImage?: boolean }>): boolean {
+export function updateServerModelMetadata(models: ServerModelMetadata[]): boolean {
   const previous = serializeServerModelMetadata(getAllServerModelMetadata());
-  const nextCache = new Map(models.map(m => [m.modelId, { supportsImage: m.supportsImage }]));
+  const nextCache = new Map(models.map(m => [m.modelId, {
+    supportsImage: m.supportsImage,
+    contextWindow: m.contextWindow,
+  }]));
   const next = serializeServerModelMetadata(Array.from(nextCache.entries()).map(([modelId, meta]) => ({
     modelId,
     supportsImage: meta.supportsImage,
+    contextWindow: meta.contextWindow,
   })));
   serverModelMetadataCache = nextCache;
   return previous !== next;
@@ -120,20 +130,22 @@ export function clearServerModelMetadata(): void {
   serverModelMetadataCache.clear();
 }
 
-export function getAllServerModelMetadata(): Array<{ modelId: string; supportsImage?: boolean }> {
+export function getAllServerModelMetadata(): ServerModelMetadata[] {
   return Array.from(serverModelMetadataCache.entries()).map(([modelId, meta]) => ({
     modelId,
     supportsImage: meta.supportsImage,
+    contextWindow: meta.contextWindow,
   }));
 }
 
 const serializeServerModelMetadata = (
-  models: Array<{ modelId: string; supportsImage?: boolean }>,
+  models: ServerModelMetadata[],
 ): string => JSON.stringify(
   models
     .map((model) => ({
       modelId: model.modelId,
       supportsImage: model.supportsImage,
+      contextWindow: model.contextWindow,
     }))
     .sort((a, b) => a.modelId.localeCompare(b.modelId)),
 );
@@ -143,6 +155,7 @@ function buildServerFallbackModels(effectiveModelId: string): NonNullable<Provid
     id: model.modelId,
     name: model.modelId,
     supportsImage: model.supportsImage,
+    contextWindow: model.contextWindow,
   }));
 
   if (!models.some(model => model.id === effectiveModelId)) {
@@ -151,6 +164,7 @@ function buildServerFallbackModels(effectiveModelId: string): NonNullable<Provid
       id: effectiveModelId,
       name: effectiveModelId,
       supportsImage: cachedMeta?.supportsImage,
+      contextWindow: cachedMeta?.contextWindow,
     });
   }
 

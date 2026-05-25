@@ -132,6 +132,7 @@ import {
 import type { ResolvedMcpServer } from './libs/openclawConfigSync';
 import { OpenClawConfigSync } from './libs/openclawConfigSync';
 import { OpenClawEngineManager, type OpenClawEngineStatus } from './libs/openclawEngineManager';
+import { collectReferencedEnvVarNames, pickReferencedSecretEnvVars } from './libs/openclawSecretEnv';
 import {
   addMemoryEntry,
   deleteMemoryEntry,
@@ -1727,7 +1728,17 @@ const syncOpenClawConfig = async (
   // contains ${VAR} placeholders, never plaintext secrets).
   const nextSecretEnvVars = getOpenClawConfigSync().collectSecretEnvVars();
   const prevSecretEnvVars = getOpenClawEngineManager().getSecretEnvVars();
-  const secretEnvVarsChanged = JSON.stringify(nextSecretEnvVars) !== JSON.stringify(prevSecretEnvVars);
+  let referencedSecretNames = new Set<string>();
+  try {
+    referencedSecretNames = collectReferencedEnvVarNames(
+      fs.readFileSync(getOpenClawEngineManager().getConfigPath(), 'utf8'),
+    );
+  } catch {
+    referencedSecretNames = new Set<string>();
+  }
+  const nextReferencedSecretEnvVars = pickReferencedSecretEnvVars(nextSecretEnvVars, referencedSecretNames);
+  const prevReferencedSecretEnvVars = pickReferencedSecretEnvVars(prevSecretEnvVars, referencedSecretNames);
+  const secretEnvVarsChanged = JSON.stringify(nextReferencedSecretEnvVars) !== JSON.stringify(prevReferencedSecretEnvVars);
   getOpenClawEngineManager().setSecretEnvVars(nextSecretEnvVars);
 
   const needsRestart = secretEnvVarsChanged || (syncResult.changed && !!options.restartGatewayIfRunning);

@@ -220,17 +220,17 @@ describe('claudeSettings provider model metadata', () => {
 
   test('does not report server model metadata changes when only order changes', () => {
     expect(updateServerModelMetadata([
-      { modelId: 'qwen3.6-plus', supportsImage: true },
+      { modelId: 'qwen3.6-plus', supportsImage: true, contextWindow: 256000 },
       { modelId: 'deepseek-v3.2', supportsImage: false },
     ])).toBe(true);
 
     expect(updateServerModelMetadata([
       { modelId: 'deepseek-v3.2', supportsImage: false },
-      { modelId: 'qwen3.6-plus', supportsImage: true },
+      { modelId: 'qwen3.6-plus', supportsImage: true, contextWindow: 256000 },
     ])).toBe(false);
 
     expect(getAllServerModelMetadata()).toEqual(expect.arrayContaining([
-      { modelId: 'qwen3.6-plus', supportsImage: true },
+      { modelId: 'qwen3.6-plus', supportsImage: true, contextWindow: 256000 },
       { modelId: 'deepseek-v3.2', supportsImage: false },
     ]));
   });

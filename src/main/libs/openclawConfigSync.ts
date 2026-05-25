@@ -502,6 +502,10 @@ type OpenClawProviderSelection = {
   };
 };
 
+type OpenClawAgentModelDefault = {
+  params?: Record<string, unknown>;
+};
+
 const OPENAI_CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 
 const normalizeBaseUrlPath = (rawBaseUrl: string, pathName: string): string => {
@@ -977,6 +981,55 @@ const upsertProviderModel = (
   providerConfig.models.push(model);
 };
 
+const buildProviderModelCatalog = (
+  providers: Record<string, OpenClawProviderSelection['providerConfig']>,
+): Record<string, { models: Array<{ id: string }> }> => Object.fromEntries(
+  Object.entries(providers).map(([providerId, providerConfig]) => [
+    providerId,
+    {
+      models: providerConfig.models
+        .map((model) => ({ id: model.id?.trim() ?? '' }))
+        .filter((model) => model.id),
+    },
+  ]),
+);
+
+const cloneAgentModelDefault = (
+  entry: OpenClawAgentModelDefault,
+): OpenClawAgentModelDefault => (
+  entry.params ? { params: { ...entry.params } } : {}
+);
+
+const buildCompleteAgentModelDefaults = (
+  providers: Record<string, OpenClawProviderSelection['providerConfig']>,
+  customDefaults: Record<string, OpenClawAgentModelDefault>,
+): Record<string, OpenClawAgentModelDefault> => {
+  const modelDefaults: Record<string, OpenClawAgentModelDefault> = {};
+
+  for (const [providerId, providerConfig] of Object.entries(providers)) {
+    const normalizedProviderId = providerId.trim();
+    if (!normalizedProviderId) continue;
+
+    for (const model of providerConfig.models) {
+      const modelId = model.id?.trim();
+      if (!modelId) continue;
+
+      const modelKey = `${normalizedProviderId}/${modelId}`;
+      modelDefaults[modelKey] = customDefaults[modelKey]
+        ? cloneAgentModelDefault(customDefaults[modelKey])
+        : {};
+    }
+  }
+
+  for (const [modelKey, entry] of Object.entries(customDefaults)) {
+    if (!modelDefaults[modelKey]) {
+      modelDefaults[modelKey] = cloneAgentModelDefault(entry);
+    }
+  }
+
+  return modelDefaults;
+};
+
 const resolveExternalPluginLoadPaths = (pluginIds: string[]): string[] => {
   const seen = new Set<string>();
   const paths: string[] = [];
@@ -1230,6 +1283,7 @@ export class OpenClawConfigSync {
     });
 
     const allProvidersMap: Record<string, OpenClawProviderSelection['providerConfig']> = {};
+    const perModelCustomDefaults: Record<string, OpenClawAgentModelDefault> = {};
 
     for (const p of resolveAllEnabledProviderConfigs()) {
       for (const m of p.models) {
@@ -1252,6 +1306,10 @@ export class OpenClawConfigSync {
         const alreadyHas = existing.models.some((em) => em.id === sel.providerConfig.models[0]?.id);
         if (!alreadyHas && sel.providerConfig.models.length > 0) {
           existing.models.push(...sel.providerConfig.models);
+        }
+        if (m.customParams && Object.keys(m.customParams).length > 0) {
+          const modelKey = `${sel.providerId}/${sel.sessionModelId}`;
+          perModelCustomDefaults[modelKey] = { params: { extra_body: { ...m.customParams } } };
         }
       }
     }
@@ -1311,6 +1369,10 @@ export class OpenClawConfigSync {
 
     const sandboxMode = mapExecutionModeToSandboxMode(coworkConfig.executionMode || 'auto');
     console.log(`[OpenClawConfigSync] sandbox mode: ${sandboxMode} (executionMode: ${coworkConfig.executionMode || 'auto'})`);
+    const availableProviders = buildProviderModelCatalog(allProvidersMap);
+    const agentModelDefaults = Object.keys(perModelCustomDefaults).length > 0
+      ? buildCompleteAgentModelDefaults(allProvidersMap, perModelCustomDefaults)
+      : {};
 
     const mainWorkspacePath = getMainAgentWorkspacePath(this.engineManager.getStateDir());
     ensureDir(mainWorkspacePath);
@@ -1451,6 +1513,7 @@ export class OpenClawConfigSync {
           model: {
             primary: providerSelection.primaryModel,
           },
+          ...(Object.keys(agentModelDefaults).length > 0 ? { models: agentModelDefaults } : {}),
           sandbox: {
             mode: sandboxMode,
           },
@@ -1464,7 +1527,11 @@ export class OpenClawConfigSync {
             isolatedSession: true,
           },
         },
-        ...this.buildAgentsList(providerSelection.primaryModel, this.engineManager.getStateDir()),
+        ...this.buildAgentsList(
+          providerSelection.primaryModel,
+          this.engineManager.getStateDir(),
+          availableProviders,
+        ),
       },
       ...this.buildBindings(),
       session: buildOpenClawSessionConfig(coworkConfig.openClawSessionPolicy?.keepAlive),
@@ -2562,13 +2629,17 @@ export class OpenClawConfigSync {
    * Per-agent `identity` (name, emoji) is set from the agent database so
    * OpenClaw picks it up natively.
    */
-  private buildAgentsList(defaultPrimaryModel: string, stateDir?: string): { list?: Array<Record<string, unknown>> } {
+  private buildAgentsList(
+    defaultPrimaryModel: string,
+    stateDir?: string,
+    availableProviders?: Record<string, { models: Array<{ id: string }> }>,
+  ): { list?: Array<Record<string, unknown>> } {
     const agents = this.getAgents?.() ?? [];
     const mainAgent = agents.find((agent) => agent.id === 'main');
 
     const list: Array<Record<string, unknown>> = [
       mainAgent
-        ? buildAgentEntry(mainAgent, defaultPrimaryModel)
+        ? buildAgentEntry(mainAgent, defaultPrimaryModel, { availableProviders })
         : {
             id: 'main',
             default: true,
@@ -2580,6 +2651,7 @@ export class OpenClawConfigSync {
         agents,
         fallbackPrimaryModel: defaultPrimaryModel,
         stateDir,
+        availableProviders,
       }),
     ];
 
