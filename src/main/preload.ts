@@ -44,7 +44,11 @@ import {
 } from '../shared/appUpdate/constants';
 import { ArtifactIpcChannel } from '../shared/artifact/constants';
 import { ArtifactPreviewIpc } from '../shared/artifactPreview/constants';
+import { ClipboardIpc } from '../shared/clipboard/constants';
 import { CoworkIpcChannel } from '../shared/cowork/constants';
+import { DialogIpc } from '../shared/dialog/constants';
+import type { ListLocalWebServicesOptions, LocalWebService } from '../shared/localWebServices/constants';
+import { LocalWebServicesIpc } from '../shared/localWebServices/constants';
 import { PetIpcChannel } from '../shared/pet/constants';
 import type { PetConfig, PetImportRequest, PetRuntimeState } from '../shared/pet/types';
 import type { Platform } from '../shared/platform';
@@ -425,6 +429,8 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke('dialog:saveInlineFile', options),
     readFileAsDataUrl: (filePath: string) =>
       ipcRenderer.invoke('dialog:readFileAsDataUrl', filePath),
+    readTextFile: (filePath: string) =>
+      ipcRenderer.invoke(DialogIpc.ReadTextFile, filePath),
   },
   speech: {
     getAvailability: () => ipcRenderer.invoke(SpeechIpcChannel.GetAvailability),
@@ -489,7 +495,9 @@ contextBridge.exposeInMainWorld('electron', {
   },
   clipboard: {
     writeImageFromFile: (filePath: string) =>
-      ipcRenderer.invoke(ArtifactIpcChannel.WriteImageFromFile, filePath),
+      ipcRenderer.invoke(ClipboardIpc.WriteImageFromFile, filePath),
+    writeImageFromDataUrl: (dataUrl: string) =>
+      ipcRenderer.invoke(ClipboardIpc.WriteImageFromDataUrl, dataUrl),
   },
   artifact: {
     watchFile: (filePath: string) => ipcRenderer.invoke(ArtifactIpcChannel.WatchFile, filePath),
@@ -504,6 +512,8 @@ contextBridge.exposeInMainWorld('electron', {
     destroyPreviewSession: (sessionId: string) => ipcRenderer.invoke(ArtifactPreviewIpc.DestroySession, sessionId),
     clearBrowserCookies: () => ipcRenderer.invoke(ArtifactPreviewIpc.ClearBrowserCookies),
     clearBrowserCache: () => ipcRenderer.invoke(ArtifactPreviewIpc.ClearBrowserCache),
+    listLocalWebServices: (options?: ListLocalWebServicesOptions) =>
+      ipcRenderer.invoke(LocalWebServicesIpc.List, options) as Promise<LocalWebService[]>,
   },
   autoLaunch: {
     get: () => ipcRenderer.invoke('app:getAutoLaunch'),

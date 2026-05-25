@@ -27,7 +27,10 @@ import { migrateScheduledTaskRunsToOpenclaw,migrateScheduledTasksToOpenclaw } fr
 import { type AppUpdateInfo,AppUpdateIpc, AppUpdateSource } from '../shared/appUpdate/constants';
 import { ArtifactIpcChannel } from '../shared/artifact/constants';
 import { ArtifactBrowserPartition, ArtifactPreviewIpc } from '../shared/artifactPreview/constants';
+import { ClipboardIpc } from '../shared/clipboard/constants';
 import { CoworkIpcChannel } from '../shared/cowork/constants';
+import { DialogIpc } from '../shared/dialog/constants';
+import { type ListLocalWebServicesOptions, type LocalWebService, LocalWebServicesIpc } from '../shared/localWebServices/constants';
 import { PetStatus } from '../shared/pet/constants';
 import { type Platform as SharedPlatform,PlatformRegistry } from '../shared/platform';
 import { OpenClawProviderId, ProviderName, isQingShuServerProvider } from '../shared/providers';
@@ -226,6 +229,13 @@ const IPC_MAX_ITEMS = 40;
 const MAX_INLINE_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const MAX_QINGSHU_FILE_UPLOAD_BYTES = 50 * 1024 * 1024;
 const ENGINE_NOT_READY_CODE = 'ENGINE_NOT_READY';
+const LOCAL_WEB_SERVICE_PROBE_TIMEOUT_MS = 700;
+const LOCAL_WEB_SERVICE_TITLE_MAX_LENGTH = 80;
+const LOCAL_WEB_SERVICE_PORTS = Array.from(new Set([
+  3000, 3001, 3002, 3003, 3004, 3005, 3006, 3007, 3008, 3009, 3010,
+  3333, 4000, 4173, 5000, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180,
+  8000, 8080, 8081, 8888,
+])).sort((a, b) => a - b);
 const PowerSaveBlockerType = {
   PreventAppSuspension: 'prevent-app-suspension',
 } as const;
@@ -245,6 +255,60 @@ const MIME_EXTENSION_MAP: Record<string, string> = {
   'text/markdown': '.md',
   'application/json': '.json',
   'text/csv': '.csv',
+};
+
+const cleanHtmlTitle = (value: string): string =>
+  value.replace(/\s+/g, ' ').trim().slice(0, LOCAL_WEB_SERVICE_TITLE_MAX_LENGTH);
+
+const extractHtmlTitle = (html: string): string => {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (!match) return '';
+  return cleanHtmlTitle(match[1]
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'"));
+};
+
+const probeLocalWebService = async (port: number): Promise<LocalWebService | null> => {
+  const url = `http://localhost:${port}/`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LOCAL_WEB_SERVICE_PROBE_TIMEOUT_MS);
+
+  try {
+    const response = await session.defaultSession.fetch(url, {
+      method: 'GET',
+      redirect: 'manual',
+      signal: controller.signal,
+    });
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.toLowerCase().includes('text/html')) {
+      return null;
+    }
+
+    const html = await response.text();
+    const title = extractHtmlTitle(html) || `localhost:${port}`;
+    return {
+      id: `localhost:${port}`,
+      title,
+      url,
+      host: 'localhost',
+      port,
+      online: true,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const sanitizeLocalWebServicePorts = (ports: unknown): number[] => {
+  if (!Array.isArray(ports)) return [];
+  return Array.from(new Set(ports
+    .filter((port): port is number => Number.isInteger(port) && port > 0 && port <= 65535)
+    .slice(0, IPC_MAX_ITEMS)));
 };
 const IMAGE_MIME_BY_EXTENSION: Record<string, string> = {
   '.png': 'image/png',
@@ -6727,6 +6791,45 @@ if (!gotTheLock) {
     }
   );
 
+  const MAX_READ_TEXT_FILE_BYTES = 2 * 1024 * 1024;
+  ipcMain.handle(
+    DialogIpc.ReadTextFile,
+    async (_event, filePath?: string): Promise<{ success: boolean; content?: string; size?: number; readBytes?: number; truncated?: boolean; error?: string }> => {
+      try {
+        if (typeof filePath !== 'string' || !filePath.trim()) {
+          return { success: false, error: 'Missing file path' };
+        }
+        const resolvedPath = resolveShellFilePath(filePath);
+        const stat = await fs.promises.stat(resolvedPath);
+        if (!stat.isFile()) {
+          return { success: false, error: 'Not a file' };
+        }
+
+        const truncated = stat.size > MAX_READ_TEXT_FILE_BYTES;
+        const handle = await fs.promises.open(resolvedPath, 'r');
+        try {
+          const bytesToRead = Math.min(stat.size, MAX_READ_TEXT_FILE_BYTES);
+          const buffer = Buffer.alloc(bytesToRead);
+          const { bytesRead } = await handle.read(buffer, 0, bytesToRead, 0);
+          return {
+            success: true,
+            content: buffer.subarray(0, bytesRead).toString('utf8'),
+            size: stat.size,
+            readBytes: bytesRead,
+            truncated,
+          };
+        } finally {
+          await handle.close();
+        }
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to read text file',
+        };
+      }
+    }
+  );
+
   ipcMain.handle(
     QingShuFileIpcChannel.Publish,
     async (_event, filePath?: string): Promise<QingShuFilePublishResult> => publishQingShuFile(filePath),
@@ -7006,12 +7109,25 @@ end tell'`, { timeout: 5000 });
     }
   });
 
-  ipcMain.handle(ArtifactIpcChannel.WriteImageFromFile, async (_event, filePath: string) => {
+  ipcMain.handle(ClipboardIpc.WriteImageFromFile, async (_event, filePath: string) => {
     try {
       const normalizedPath = resolveShellFilePath(filePath);
       const image = nativeImage.createFromPath(normalizedPath);
       if (image.isEmpty()) {
         return { success: false, error: 'Failed to read image file' };
+      }
+      clipboard.writeImage(image);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  ipcMain.handle(ClipboardIpc.WriteImageFromDataUrl, async (_event, dataUrl: string) => {
+    try {
+      const image = nativeImage.createFromDataURL(dataUrl);
+      if (image.isEmpty()) {
+        return { success: false, error: 'Failed to read image data' };
       }
       clipboard.writeImage(image);
       return { success: true };
@@ -7112,6 +7228,13 @@ end tell'`, { timeout: 5000 });
       console.error('[ArtifactBrowser] failed to clear browser cache:', error);
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
+  });
+
+  ipcMain.handle(LocalWebServicesIpc.List, async (_event, options?: ListLocalWebServicesOptions) => {
+    const preferredPorts = sanitizeLocalWebServicePorts(options?.preferredPorts);
+    const ports = Array.from(new Set([...preferredPorts, ...LOCAL_WEB_SERVICE_PORTS])).sort((a, b) => a - b);
+    const results = await Promise.all(ports.map(port => probeLocalWebService(port)));
+    return results.filter((service): service is LocalWebService => service !== null);
   });
 
   // App update state, download & install
@@ -7450,6 +7573,7 @@ end tell'`, { timeout: 5000 });
         backgroundThrottling: false,
         devTools: isDev,
         spellcheck: false,
+        webviewTag: true,
         enableWebSQL: false,
         autoplayPolicy: 'document-user-activation-required',
         disableDialogs: true,
@@ -7492,6 +7616,26 @@ end tell'`, { timeout: 5000 });
       }
       shell.openExternal(url);
       return { action: 'deny' };
+    });
+
+    mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+      webPreferences.nodeIntegration = false;
+      webPreferences.nodeIntegrationInSubFrames = false;
+      webPreferences.contextIsolation = true;
+      webPreferences.sandbox = true;
+      webPreferences.webSecurity = true;
+      webPreferences.plugins = false;
+      webPreferences.devTools = isDev;
+      webPreferences.partition = ArtifactBrowserPartition.Default;
+      delete webPreferences.preload;
+
+      params.partition = ArtifactBrowserPartition.Default;
+      params.allowpopups = 'false';
+
+      const src = params.src ?? '';
+      if (src.startsWith('javascript:')) {
+        event.preventDefault();
+      }
     });
 
     // 监听子窗口创建事件（企微授权弹窗安全限制）

@@ -1,3 +1,5 @@
+import { ArtifactBrowserPartition } from '@shared/artifactPreview/constants';
+import type { LocalWebService } from '@shared/localWebServices/constants';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
@@ -696,6 +698,18 @@ interface BrowserTabContentProps {
   onAnnotationCaptured?: (payload: BrowserAnnotationPayload) => void;
 }
 
+type BrowserWebviewElement = HTMLElement & {
+  canGoBack?: () => boolean;
+  canGoForward?: () => boolean;
+  capturePage?: () => Promise<{ toDataURL: () => string; getSize?: () => { width: number; height: number } }>;
+  loadURL?: (url: string) => Promise<void>;
+  goBack?: () => void;
+  goForward?: () => void;
+  reload?: () => void;
+  stop?: () => void;
+  getURL?: () => string;
+};
+
 function normalizeBrowserUrl(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -717,10 +731,155 @@ const BrowserTabContent: React.FC<BrowserTabContentProps> = ({
   onCurrentUrlChange,
   onAnnotationCaptured: _onAnnotationCaptured,
 }) => {
+  const [webviewNode, setWebviewNode] = useState<BrowserWebviewElement | null>(null);
+  const [isWebviewReady, setIsWebviewReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
+  const [discoveredServices, setDiscoveredServices] = useState<LocalWebService[]>([]);
+  const [isLoadingLocalServices, setIsLoadingLocalServices] = useState(false);
+  const webviewNodeRef = useRef<BrowserWebviewElement | null>(null);
+  const lastRequestedUrlRef = useRef('');
   const localServices = useMemo(
     () => artifacts.filter((artifact) => artifact.type === ArtifactTypeValue.LocalService),
     [artifacts],
   );
+  const serviceCards = useMemo(() => {
+    const seen = new Set<string>();
+    const cards: Array<{ id: string; title: string; url: string; subtitle: string; online: boolean }> = [];
+    for (const artifact of localServices) {
+      const url = artifact.url || artifact.content;
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      cards.push({
+        id: artifact.id,
+        title: artifact.title,
+        url,
+        subtitle: url,
+        online: false,
+      });
+    }
+    for (const service of discoveredServices) {
+      if (seen.has(service.url)) continue;
+      seen.add(service.url);
+      cards.push({
+        id: service.id,
+        title: service.title,
+        url: service.url,
+        subtitle: `${service.host}:${service.port}`,
+        online: service.online,
+      });
+    }
+    return cards.slice(0, 10);
+  }, [discoveredServices, localServices]);
+
+  const handleWebviewRef = useCallback((node: BrowserWebviewElement | null) => {
+    if (webviewNodeRef.current === node) return;
+    webviewNodeRef.current = node;
+    lastRequestedUrlRef.current = '';
+    setIsWebviewReady(false);
+    setWebviewNode(node);
+  }, []);
+
+  const syncNavigationState = useCallback((node: BrowserWebviewElement | null) => {
+    if (!node) return;
+    setCanGoBack(node.canGoBack?.() ?? false);
+    setCanGoForward(node.canGoForward?.() ?? false);
+    const nextUrl = node.getURL?.();
+    if (nextUrl && nextUrl !== 'about:blank') {
+      onCurrentUrlChange(nextUrl);
+      onAddressChange(nextUrl);
+    }
+  }, [onAddressChange, onCurrentUrlChange]);
+
+  const loadLocalServices = useCallback(async () => {
+    setIsLoadingLocalServices(true);
+    try {
+      const preferredPorts = localServices
+        .map((artifact) => {
+          const rawUrl = artifact.url || artifact.content;
+          try {
+            const parsed = new URL(rawUrl);
+            const port = Number(parsed.port);
+            return Number.isInteger(port) ? port : null;
+          } catch {
+            return null;
+          }
+        })
+        .filter((port): port is number => typeof port === 'number');
+      const services = await window.electron?.artifact?.listLocalWebServices?.({ preferredPorts });
+      setDiscoveredServices(services ?? []);
+    } catch {
+      setDiscoveredServices([]);
+    } finally {
+      setIsLoadingLocalServices(false);
+    }
+  }, [localServices]);
+
+  useEffect(() => {
+    if (currentUrl) return;
+    void loadLocalServices();
+  }, [currentUrl, loadLocalServices]);
+
+  useEffect(() => {
+    if (!webviewNode) return;
+    const handleStartLoading = () => setIsLoading(true);
+    const handleStopLoading = () => {
+      setIsLoading(false);
+      syncNavigationState(webviewNode);
+    };
+    const handleNavigate = (event: Event) => {
+      const nextUrl = (event as Event & { url?: string }).url;
+      if (nextUrl && nextUrl !== 'about:blank') {
+        onCurrentUrlChange(nextUrl);
+        onAddressChange(nextUrl);
+      }
+      syncNavigationState(webviewNode);
+    };
+    const handleFailLoad = (event: Event) => {
+      const detail = event as Event & { errorCode?: number };
+      setIsLoading(false);
+      if (detail.errorCode === -3) return;
+      syncNavigationState(webviewNode);
+    };
+    const handleDomReady = () => {
+      setIsWebviewReady(true);
+      handleStopLoading();
+    };
+
+    webviewNode.addEventListener('did-start-loading', handleStartLoading);
+    webviewNode.addEventListener('did-stop-loading', handleStopLoading);
+    webviewNode.addEventListener('did-fail-load', handleFailLoad);
+    webviewNode.addEventListener('did-navigate', handleNavigate);
+    webviewNode.addEventListener('did-navigate-in-page', handleNavigate);
+    webviewNode.addEventListener('dom-ready', handleDomReady);
+    return () => {
+      webviewNode.removeEventListener('did-start-loading', handleStartLoading);
+      webviewNode.removeEventListener('did-stop-loading', handleStopLoading);
+      webviewNode.removeEventListener('did-fail-load', handleFailLoad);
+      webviewNode.removeEventListener('did-navigate', handleNavigate);
+      webviewNode.removeEventListener('did-navigate-in-page', handleNavigate);
+      webviewNode.removeEventListener('dom-ready', handleDomReady);
+    };
+  }, [onAddressChange, onCurrentUrlChange, syncNavigationState, webviewNode]);
+
+  useEffect(() => {
+    if (!currentUrl || !isWebviewReady || !webviewNode?.loadURL) return;
+    if (webviewNode.getURL?.() === currentUrl || lastRequestedUrlRef.current === currentUrl) return;
+    lastRequestedUrlRef.current = currentUrl;
+    setIsLoading(true);
+    try {
+      void webviewNode.loadURL(currentUrl).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('ERR_ABORTED') || message.includes('(-3)')) return;
+        lastRequestedUrlRef.current = '';
+        setIsLoading(false);
+      });
+    } catch {
+      lastRequestedUrlRef.current = '';
+      setIsLoading(false);
+    }
+  }, [currentUrl, isWebviewReady, webviewNode]);
 
   const handleNavigate = useCallback(() => {
     const nextUrl = normalizeBrowserUrl(address);
@@ -740,8 +899,8 @@ const BrowserTabContent: React.FC<BrowserTabContentProps> = ({
     void window.electron?.shell?.openExternal(currentUrl);
   }, [currentUrl]);
 
-  const handleSelectLocalService = useCallback((artifact: Artifact) => {
-    const url = artifact.url || artifact.content;
+  const handleSelectLocalService = useCallback((service: { url: string }) => {
+    const url = service.url;
     if (!url) return;
     onAddressChange(url);
     onCurrentUrlChange(url);
@@ -750,6 +909,33 @@ const BrowserTabContent: React.FC<BrowserTabContentProps> = ({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+        <button
+          type="button"
+          onClick={() => webviewNode?.goBack?.()}
+          disabled={!canGoBack}
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-secondary transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+          title={t('artifactBrowserBack')}
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          onClick={() => webviewNode?.goForward?.()}
+          disabled={!canGoForward}
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-secondary transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+          title={t('artifactBrowserForward')}
+        >
+          ›
+        </button>
+        <button
+          type="button"
+          onClick={() => (isLoading ? webviewNode?.stop?.() : webviewNode?.reload?.())}
+          disabled={!currentUrl}
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-secondary transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+          title={isLoading ? t('artifactBrowserStop') : t('artifactBrowserReload')}
+        >
+          {isLoading ? '×' : <RefreshIcon />}
+        </button>
         <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-surface px-2 focus-within:border-primary">
           <BrowserIcon />
           <input
@@ -779,29 +965,39 @@ const BrowserTabContent: React.FC<BrowserTabContentProps> = ({
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto px-6 py-10">
+      <div className="flex min-h-0 flex-1">
         {currentUrl ? (
-          <div className="w-full max-w-[520px] rounded-xl border border-border bg-surface p-5 text-center shadow-sm">
-            <div className="mb-2 text-sm font-medium text-foreground">{t('artifactBrowserTab')}</div>
-            <div className="mb-4 break-all text-xs text-muted">{currentUrl}</div>
-            <button
-              type="button"
-              onClick={handleOpenExternal}
-              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              {t('artifactBrowserOpenExternal')}
-            </button>
+          <div className="h-full w-full bg-white">
+            {React.createElement('webview', {
+              ref: handleWebviewRef,
+              src: 'about:blank',
+              partition: ArtifactBrowserPartition.Default,
+              className: 'h-full w-full bg-white',
+              allowpopups: 'false',
+            })}
           </div>
         ) : (
-          <div className="w-full max-w-[420px]">
-            <div className="mb-3 px-1 text-xs text-muted">{t('artifactBrowserLocalServices')}</div>
-            {localServices.length > 0 ? (
+          <div className="flex flex-1 items-center justify-center overflow-auto px-6 py-10">
+            <div className="w-full max-w-[420px]">
+            <div className="mb-3 flex items-center justify-between px-1">
+              <div className="text-xs text-muted">{t('artifactBrowserLocalServices')}</div>
+              <button
+                type="button"
+                onClick={loadLocalServices}
+                disabled={isLoadingLocalServices}
+                className="inline-flex h-6 w-6 items-center justify-center rounded text-muted transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                title={t('artifactBrowserLocalServicesRefresh')}
+              >
+                <RefreshIcon />
+              </button>
+            </div>
+            {serviceCards.length > 0 ? (
               <div className="space-y-2">
-                {localServices.map((artifact) => (
+                {serviceCards.map((service) => (
                   <button
-                    key={artifact.id}
+                    key={service.id}
                     type="button"
-                    onClick={() => handleSelectLocalService(artifact)}
+                    onClick={() => handleSelectLocalService(service)}
                     className="group flex w-full items-center gap-3 rounded-lg border border-border bg-background p-2 text-left transition-colors hover:border-primary/35 hover:bg-surface"
                   >
                     <div className="flex h-[52px] w-[84px] shrink-0 flex-col overflow-hidden rounded-md border border-border bg-surface shadow-sm">
@@ -811,21 +1007,23 @@ const BrowserTabContent: React.FC<BrowserTabContentProps> = ({
                         <span className="h-1.5 w-1.5 rounded-full bg-green-400/70" />
                       </div>
                       <div className="flex flex-1 items-center px-2 text-[8px] leading-tight text-muted">
-                        <span className="line-clamp-2">{artifact.title}</span>
+                        <span className="line-clamp-2">{service.title}</span>
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-foreground">{artifact.title}</div>
-                      <div className="truncate text-xs text-muted">{artifact.url || artifact.content}</div>
+                      <div className="truncate text-sm font-medium text-foreground">{service.title}</div>
+                      <div className="truncate text-xs text-muted">{service.subtitle}</div>
                     </div>
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${service.online ? 'bg-emerald-400' : 'bg-muted'}`} />
                   </button>
                 ))}
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted">
-                {t('artifactBrowserEmpty')}
+                {isLoadingLocalServices ? t('artifactBrowserLocalServicesLoading') : t('artifactBrowserEmpty')}
               </div>
             )}
+            </div>
           </div>
         )}
       </div>

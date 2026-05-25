@@ -1,5 +1,6 @@
 import type { AppUpdateCheckResult, AppUpdateInfo as RuntimeAppUpdateInfo, AppUpdateRuntimeState, AppUpdateSource } from '../../shared/appUpdate/constants';
 import type { NimQrLoginPollResult, NimQrLoginStartResult } from '../../shared/im/nimQrLogin';
+import type { ListLocalWebServicesOptions, LocalWebService } from '../../shared/localWebServices/constants';
 import type { PetCatalogEntry, PetConfig, PetImportRequest, PetImportResult, PetRuntimeState } from '../../shared/pet/types';
 import type { QingShuFilePublishResult } from '../../shared/qingshuFile/types';
 
@@ -756,6 +757,7 @@ interface IElectronAPI {
     selectFiles: (options?: { title?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<{ success: boolean; paths: string[] }>;
     saveInlineFile: (options: { dataBase64: string; fileName?: string; mimeType?: string; cwd?: string }) => Promise<{ success: boolean; path: string | null; error?: string }>;
     readFileAsDataUrl: (filePath: string) => Promise<{ success: boolean; dataUrl?: string; error?: string }>;
+    readTextFile: (filePath: string) => Promise<{ success: boolean; content?: string; size?: number; readBytes?: number; truncated?: boolean; error?: string }>;
   };
   speech: {
     getAvailability: () => Promise<SpeechAvailability>;
@@ -801,6 +803,7 @@ interface IElectronAPI {
   };
   clipboard: {
     writeImageFromFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+    writeImageFromDataUrl: (dataUrl: string) => Promise<{ success: boolean; error?: string }>;
   };
   artifact: {
     watchFile: (filePath: string) => Promise<void>;
@@ -811,6 +814,7 @@ interface IElectronAPI {
     destroyPreviewSession: (sessionId: string) => Promise<{ success: boolean }>;
     clearBrowserCookies: () => Promise<{ success: boolean; error?: string }>;
     clearBrowserCache: () => Promise<{ success: boolean; error?: string }>;
+    listLocalWebServices: (options?: ListLocalWebServicesOptions) => Promise<LocalWebService[]>;
   };
   autoLaunch: {
     get: () => Promise<{ enabled: boolean }>;
