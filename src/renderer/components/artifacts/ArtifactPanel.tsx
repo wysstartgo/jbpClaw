@@ -7,6 +7,7 @@ import {
   activateArtifactPreviewTab,
   addArtifact,
   ArtifactContentView,
+  ArtifactSpecialTab,
   closeArtifactPreviewTab,
   closePanel,
   MAX_PANEL_WIDTH,
@@ -24,7 +25,7 @@ import {
 } from '@/store/slices/artifactSlice';
 import type { ArtifactType } from '@/types/artifact';
 import type { Artifact } from '@/types/artifact';
-import { PREVIEWABLE_ARTIFACT_TYPES } from '@/types/artifact';
+import { ArtifactTypeValue, PREVIEWABLE_ARTIFACT_TYPES } from '@/types/artifact';
 
 import CopyIcon from '../icons/CopyIcon';
 import ArtifactRenderer from './ArtifactRenderer';
@@ -37,7 +38,7 @@ const BROWSER_OPENABLE_TYPES = new Set<ArtifactType>(['html', 'svg', 'mermaid', 
 
 const SYSTEM_OPENABLE_TYPES = new Set<ArtifactType>(['document']);
 
-const NON_CODE_TYPES = new Set<ArtifactType>(['document', 'image', 'text']);
+const NON_CODE_TYPES = new Set<ArtifactType>(['document', 'image', 'text', ArtifactTypeValue.LocalService]);
 
 const COPYABLE_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);
 
@@ -45,6 +46,7 @@ const PANEL_CLOSE_DRAG_THRESHOLD = 48;
 
 function isCopyableArtifact(artifact: Artifact): boolean {
   if (artifact.type === 'document') return false;
+  if (artifact.type === ArtifactTypeValue.LocalService) return false;
   if (artifact.type === 'image') {
     const filename = artifact.fileName || artifact.filePath || '';
     const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase();
@@ -97,15 +99,80 @@ const showArtifactToast = (message: string): void => {
 interface ArtifactPanelProps {
   sessionId?: string;
   artifacts: Artifact[];
+  activeSpecialTab?: ArtifactSpecialTab;
   minPanelWidth?: number;
   maxPanelWidth?: number;
+  browserAddress?: string;
+  browserUrl?: string;
+  onBrowserAddressChange?: (value: string) => void;
+  onBrowserUrlChange?: (value: string) => void;
+  onOpenFileListTab?: () => void;
+  onOpenBrowserTab?: () => void;
+  onBrowserAnnotationCaptured?: (payload: BrowserAnnotationPayload) => void;
+}
+
+export const BrowserAnnotationShape = {
+  Rectangle: 'rectangle',
+} as const;
+
+export type BrowserAnnotationShape = typeof BrowserAnnotationShape[keyof typeof BrowserAnnotationShape];
+
+export const BrowserAnnotationColor = {
+  Blue: 'blue',
+} as const;
+
+export type BrowserAnnotationColor = typeof BrowserAnnotationColor[keyof typeof BrowserAnnotationColor];
+
+export interface BrowserAnnotationElementInfo {
+  tagName: string;
+  text: string;
+  color: string;
+  fontFamily: string;
+  width: number;
+  height: number;
+}
+
+export interface BrowserAnnotationRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface BrowserAnnotationScreenshotInfo {
+  width: number;
+  height: number;
+  devicePixelRatio: number;
+}
+
+export interface BrowserAnnotationMarkInfo extends BrowserAnnotationRect {
+  shape: BrowserAnnotationShape;
+  color: BrowserAnnotationColor;
+}
+
+export interface BrowserAnnotationPayload {
+  comment: string;
+  imageDataUrl: string;
+  pageUrl: string;
+  pageTitle: string;
+  screenshot: BrowserAnnotationScreenshotInfo;
+  annotation: BrowserAnnotationMarkInfo;
+  element: BrowserAnnotationElementInfo;
 }
 
 const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
   sessionId,
   artifacts,
+  activeSpecialTab = ArtifactSpecialTab.FileList,
   minPanelWidth = MIN_PANEL_WIDTH,
   maxPanelWidth = MAX_PANEL_WIDTH,
+  browserAddress: controlledBrowserAddress,
+  browserUrl: controlledBrowserUrl,
+  onBrowserAddressChange,
+  onBrowserUrlChange,
+  onOpenFileListTab,
+  onOpenBrowserTab,
+  onBrowserAnnotationCaptured,
 }) => {
   const dispatch = useDispatch();
   const effectiveSessionId = useMemo(() => (
@@ -124,6 +191,8 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
   const panelWidth = useSelector(selectPanelWidth);
   const legacyActiveTab = useSelector(selectActiveTab);
   const [showFileList, setShowFileList] = useState(false);
+  const [localBrowserAddress, setLocalBrowserAddress] = useState('');
+  const [localBrowserUrl, setLocalBrowserUrl] = useState('');
   const fileListRef = useRef<HTMLDivElement>(null);
   const toggleBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -146,6 +215,18 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
     Math.max(MIN_PANEL_WIDTH, minPanelWidth),
   );
   const constrainedPanelWidth = Math.max(constrainedMinPanelWidth, Math.min(constrainedMaxPanelWidth, panelWidth));
+  const browserAddress = controlledBrowserAddress ?? localBrowserAddress;
+  const browserUrl = controlledBrowserUrl ?? localBrowserUrl;
+
+  const handleBrowserAddressChange = useCallback((value: string) => {
+    setLocalBrowserAddress(value);
+    onBrowserAddressChange?.(value);
+  }, [onBrowserAddressChange]);
+
+  const handleBrowserUrlChange = useCallback((value: string) => {
+    setLocalBrowserUrl(value);
+    onBrowserUrlChange?.(value);
+  }, [onBrowserUrlChange]);
 
   const handleResizeStart = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -239,14 +320,35 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
 
   const handleClose = useCallback(() => dispatch(closePanel()), [dispatch]);
   const handleSelectArtifact = useCallback((id: string) => {
+    const artifact = artifacts.find((item) => item.id === id);
+    if (artifact?.type === ArtifactTypeValue.LocalService) {
+      const url = artifact.url || artifact.content;
+      if (url) {
+        handleBrowserAddressChange(url);
+        handleBrowserUrlChange(url);
+        onOpenBrowserTab?.();
+      }
+      setShowFileList(false);
+      return;
+    }
     if (effectiveSessionId) {
       dispatch(openArtifactPreviewTab({ sessionId: effectiveSessionId, artifactId: id }));
       setShowFileList(false);
+      onOpenFileListTab?.();
       return;
     }
     dispatch(selectArtifact(id));
     setShowFileList(false);
-  }, [dispatch, effectiveSessionId]);
+    onOpenFileListTab?.();
+  }, [
+    artifacts,
+    dispatch,
+    effectiveSessionId,
+    handleBrowserAddressChange,
+    handleBrowserUrlChange,
+    onOpenBrowserTab,
+    onOpenFileListTab,
+  ]);
 
   const handleActivatePreviewTab = useCallback((tabId: string) => {
     if (!effectiveSessionId) return;
@@ -551,6 +653,15 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
               )}
             </div>
           </div>
+        ) : activeSpecialTab === ArtifactSpecialTab.Browser ? (
+          <BrowserTabContent
+            address={browserAddress}
+            currentUrl={browserUrl}
+            artifacts={previewableArtifacts}
+            onAddressChange={handleBrowserAddressChange}
+            onCurrentUrlChange={handleBrowserUrlChange}
+            onAnnotationCaptured={onBrowserAnnotationCaptured}
+          />
         ) : (
           /* No artifact selected: show full-width file list */
           <div className="flex-1 flex flex-col h-full overflow-hidden">
@@ -573,6 +684,152 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
         )}
       </aside>
     </>
+  );
+};
+
+interface BrowserTabContentProps {
+  address: string;
+  currentUrl: string;
+  artifacts: Artifact[];
+  onAddressChange: (value: string) => void;
+  onCurrentUrlChange: (value: string) => void;
+  onAnnotationCaptured?: (payload: BrowserAnnotationPayload) => void;
+}
+
+function normalizeBrowserUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^(https?|file):\/\//i.test(trimmed)) return trimmed;
+  if (/^(localhost|127\.0\.0\.1|\[::1\]|::1)(:\d+)?(\/.*)?$/i.test(trimmed)) {
+    return `http://${trimmed}`;
+  }
+  if (/^[\w.-]+\.[a-z]{2,}(:\d+)?(\/.*)?$/i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
+}
+
+const BrowserTabContent: React.FC<BrowserTabContentProps> = ({
+  address,
+  currentUrl,
+  artifacts,
+  onAddressChange,
+  onCurrentUrlChange,
+  onAnnotationCaptured: _onAnnotationCaptured,
+}) => {
+  const localServices = useMemo(
+    () => artifacts.filter((artifact) => artifact.type === ArtifactTypeValue.LocalService),
+    [artifacts],
+  );
+
+  const handleNavigate = useCallback(() => {
+    const nextUrl = normalizeBrowserUrl(address);
+    if (!nextUrl) return;
+    onAddressChange(nextUrl);
+    onCurrentUrlChange(nextUrl);
+  }, [address, onAddressChange, onCurrentUrlChange]);
+
+  const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      handleNavigate();
+    }
+  }, [handleNavigate]);
+
+  const handleOpenExternal = useCallback(() => {
+    if (!currentUrl) return;
+    void window.electron?.shell?.openExternal(currentUrl);
+  }, [currentUrl]);
+
+  const handleSelectLocalService = useCallback((artifact: Artifact) => {
+    const url = artifact.url || artifact.content;
+    if (!url) return;
+    onAddressChange(url);
+    onCurrentUrlChange(url);
+  }, [onAddressChange, onCurrentUrlChange]);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-surface px-2 focus-within:border-primary">
+          <BrowserIcon />
+          <input
+            type="text"
+            value={address}
+            onChange={(event) => onAddressChange(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={t('artifactBrowserUrlPlaceholder')}
+            className="h-7 min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={handleNavigate}
+          className="h-7 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          {t('artifactOpen')}
+        </button>
+        <button
+          type="button"
+          onClick={handleOpenExternal}
+          disabled={!currentUrl}
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-secondary transition-colors hover:bg-surface hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+          title={t('artifactBrowserOpenExternal')}
+        >
+          <OpenExternalIcon />
+        </button>
+      </div>
+
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto px-6 py-10">
+        {currentUrl ? (
+          <div className="w-full max-w-[520px] rounded-xl border border-border bg-surface p-5 text-center shadow-sm">
+            <div className="mb-2 text-sm font-medium text-foreground">{t('artifactBrowserTab')}</div>
+            <div className="mb-4 break-all text-xs text-muted">{currentUrl}</div>
+            <button
+              type="button"
+              onClick={handleOpenExternal}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              {t('artifactBrowserOpenExternal')}
+            </button>
+          </div>
+        ) : (
+          <div className="w-full max-w-[420px]">
+            <div className="mb-3 px-1 text-xs text-muted">{t('artifactBrowserLocalServices')}</div>
+            {localServices.length > 0 ? (
+              <div className="space-y-2">
+                {localServices.map((artifact) => (
+                  <button
+                    key={artifact.id}
+                    type="button"
+                    onClick={() => handleSelectLocalService(artifact)}
+                    className="group flex w-full items-center gap-3 rounded-lg border border-border bg-background p-2 text-left transition-colors hover:border-primary/35 hover:bg-surface"
+                  >
+                    <div className="flex h-[52px] w-[84px] shrink-0 flex-col overflow-hidden rounded-md border border-border bg-surface shadow-sm">
+                      <div className="flex h-3 items-center gap-1 border-b border-border px-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-400/70" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-yellow-400/70" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-green-400/70" />
+                      </div>
+                      <div className="flex flex-1 items-center px-2 text-[8px] leading-tight text-muted">
+                        <span className="line-clamp-2">{artifact.title}</span>
+                      </div>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-foreground">{artifact.title}</div>
+                      <div className="truncate text-xs text-muted">{artifact.url || artifact.content}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted">
+                {t('artifactBrowserEmpty')}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
