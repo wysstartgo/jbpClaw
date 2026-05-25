@@ -33,6 +33,7 @@ import type { LocalizedQuickAction } from '../../types/quickAction';
 import { Skill } from '../../types/skill';
 import { resolveOpenClawModelRef, toOpenClawModelRef } from '../../utils/openclawModelRef';
 import { getCompactFolderName } from '../../utils/path';
+import type { BrowserAnnotationPayload } from '../artifacts/ArtifactPanel';
 import PaperClipIcon from '../icons/PaperClipIcon';
 import PencilIcon from '../icons/PencilIcon';
 import TrashIcon from '../icons/TrashIcon';
@@ -214,6 +215,8 @@ export interface CoworkPromptInputRef {
   setValue: (value: string) => void;
   /** 设置图片附件 */
   setImageAttachments: (attachments: CoworkImageAttachment[]) => void;
+  /** 插入浏览器注释截图和注释文本 */
+  insertBrowserAnnotation: (annotation: BrowserAnnotationPayload) => void;
   /** 聚焦输入框 */
   focus: () => void;
 }
@@ -298,6 +301,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     const activeWakeOverlayRef = useRef(false);
     const modelPatchRequestIdRef = useRef(0);
     const promptHistoryDraftRef = useRef('');
+    const modelSupportsImageRef = useRef(false);
 
     const isLarge = size === 'large';
     const minHeight = isLarge ? 44 : 24;
@@ -338,6 +342,57 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
         draftKey,
         attachments: nextAttachments,
       }));
+    },
+    insertBrowserAnnotation: (annotation: BrowserAnnotationPayload) => {
+      const timestamp = Date.now();
+      const imageName = `${i18nService.t('artifactBrowserAnnotationImageName')}-${timestamp}.png`;
+      const annotationArea = [
+        `shape=${annotation.annotation.shape}`,
+        `color=${annotation.annotation.color}`,
+        `x=${annotation.annotation.x}`,
+        `y=${annotation.annotation.y}`,
+        `width=${annotation.annotation.width}`,
+        `height=${annotation.annotation.height}`,
+      ].join(', ');
+      const pageLabel = i18nService.t('artifactBrowserAnnotationPromptPage');
+      const elementLabel = i18nService.t('artifactBrowserAnnotationPromptElement');
+      const elementSummary = [
+        annotation.element.tagName,
+        annotation.element.text ? `"${annotation.element.text}"` : '',
+        `${annotation.element.width}x${annotation.element.height}`,
+      ].filter(Boolean).join(', ');
+      const annotationPrompt = [
+        i18nService.t('artifactBrowserAnnotationPromptTitle'),
+        i18nService.t('artifactBrowserAnnotationPromptTarget'),
+        '',
+        `${i18nService.t('artifactBrowserAnnotationPromptScreenshot')}: ${annotation.screenshot.width} x ${annotation.screenshot.height}`,
+        `${i18nService.t('artifactBrowserAnnotationPromptArea')}: ${annotationArea}`,
+        annotation.pageTitle || annotation.pageUrl ? `${pageLabel}: ${[annotation.pageTitle, annotation.pageUrl].filter(Boolean).join(' - ')}` : '',
+        elementSummary ? `${elementLabel}: ${elementSummary}` : '',
+        '',
+        `${i18nService.t('artifactBrowserAnnotationPromptComment')}:`,
+        annotation.comment.trim(),
+      ].filter(line => line !== '').join('\n');
+      const nextValue = valueRef.current.trim()
+        ? `${valueRef.current.trim()}\n\n${annotationPrompt}`
+        : annotationPrompt;
+      setValue(nextValue);
+      speechBaseValueRef.current = nextValue;
+      dispatch(setDraftPrompt({ sessionId: draftKey, draft: nextValue }));
+      dispatch(addDraftAttachment({
+        draftKey,
+        attachment: {
+          path: `inline:${imageName}:${timestamp}`,
+          name: imageName,
+          isImage: true,
+          mimeType: 'image/png',
+          dataUrl: annotation.imageDataUrl,
+        },
+      }));
+      setImageVisionHint(!modelSupportsImageRef.current);
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
     },
     focus: () => {
       textareaRef.current?.focus();
@@ -386,6 +441,8 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     agentSelectedModel,
     globalSelectedModel,
   });
+  const modelSupportsImage = !!effectiveSelectedModel?.supportsImage;
+  modelSupportsImageRef.current = modelSupportsImage;
 
   const getSpeechVoiceCommandConfig = useCallback(() => ({
     ...DEFAULT_SPEECH_INPUT_CONFIG,
@@ -828,6 +885,17 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     // 图片附件只传轻量文件引用；main 进程会在运行时边界读取并转成 base64。
     const imageAtts: CoworkImageAttachment[] = [];
     for (const attachment of attachments) {
+      if (attachment.isImage && attachment.dataUrl) {
+        const match = /^data:([^;]+);base64,(.*)$/.exec(attachment.dataUrl);
+        if (match) {
+          imageAtts.push({
+            name: attachment.name,
+            mimeType: match[1] || attachment.mimeType || 'image/png',
+            base64Data: match[2],
+          });
+        }
+        continue;
+      }
       if (attachment.isImage && attachment.path && !attachment.path.startsWith('inline:')) {
         imageAtts.push({
           name: attachment.name,
@@ -841,7 +909,9 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     // 图片已经通过 chat.send attachments 传递，避免再把本地路径写进 prompt。
     // 否则 OpenClaw 会把路径当作 Native-image 处理，路径校验失败时可能连 base64 图片也丢弃。
     const attachmentLines = attachments
-      .filter((a) => !a.path.startsWith('inline:') && !(a.isImage && imageAtts.some((img) => 'path' in img && img.path === a.path)))
+      .filter((a) => !a.path.startsWith('inline:') && !(a.isImage && (
+        a.dataUrl || imageAtts.some((img) => 'path' in img && img.path === a.path)
+      )))
       .map((attachment) => `${INPUT_FILE_LABEL}: ${attachment.path}`)
       .join('\n');
     const finalPrompt = trimmedValue
@@ -1081,7 +1151,6 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     }
   };
 
-  const modelSupportsImage = !!effectiveSelectedModel?.supportsImage;
   const builtinSlashCommands = getBuiltinPromptSlashCommands({
     newSession: i18nService.t('coworkSlashNewSession'),
     newSessionDescription: i18nService.t('coworkSlashNewSessionDesc'),

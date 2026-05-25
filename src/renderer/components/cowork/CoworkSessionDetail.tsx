@@ -2650,7 +2650,8 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
     dispatch(openArtifactPreviewTab({ sessionId, artifactId: artifact.id }));
   }, [dispatch, handleOpenArtifactBrowser, sessionId]);
 
-  const handleBrowserAnnotationCaptured = useCallback((_payload: BrowserAnnotationPayload) => {
+  const handleBrowserAnnotationCaptured = useCallback((payload: BrowserAnnotationPayload) => {
+    promptInputRef.current?.insertBrowserAnnotation(payload);
     window.dispatchEvent(new CustomEvent(AppCustomEvent.ShowToast, {
       detail: i18nService.t('artifactBrowserAnnotationCaptured'),
     }));
