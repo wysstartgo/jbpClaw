@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 
 import type { SkillSecurityReport as SkillSecurityReportData } from '../../../main/libs/skillSecurity/skillSecurityTypes';
+import { ENABLE_OPENCLAW_SKILL_SYNC } from '../../../shared/featureFlags';
 import { i18nService } from '../../services/i18n';
 import { compareVersions,resolveLocalizedText, skillService } from '../../services/skill';
 import { RootState } from '../../store';
@@ -142,6 +143,7 @@ const SkillsManager: React.FC<SkillsManagerProps> = ({ readOnly, onCreateByChat 
   }, []);
 
   useEffect(() => {
+    if (!ENABLE_OPENCLAW_SKILL_SYNC) return;
     if (sessionStorage.getItem('openClawSkillSyncDetected')) return;
     const detect = async () => {
       const result = await window.electron?.skills.detectFromOpenClaw();
@@ -671,6 +673,7 @@ const SkillsManager: React.FC<SkillsManagerProps> = ({ readOnly, onCreateByChat 
                 <PencilSquareIcon className="h-4 w-4 text-secondary" />
                 <span>{i18nService.t('createSkillByChat')}</span>
               </button>
+              {ENABLE_OPENCLAW_SKILL_SYNC && (
               <button
                 type="button"
                 onClick={handleManualOpenClawSync}
@@ -679,6 +682,7 @@ const SkillsManager: React.FC<SkillsManagerProps> = ({ readOnly, onCreateByChat 
                 <ArrowPathIcon className="h-4 w-4 text-secondary" />
                 <span>{i18nService.t('syncSkillsFromOpenClaw')}</span>
               </button>
+              )}
             </div>
           )}
         </div>
