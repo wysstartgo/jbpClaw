@@ -3803,8 +3803,14 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
   }
 
   private handleGatewayEvent(event: GatewayEventFrame): void {
+    // Any event from the gateway proves the connection is alive.
+    // Previously only 'tick' updated this timestamp, but during heavy exec
+    // streaming the gateway's tick timer gets starved by I/O while other
+    // events (agent, tool updates) keep flowing — causing false-positive
+    // disconnect from the TickWatchdog.
+    this.lastTickTimestamp = Date.now();
+
     if (event.event === 'tick') {
-      this.lastTickTimestamp = Date.now();
       return;
     }
 
