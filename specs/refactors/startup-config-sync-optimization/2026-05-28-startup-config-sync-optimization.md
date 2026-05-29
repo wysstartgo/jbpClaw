@@ -143,11 +143,60 @@ if (getAuthTokens()) {
 |------|------|
 | `src/main/libs/openclawConfigSync.ts` | Fix 1: 插件配置固定化（2 行） |
 | `src/main/main.ts` | Fix 2: 启动预热代码块 |
+| `src/main/main.ts` | Fix 3: 预热提前 + agent model 迁移去重 |
+| `src/main/libs/resolveStdioCommand.ts` | Fix 4: MCP resolve 去除 API config 依赖 |
 
-## 6. 验证计划
+## 6. 后续改动（2026-05-29）
+
+### 6.1 Fix 3：预热提前至 agent model 迁移之前 + 去重
+
+**问题**：`resolveDefaultAgentModelRef()` 和 `migrateAgentModelRefs()` 在预热代码块之前执行，此时 `serverModelMetadataCache` 为空，`resolveMatchedProvider` 无法匹配 `lobsterai-server` provider 的模型。另外 `migrateAgentModelRefs()` 内部重复调用了 `resolveDefaultAgentModelRef()`。
+
+**改动**：
+- 将启动顺序调整为：proxy → pre-warm → agent model migration → syncConfig
+- `migrateAgentModelRefs()` 接受可选参数 `precomputedDefaultModelRef`，避免重复计算
+
+文件：`src/main/main.ts`
+
+### 6.2 Fix 4：resolveStdioCommand 去除对 getEnhancedEnv 的依赖
+
+**问题**：每次 `syncOpenClawConfig` 时，`getResolvedMcpServers()` 对每个 stdio MCP server 调用 `resolveStdioCommand()`，其中 `getEnhancedEnv()` 触发完整的 API config 解析（`resolveCurrentApiConfig → resolveMatchedProvider → tryLobsteraiServerFallback`）。3 次 sync × 3 个 MCP servers = 9 次多余的 provider 解析。
+
+**分析**：`resolveStdioCommand` 调用 `getEnhancedEnv()` 只使用了返回值中的 `LOBSTERAI_NPM_BIN_DIR`，该值仅依赖 `process.resourcesPath`，是打包时的固定路径，不需要 API config、proxy 解析等开销。
+
+**改动**：引入轻量函数 `getPackagedNpmBinDir()` 替代 `getEnhancedEnv()`：
+
+```typescript
+function getPackagedNpmBinDir(): string | undefined {
+  if (!app.isPackaged) return undefined;
+  const npmBinDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'npm', 'bin');
+  return fs.existsSync(npmBinDir) ? npmBinDir : undefined;
+}
+```
+
+文件：`src/main/libs/resolveStdioCommand.ts`
+
+### 6.3 效果
+
+启动期间 `tryLobsteraiServerFallback` 调用次数：
+
+| 场景 | 优化前 | 优化后 |
+|------|--------|--------|
+| `resolveDefaultAgentModelRef` | 1 | 1（但 cache 已热，正常 match） |
+| `migrateAgentModelRefs` | 1（重复） | 0（复用结果） |
+| `syncOpenClawConfig('startup')` 内 MCP resolve | 3 | 0 |
+| `syncOpenClawConfig('im-gateway-start-batch')` 内 MCP resolve | 3 | 0 |
+| `syncOpenClawConfig('ensureRunning:mcpConfig')` 内 MCP resolve | 3 | 0 |
+| sync 本身的 `resolveRawApiConfig` | 3 | 3（正常路径） |
+| 渲染进程 `checkApiConfig` | 2 | 2（正常路径） |
+| **合计** | ~15 | ~6 |
+
+## 7. 验证计划
 
 1. **正常启动**：观察 `main-*.log` 中 `syncOpenClawConfig START`，启动阶段不应出现 `media-entitlement-changed` 或 `server-models-updated`
 2. **Gateway 日志**：`gateway-*.log` 中 plugin registration 次数从 4 降至 1-2
 3. **网络异常回退**：断网启动时行为与当前一致（预热超时后正常启动）
 4. **未登录用户**：无 auth token 时跳过预热，行为不变
 5. **登出/登入**：entitlement 变化仍正确同步（不影响运行时 sync 逻辑）
+6. **MCP server 正常启动**：3 个 stdio MCP server（Context7、Tavily、Playwright）仍正确解析 npx 命令
+7. **Fallback 日志减少**：启动期间 `lobsterai-server fallback activated` 日志从 ~15 次降至 ~6 次

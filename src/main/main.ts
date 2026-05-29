@@ -723,8 +723,8 @@ const RENAMED_PROVIDER_IDS: Record<string, string> = {
   'github-copilot': 'lobsterai-copilot',
 };
 
-const migrateAgentModelRefs = (): number => {
-  const defaultModelRef = resolveDefaultAgentModelRef();
+const migrateAgentModelRefs = (precomputedDefaultModelRef?: string): number => {
+  const defaultModelRef = precomputedDefaultModelRef ?? resolveDefaultAgentModelRef();
   if (!defaultModelRef) return 0;
 
   const availableProviders = buildAvailableOpenClawProviders();
@@ -9060,28 +9060,6 @@ end tell'`,
     bindCoworkRuntimeForwarder();
     bindOpenClawStatusForwarder();
 
-    const defaultAgentModelRef = resolveDefaultAgentModelRef();
-    const backfilledAgentModels = getCoworkStore().backfillEmptyAgentModels(defaultAgentModelRef);
-    const qualifiedAgentModels = migrateAgentModelRefs();
-    if (backfilledAgentModels > 0 || qualifiedAgentModels > 0) {
-      console.log(
-        `[Main] migrated agent model bindings: backfilled=${backfilledAgentModels}, qualified=${qualifiedAgentModels}`,
-      );
-    }
-
-    // One-time migration: move main agent workspace files from the user's
-    // working directory to the fixed {STATE_DIR}/workspace-main/ path.
-    try {
-      const engineManager = getOpenClawEngineManager();
-      migrateMainAgentWorkspace(
-        engineManager.getStateDir(),
-        getCoworkStore().getConfig().workingDirectory,
-        getStore(),
-      );
-    } catch (err) {
-      console.warn('[OpenClaw] main agent workspace migration failed (non-fatal):', err);
-    }
-
     // Start proxy BEFORE config sync so proxy-dependent providers (e.g. copilot)
     // get the correct baseURL on the first write, avoiding a mid-startup config
     // overwrite that triggers unnecessary gateway hot-reload.
@@ -9096,10 +9074,12 @@ end tell'`,
     });
     profiler.measure('coworkOpenAICompatProxy');
 
-    // ── Pre-warm quota & model caches so startup sync generates correct config ──
+    // ── Pre-warm quota & model caches so provider resolution and config sync
+    // see real server data instead of empty defaults ──
     // Without this, cachedSubscriptionStatus starts as 'free' and serverModelMetadataCache
-    // is empty. When the renderer later fetches real values, the "change" triggers redundant
-    // syncOpenClawConfig calls while the gateway is still starting up.
+    // is empty. resolveMatchedProvider then falls back to tryLobsteraiServerFallback
+    // for every call, and the renderer's subsequent auth responses trigger redundant
+    // syncOpenClawConfig calls during the gateway startup window.
     if (getAuthTokens()) {
       profiler.mark('startupCacheWarmup');
       const serverBaseUrl = getServerApiBaseUrl();
@@ -9143,6 +9123,30 @@ end tell'`,
         })(),
       ]);
       profiler.measure('startupCacheWarmup');
+    }
+
+    // Agent model migration — runs after cache warmup so resolveMatchedProvider
+    // can match lobsterai-server models without falling back.
+    const defaultAgentModelRef = resolveDefaultAgentModelRef();
+    const backfilledAgentModels = getCoworkStore().backfillEmptyAgentModels(defaultAgentModelRef);
+    const qualifiedAgentModels = migrateAgentModelRefs(defaultAgentModelRef);
+    if (backfilledAgentModels > 0 || qualifiedAgentModels > 0) {
+      console.log(
+        `[Main] migrated agent model bindings: backfilled=${backfilledAgentModels}, qualified=${qualifiedAgentModels}`,
+      );
+    }
+
+    // One-time migration: move main agent workspace files from the user's
+    // working directory to the fixed {STATE_DIR}/workspace-main/ path.
+    try {
+      const engineManager = getOpenClawEngineManager();
+      migrateMainAgentWorkspace(
+        engineManager.getStateDir(),
+        getCoworkStore().getConfig().workingDirectory,
+        getStore(),
+      );
+    } catch (err) {
+      console.warn('[OpenClaw] main agent workspace migration failed (non-fatal):', err);
     }
 
     profiler.mark('syncOpenClawConfig');
