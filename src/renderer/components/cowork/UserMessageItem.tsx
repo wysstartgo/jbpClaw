@@ -130,10 +130,10 @@ const UserMessageKitBadges: React.FC<{ kitReferences: KitReference[] }> = ({ kit
         return (
           <div
             key={kitReference.uri || kitReference.id}
-            className="inline-flex h-7 max-w-[240px] items-center gap-1.5 rounded-md bg-surface-raised px-2.5 text-[13px] font-normal leading-none text-foreground ring-1 ring-border/60"
+            className="inline-flex h-7 max-w-[240px] items-center gap-1.5 rounded-md bg-primary-muted px-2.5 text-[13px] font-normal leading-none text-foreground"
             title={kitReference.uri}
           >
-            <SidebarKitsIcon className="h-3.5 w-3.5 shrink-0 text-secondary" />
+            <SidebarKitsIcon className="h-3.5 w-3.5 shrink-0 text-primary" />
             <span className="min-w-0 truncate">
               {displayName}
             </span>

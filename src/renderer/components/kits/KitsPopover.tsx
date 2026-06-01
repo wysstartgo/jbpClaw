@@ -9,7 +9,9 @@ import { RootState } from '../../store';
 import { setInstalledKits, setMarketplaceKits } from '../../store/slices/kitSlice';
 import type { MarketplaceKit } from '../../types/kit';
 import SearchIcon from '../icons/SearchIcon';
-import SidebarKitsIcon from '../icons/SidebarKitsIcon';
+import KitIcon from './KitIcon';
+
+const MIN_SEARCHABLE_KIT_COUNT = 3;
 
 interface KitsPopoverProps {
   isOpen: boolean;
@@ -40,10 +42,11 @@ const KitsPopover: React.FC<KitsPopoverProps> = ({
   const installedKitList: MarketplaceKit[] = Object.keys(installedKits)
     .map(kitId => marketplaceKits.find(mk => mk.id === kitId))
     .filter((k): k is MarketplaceKit => k !== undefined);
+  const shouldShowSearch = installedKitList.length >= MIN_SEARCHABLE_KIT_COUNT;
 
   // Filter by search query
   const filteredKits = installedKitList.filter(kit => {
-    if (!searchQuery.trim()) return true;
+    if (!shouldShowSearch || !searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     const name = resolveLocalizedText(kit.name).toLowerCase();
     const desc = resolveLocalizedText(kit.description).toLowerCase();
@@ -81,14 +84,20 @@ const KitsPopover: React.FC<KitsPopoverProps> = ({
         const availableHeight = anchorRect.top - 120 - 60;
         setMaxListHeight(Math.max(120, Math.min(300, availableHeight)));
       }
-      if (searchInputRef.current) {
+      if (shouldShowSearch && searchInputRef.current) {
         setTimeout(() => searchInputRef.current?.focus(), 0);
       }
     }
     if (!isOpen) {
       setSearchQuery('');
     }
-  }, [isOpen, anchorRef]);
+  }, [isOpen, anchorRef, shouldShowSearch]);
+
+  useEffect(() => {
+    if (!shouldShowSearch && searchQuery) {
+      setSearchQuery('');
+    }
+  }, [searchQuery, shouldShowSearch]);
 
   // Handle click outside
   useEffect(() => {
@@ -135,20 +144,21 @@ const KitsPopover: React.FC<KitsPopoverProps> = ({
       className="absolute bottom-full left-0 z-50 mb-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-surface shadow-popover"
       role="menu"
     >
-      {/* Search input */}
-      <div className="px-3 py-2 border-b border-border">
-        <div className="relative">
-          <SearchIcon className="absolute left-1.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-secondary" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            placeholder={i18nService.t('searchKits')}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-md bg-transparent py-1.5 pl-8 pr-2 text-[13px] leading-5 text-foreground placeholder-secondary focus:bg-surface-raised/70 focus:outline-none"
-          />
+      {shouldShowSearch && (
+        <div className="px-3 py-2 border-b border-border">
+          <div className="relative">
+            <SearchIcon className="absolute left-1.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-secondary" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder={i18nService.t('searchKits')}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-md bg-transparent py-1.5 pl-8 pr-2 text-[13px] leading-5 text-foreground placeholder-secondary focus:bg-surface-raised/70 focus:outline-none"
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Kits list */}
       <div className="overflow-y-auto px-2 py-1.5" style={{ maxHeight: `${maxListHeight}px` }}>
@@ -156,9 +166,13 @@ const KitsPopover: React.FC<KitsPopoverProps> = ({
           <div className="px-3 py-5 text-center text-[13px] text-secondary">
             {i18nService.t('kitLoading')}
           </div>
-        ) : filteredKits.length === 0 ? (
+        ) : installedKitList.length === 0 ? (
           <div className="px-3 py-5 text-center text-[13px] text-secondary">
             {i18nService.t('noKitsInstalled')}
+          </div>
+        ) : filteredKits.length === 0 ? (
+          <div className="px-3 py-5 text-center text-[13px] text-secondary">
+            {i18nService.t('kitSearchNoResults')}
           </div>
         ) : (
           filteredKits.map((kit) => {
@@ -173,12 +187,8 @@ const KitsPopover: React.FC<KitsPopoverProps> = ({
                     : 'hover:bg-surface-raised'
                 }`}
               >
-                <div className={`mt-[3px] flex h-5 w-5 flex-shrink-0 items-center justify-center ${
-                  isActive
-                    ? 'text-foreground'
-                    : 'text-secondary'
-                }`}>
-                  <SidebarKitsIcon className="h-[18px] w-[18px]" />
+                <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
+                  <KitIcon icon={kit.icon} className="h-8 w-8" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex min-w-0 items-center gap-1.5">

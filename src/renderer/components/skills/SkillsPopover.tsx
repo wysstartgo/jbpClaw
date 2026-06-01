@@ -144,6 +144,12 @@ const SkillsPopover: React.FC<SkillsPopoverProps> = ({
   const listClassName = asSubmenu
     ? 'overflow-y-auto px-2 py-1.5'
     : 'overflow-y-auto py-1';
+  const listStyle: React.CSSProperties = asSubmenu
+    ? { height: `${maxListHeight}px` }
+    : { maxHeight: `${maxListHeight}px` };
+  const emptyStateClassName = asSubmenu
+    ? 'flex h-full items-center justify-center px-3 py-5 text-center text-[13px] text-secondary'
+    : 'px-4 py-6 text-center text-sm text-secondary';
 
   return (
     <div
@@ -171,9 +177,9 @@ const SkillsPopover: React.FC<SkillsPopoverProps> = ({
       </div>
 
       {/* Skills list */}
-      <div className={listClassName} style={{ maxHeight: `${maxListHeight}px` }}>
+      <div className={listClassName} style={listStyle}>
         {filteredSkills.length === 0 ? (
-          <div className={asSubmenu ? 'px-3 py-5 text-center text-[13px] text-secondary' : 'px-4 py-6 text-center text-sm text-secondary'}>
+          <div className={emptyStateClassName}>
             {i18nService.t('noSkillsAvailable')}
           </div>
         ) : (
