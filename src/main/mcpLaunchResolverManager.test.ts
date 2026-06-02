@@ -1,5 +1,15 @@
 import path from 'path';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
+
+vi.mock('electron', () => ({
+  app: {
+    getAppPath: () => process.cwd(),
+    getName: () => 'LobsterAI',
+    getPath: () => process.cwd(),
+    isPackaged: false,
+  },
+  session: { defaultSession: { resolveProxy: vi.fn() } },
+}));
 
 import { McpLaunchResolutionStatus, McpLaunchResolverKind } from './mcpLaunchResolution';
 import {
