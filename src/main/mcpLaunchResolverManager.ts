@@ -17,6 +17,7 @@ import { McpStore } from './mcpStore';
 
 const INSTALL_TIMEOUT_MS = 120_000;
 const NPM_VIEW_TIMEOUT_MS = 20_000;
+const STALE_INSTALLING_MS = INSTALL_TIMEOUT_MS + 30_000;
 
 type RunResult = {
   code: number | null;
@@ -121,11 +122,21 @@ function parseNpxArgs(args: string[]): ParsedNpxSpec | null {
   return null;
 }
 
-function packageRootFromInstallDir(installDir: string, packageName: string): string {
+export function packageRootFromInstallDir(installDir: string, packageName: string): string {
   const parts = packageName.startsWith('@')
-    ? packageName.slice(1).split('/')
+    ? packageName.split('/')
     : [packageName];
   return path.join(installDir, 'node_modules', ...parts);
+}
+
+export function isStaleInstallingResolution(
+  resolution: McpLaunchResolution | undefined,
+  now = Date.now(),
+): boolean {
+  return (
+    resolution?.status === McpLaunchResolutionStatus.Installing
+    && now - resolution.updatedAt > STALE_INSTALLING_MS
+  );
 }
 
 function resolvePackageBin(packageRoot: string, packageName: string): string {
@@ -253,6 +264,17 @@ export class McpLaunchResolverManager {
     if (resolution.status !== McpLaunchResolutionStatus.Ready) return undefined;
     if (!resolution.command || !resolution.args?.length) return undefined;
     return resolution;
+  }
+
+  shouldStartResolution(server: McpServerRecord, status: McpLaunchResolutionStatus): boolean {
+    if (status === McpLaunchResolutionStatus.Failed) return false;
+    if (status !== McpLaunchResolutionStatus.Installing) return true;
+    if (this.inFlight.has(server.id)) return false;
+
+    const resolution = this.store.getLaunchResolution(server.id);
+    if (!isStaleInstallingResolution(resolution)) return false;
+    log('WARN', `retrying stale MCP launch installation for server "${server.name}"`);
+    return true;
   }
 
   ensureResolved(serverId: string, reason: string): void {

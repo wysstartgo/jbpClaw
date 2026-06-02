@@ -1975,10 +1975,7 @@ const getResolvedMcpServers = async (): Promise<ResolvedMcpServer[]> => {
             console.log(
               `[MCP] skipping stdio server "${server.name}" while managed launch resolution is ${status}`,
             );
-            if (
-              status !== McpLaunchResolutionStatus.Installing
-              && status !== McpLaunchResolutionStatus.Failed
-            ) {
+            if (launchResolver.shouldStartResolution(server, status)) {
               ensureMcpLaunchResolution(server.id, `config-sync:${status}`);
             }
             continue;
