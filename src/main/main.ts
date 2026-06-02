@@ -52,6 +52,12 @@ import {
   CoworkForkMode,
   CoworkIpcChannel,
 } from '../shared/cowork/constants';
+import {
+  buildCoworkImageAttachmentPreviews,
+  type CoworkImageAttachmentPreview,
+  formatCoworkImageAttachmentLimit,
+  validateCoworkImageAttachmentSize,
+} from '../shared/cowork/imageAttachments';
 import { DialogIpc } from '../shared/dialog/constants';
 import {
   HtmlShareAccessMode,
@@ -909,16 +915,19 @@ const sanitizeCoworkMessageForIpc = (message: unknown): unknown => {
   }
   const messageRecord = message as { metadata?: unknown; content?: unknown };
 
-  // Preserve imageAttachments in metadata as-is (base64 data can be very large
-  // and must not be truncated by the generic sanitizer).
+  // Preserve image metadata as-is; previews are already size-bounded, while
+  // legacy imageAttachments may contain historical base64 payloads.
   let sanitizedMetadata: unknown;
   if (messageRecord.metadata && typeof messageRecord.metadata === 'object') {
-    const { imageAttachments, ...rest } = messageRecord.metadata as Record<string, unknown>;
+    const { imageAttachments, imageAttachmentPreviews, ...rest } = messageRecord.metadata as Record<string, unknown>;
     const sanitizedRest = sanitizeIpcPayload(rest) as Record<string, unknown> | undefined;
     sanitizedMetadata = {
       ...(sanitizedRest && typeof sanitizedRest === 'object' ? sanitizedRest : {}),
       ...(Array.isArray(imageAttachments) && imageAttachments.length > 0
         ? { imageAttachments }
+        : {}),
+      ...(Array.isArray(imageAttachmentPreviews) && imageAttachmentPreviews.length > 0
+        ? { imageAttachmentPreviews }
         : {}),
     };
   } else {
@@ -2313,14 +2322,33 @@ type CoworkImageAttachmentMain = {
   name: string;
   mimeType: string;
   base64Data: string;
+  sizeBytes?: number;
+  localPath?: string;
+  previewMimeType?: string;
+  previewBase64Data?: string;
 };
+
+function validateCoworkImageAttachmentsForRuntime(
+  imageAttachments?: CoworkImageAttachmentMain[],
+): { ok: true } | { ok: false; error: string } {
+  for (const attachment of imageAttachments ?? []) {
+    const validation = validateCoworkImageAttachmentSize(attachment);
+    if (!validation.ok) {
+      return {
+        ok: false,
+        error: `Image attachment ${attachment.name} exceeds the ${formatCoworkImageAttachmentLimit(validation.maxBytes)} limit.`,
+      };
+    }
+  }
+  return { ok: true };
+}
 
 function buildCoworkUserSelectionMetadata(options: {
   skillIds?: string[];
   kitIds?: string[];
   kitReferences?: KitReference[];
   resolvedKitCapabilities?: ResolvedKitCapabilities;
-  imageAttachments?: CoworkImageAttachmentMain[];
+  imageAttachmentPreviews?: CoworkImageAttachmentPreview[];
 }): Record<string, unknown> | undefined {
   const metadata: Record<string, unknown> = {};
 
@@ -2336,8 +2364,8 @@ function buildCoworkUserSelectionMetadata(options: {
       metadata.resolvedKitCapabilities = options.resolvedKitCapabilities;
     }
   }
-  if (options.imageAttachments?.length) {
-    metadata.imageAttachments = options.imageAttachments;
+  if (options.imageAttachmentPreviews?.length) {
+    metadata.imageAttachmentPreviews = options.imageAttachmentPreviews;
   }
 
   return Object.keys(metadata).length > 0 ? metadata : undefined;
@@ -4695,6 +4723,13 @@ if (!gotTheLock) {
             error: 'Please select a task folder before submitting.',
           };
         }
+        const imageAttachmentValidation = validateCoworkImageAttachmentsForRuntime(options.imageAttachments);
+        if (imageAttachmentValidation.ok === false) {
+          return {
+            success: false,
+            error: imageAttachmentValidation.error,
+          };
+        }
 
         const fallbackTitle = buildSessionTitleFromInput(
           options.prompt,
@@ -4744,12 +4779,13 @@ if (!gotTheLock) {
             })),
           });
         }
+        const imageAttachmentPreviews = buildCoworkImageAttachmentPreviews(options.imageAttachments);
         const messageMetadata = buildCoworkUserSelectionMetadata({
           skillIds: options.activeSkillIds,
           kitIds: options.kitIds,
           kitReferences: options.kitReferences,
           resolvedKitCapabilities: options.resolvedKitCapabilities,
-          imageAttachments: options.imageAttachments,
+          imageAttachmentPreviews,
         });
         coworkStoreInstance.addMessage(session.id, {
           type: 'user',
@@ -4856,6 +4892,13 @@ if (!gotTheLock) {
 
         const runtime = getCoworkEngineRouter();
         const existingSession = getCoworkStore().getSession(options.sessionId);
+        const imageAttachmentValidation = validateCoworkImageAttachmentsForRuntime(options.imageAttachments);
+        if (imageAttachmentValidation.ok === false) {
+          return {
+            success: false,
+            error: imageAttachmentValidation.error,
+          };
+        }
 
         if (options.mediaSelection && options.mediaSelection.mode !== 'none') {
           mediaSelectionBySession.set(options.sessionId, options.mediaSelection);

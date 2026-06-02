@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef,useState } from 'react';
 import { useDispatch,useSelector } from 'react-redux';
 
 import { buildSessionTitleFromInput } from '../../../common/sessionTitle';
+import { buildCoworkImageAttachmentPreviews } from '../../../shared/cowork/imageAttachments';
 import { agentService } from '../../services/agent';
 import { coworkService } from '../../services/cowork';
 import { i18nService } from '../../services/i18n';
@@ -295,6 +296,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         kitReferences,
         resolvedKitCapabilities,
       } = buildCapabilitySelection(sessionSkillIds, sessionKitIds);
+      const imageAttachmentPreviews = buildCoworkImageAttachmentPreviews(imageAttachments);
 
       const tempSession: CoworkSession = {
         id: tempSessionId,
@@ -317,7 +319,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
             type: 'user',
             content: prompt,
             timestamp: now,
-            metadata: (directSkillIds.length > 0 || sessionKitIds.length > 0 || (imageAttachments && imageAttachments.length > 0))
+            metadata: (directSkillIds.length > 0 || sessionKitIds.length > 0 || imageAttachmentPreviews?.length)
               ? {
                 ...(directSkillIds.length > 0 ? { skillIds: directSkillIds } : {}),
                 ...(sessionKitIds.length > 0 ? {
@@ -325,7 +327,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
                   kitReferences,
                   resolvedKitCapabilities,
                 } : {}),
-                ...(imageAttachments && imageAttachments.length > 0 ? { imageAttachments } : {}),
+                ...(imageAttachmentPreviews?.length ? { imageAttachmentPreviews } : {}),
               }
               : undefined,
           },

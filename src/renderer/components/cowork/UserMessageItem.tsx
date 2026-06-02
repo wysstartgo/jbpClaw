@@ -1,6 +1,7 @@
 import { PhotoIcon } from '@heroicons/react/24/outline';
 import React, { useCallback, useMemo, useState } from 'react';
 
+import type { CoworkImageAttachmentPreview } from '../../../shared/cowork/imageAttachments';
 import type { KitReference } from '../../../shared/kit/constants';
 import { i18nService } from '../../services/i18n';
 import { buildKitReferences } from '../../services/kitCapability';
@@ -197,7 +198,13 @@ const UserMessageItem: React.FC<{
     ? metadataKitReferences
     : buildKitReferences(messageKitIds, marketplaceKits);
 
-  const imageAttachments = (metadata?.imageAttachments ?? []) as CoworkImageAttachment[];
+  const imageAttachmentPreviews = Array.isArray(metadata?.imageAttachmentPreviews)
+    ? metadata.imageAttachmentPreviews as CoworkImageAttachmentPreview[]
+    : [];
+  const legacyImageAttachments = (metadata?.imageAttachments ?? []) as CoworkImageAttachment[];
+  const displayImageAttachments = imageAttachmentPreviews.length > 0
+    ? imageAttachmentPreviews
+    : legacyImageAttachments;
   const hasCapabilityBadges = messageKitReferences.length > 0 || messageSkills.length > 0;
 
   return (
@@ -215,7 +222,7 @@ const UserMessageItem: React.FC<{
             <div className="w-full min-w-0 flex flex-col items-end">
               <div className="w-fit max-w-full rounded-2xl px-4 py-2.5 bg-surface text-foreground shadow-subtle">
                 {hasCapabilityBadges && (
-                  <div className={(displayContent?.trim() || imageAttachments.length > 0) ? 'mb-2' : ''}>
+                  <div className={(displayContent?.trim() || displayImageAttachments.length > 0) ? 'mb-2' : ''}>
                     <UserMessageCapabilityBadges
                       kitReferences={messageKitReferences}
                       skills={messageSkills}
@@ -229,9 +236,9 @@ const UserMessageItem: React.FC<{
                     onImageClick={setExpandedImage}
                   />
                 )}
-                {imageAttachments.length > 0 && (
+                {displayImageAttachments.length > 0 && (
                   <div className={`flex flex-wrap gap-2 ${displayContent?.trim() ? 'mt-2' : ''}`}>
-                    {imageAttachments.map((img, idx) => (
+                    {displayImageAttachments.map((img, idx) => (
                       <div key={idx} className="relative group">
                         <img
                           src={`data:${img.mimeType};base64,${img.base64Data}`}
