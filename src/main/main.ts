@@ -45,6 +45,7 @@ import {
   type HtmlShareStatus as HtmlShareStatusValue,
 } from '../shared/htmlShare/constants';
 import { type ListLocalWebServicesOptions, type LocalWebService, LocalWebServicesIpc } from '../shared/localWebServices/constants';
+import { McpIpcChannel } from '../shared/mcp/constants';
 import { PetStatus } from '../shared/pet/constants';
 import { type Platform as SharedPlatform,PlatformRegistry } from '../shared/platform';
 import { isQingShuServerProvider,OpenClawProviderId, ProviderName } from '../shared/providers';
@@ -201,6 +202,8 @@ import {
 import { TtsRouterService } from './libs/ttsRouterService';
 import { WakeInputService } from './libs/wakeInputService';
 import { getLogFilePath, getRecentMainLogEntries,initLogger } from './logger';
+import { createMcpLaunchSourceFingerprint, McpLaunchResolutionStatus } from './mcpLaunchResolution';
+import { McpLaunchResolverManager } from './mcpLaunchResolverManager';
 import { type McpServerFormData,McpStore } from './mcpStore';
 import { OpenClawSessionPolicyIpc } from './openclawSessionPolicy/constants';
 import { loadOpenClawSessionPolicyConfig, saveOpenClawSessionPolicyConfig } from './openclawSessionPolicy/store';
@@ -1172,6 +1175,7 @@ let openClawRuntimeAdapter: OpenClawRuntimeAdapter | null = null;
 let coworkEngineRouter: CoworkEngineRouter | null = null;
 let skillManager: SkillManager | null = null;
 let mcpStore: McpStore | null = null;
+let mcpLaunchResolverManager: McpLaunchResolverManager | null = null;
 let mcpBridgeServer: McpBridgeServer | null = null;
 let mcpBridgeSecret: string = require('crypto').randomUUID();
 let resolvedMcpServersCache: ResolvedMcpServer[] = [];
@@ -1925,23 +1929,64 @@ const refreshQingShuManagedMcpRuntimeConfig = (reason: string): void => {
 };
 
 const getResolvedMcpServers = async (): Promise<ResolvedMcpServer[]> => {
+  const startedAt = Date.now();
   const enabledServers = getMcpStore().getEnabledServers();
   const electronPath = getElectronNodeRuntimePath();
   const npmBinDir = app.isPackaged
     ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'npm', 'bin')
     : '';
   const resolved: ResolvedMcpServer[] = [];
+  let optimizedCount = 0;
+  let rawCount = 0;
+  let skippedCount = 0;
 
   for (const server of enabledServers) {
     try {
       if (server.transportType === 'stdio') {
-        const stdio = await resolveStdioCommand(server);
         const shimEnv: Record<string, string> = {
           LOBSTERAI_ELECTRON_PATH: electronPath,
         };
         if (npmBinDir) {
           shimEnv.LOBSTERAI_NPM_BIN_DIR = npmBinDir;
         }
+
+        const launchResolver = getMcpLaunchResolverManager();
+        if (launchResolver.canOptimize(server)) {
+          const readyResolution = launchResolver.getReadyResolution(server);
+          if (readyResolution) {
+            optimizedCount++;
+            resolved.push({
+              name: server.name,
+              transportType: 'stdio',
+              command: readyResolution.command,
+              args: readyResolution.args || [],
+              env: { ...shimEnv, ...(readyResolution.env || {}), ...(server.env || {}) },
+            });
+            continue;
+          }
+
+          const fingerprint = createMcpLaunchSourceFingerprint(server);
+          const status = server.launchResolution?.sourceFingerprint === fingerprint
+            ? server.launchResolution.status
+            : McpLaunchResolutionStatus.Pending;
+
+          if (status !== McpLaunchResolutionStatus.Unsupported) {
+            skippedCount++;
+            console.log(
+              `[MCP] skipping stdio server "${server.name}" while managed launch resolution is ${status}`,
+            );
+            if (
+              status !== McpLaunchResolutionStatus.Installing
+              && status !== McpLaunchResolutionStatus.Failed
+            ) {
+              ensureMcpLaunchResolution(server.id, `config-sync:${status}`);
+            }
+            continue;
+          }
+        }
+
+        rawCount++;
+        const stdio = await resolveStdioCommand(server);
         resolved.push({
           name: server.name,
           transportType: 'stdio',
@@ -1968,6 +2013,9 @@ const getResolvedMcpServers = async (): Promise<ResolvedMcpServer[]> => {
     resolved.push(managedConfig);
   }
 
+  console.log(
+    `[MCP] resolved ${resolved.length}/${enabledServers.length} enabled server(s) for OpenClaw in ${Date.now() - startedAt}ms; optimized=${optimizedCount}, raw=${rawCount}, skipped=${skippedCount}`,
+  );
   return resolved;
 };
 
@@ -2283,6 +2331,37 @@ const getPluginManager = (): PluginManager => {
     pluginManager = new PluginManager(getCoworkStore());
   }
   return pluginManager;
+};
+
+const broadcastMcpServersChanged = (): void => {
+  const windows = BrowserWindow.getAllWindows();
+  windows.forEach(win => {
+    if (win.isDestroyed()) return;
+    try {
+      win.webContents.send(McpIpcChannel.Changed);
+    } catch {
+      // ignore destroyed windows
+    }
+  });
+};
+
+const getMcpLaunchResolverManager = (): McpLaunchResolverManager => {
+  if (!mcpLaunchResolverManager) {
+    mcpLaunchResolverManager = new McpLaunchResolverManager(
+      getMcpStore(),
+      broadcastMcpServersChanged,
+      reason => {
+        syncOpenClawConfig({ reason }).catch(error => {
+          console.error('[MCP] config sync error after launch resolution:', error);
+        });
+      },
+    );
+  }
+  return mcpLaunchResolverManager;
+};
+
+const ensureMcpLaunchResolution = (serverId: string, reason: string): void => {
+  getMcpLaunchResolverManager().ensureResolved(serverId, reason);
 };
 
 /**
@@ -4538,7 +4617,7 @@ if (!gotTheLock) {
   });
 
   // MCP Server IPC handlers
-  ipcMain.handle('mcp:list', () => {
+  ipcMain.handle(McpIpcChannel.List, () => {
     try {
       const servers = getMcpStore().listServers();
       return { success: true, servers };
@@ -4547,9 +4626,12 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('mcp:create', async (_event, data: McpServerFormData) => {
+  ipcMain.handle(McpIpcChannel.Create, async (_event, data: McpServerFormData) => {
     try {
-      getMcpStore().createServer(data);
+      const server = getMcpStore().createServer(data);
+      if (server.enabled) {
+        ensureMcpLaunchResolution(server.id, 'mcp-server-created');
+      }
       const servers = getMcpStore().listServers();
       refreshMcpRuntimeConfig('mcp-server-created');
       return { success: true, servers };
@@ -4558,9 +4640,12 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('mcp:update', async (_event, id: string, data: Partial<McpServerFormData>) => {
+  ipcMain.handle(McpIpcChannel.Update, async (_event, id: string, data: Partial<McpServerFormData>) => {
     try {
-      getMcpStore().updateServer(id, data);
+      const server = getMcpStore().updateServer(id, data);
+      if (server?.enabled) {
+        ensureMcpLaunchResolution(server.id, 'mcp-server-updated');
+      }
       const servers = getMcpStore().listServers();
       refreshMcpRuntimeConfig('mcp-server-updated');
       return { success: true, servers };
@@ -4569,7 +4654,7 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('mcp:delete', async (_event, id: string) => {
+  ipcMain.handle(McpIpcChannel.Delete, async (_event, id: string) => {
     try {
       getMcpStore().deleteServer(id);
       const servers = getMcpStore().listServers();
@@ -4580,9 +4665,12 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('mcp:setEnabled', async (_event, options: { id: string; enabled: boolean }) => {
+  ipcMain.handle(McpIpcChannel.SetEnabled, async (_event, options: { id: string; enabled: boolean }) => {
     try {
       getMcpStore().setEnabled(options.id, options.enabled);
+      if (options.enabled) {
+        ensureMcpLaunchResolution(options.id, 'mcp-server-enabled');
+      }
       const servers = getMcpStore().listServers();
       refreshMcpRuntimeConfig('mcp-server-toggled');
       return { success: true, servers };
@@ -4591,7 +4679,20 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('mcp:fetchMarketplace', async () => {
+  ipcMain.handle(McpIpcChannel.RetryLaunchResolution, async (_event, id: string) => {
+    try {
+      await getMcpLaunchResolverManager().retry(id);
+      const servers = getMcpStore().listServers();
+      return { success: true, servers };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to retry MCP launch resolution',
+      };
+    }
+  });
+
+  ipcMain.handle(McpIpcChannel.FetchMarketplace, async () => {
     const url = app.isPackaged
       ? 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/prod/mcp-marketplace'
       : 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/test/mcp-marketplace';

@@ -52,6 +52,7 @@ import { HtmlShareIpc } from '../shared/htmlShare/constants';
 import type { KitSkillMetadata } from '../shared/kit/constants';
 import type { ListLocalWebServicesOptions, LocalWebService } from '../shared/localWebServices/constants';
 import { LocalWebServicesIpc } from '../shared/localWebServices/constants';
+import { McpIpcChannel } from '../shared/mcp/constants';
 import { PetIpcChannel } from '../shared/pet/constants';
 import type { PetConfig, PetImportRequest, PetRuntimeState } from '../shared/pet/types';
 import type { Platform } from '../shared/platform';
@@ -110,12 +111,21 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke(QingShuFileIpcChannel.Publish, filePath),
   },
   mcp: {
-    list: () => ipcRenderer.invoke('mcp:list'),
-    create: (data: McpServerFormData) => ipcRenderer.invoke('mcp:create', data),
-    update: (id: string, data: Partial<McpServerFormData>) => ipcRenderer.invoke('mcp:update', id, data),
-    delete: (id: string) => ipcRenderer.invoke('mcp:delete', id),
-    setEnabled: (options: { id: string; enabled: boolean }) => ipcRenderer.invoke('mcp:setEnabled', options),
-    fetchMarketplace: () => ipcRenderer.invoke('mcp:fetchMarketplace'),
+    list: () => ipcRenderer.invoke(McpIpcChannel.List),
+    create: (data: McpServerFormData) => ipcRenderer.invoke(McpIpcChannel.Create, data),
+    update: (id: string, data: Partial<McpServerFormData>) =>
+      ipcRenderer.invoke(McpIpcChannel.Update, id, data),
+    delete: (id: string) => ipcRenderer.invoke(McpIpcChannel.Delete, id),
+    setEnabled: (options: { id: string; enabled: boolean }) =>
+      ipcRenderer.invoke(McpIpcChannel.SetEnabled, options),
+    retryLaunchResolution: (id: string) =>
+      ipcRenderer.invoke(McpIpcChannel.RetryLaunchResolution, id),
+    fetchMarketplace: () => ipcRenderer.invoke(McpIpcChannel.FetchMarketplace),
+    onChanged: (callback: () => void) => {
+      const handler = () => callback();
+      ipcRenderer.on(McpIpcChannel.Changed, handler);
+      return () => ipcRenderer.removeListener(McpIpcChannel.Changed, handler);
+    },
   },
   kits: {
     fetchStore: () => ipcRenderer.invoke('kits:fetchStore'),

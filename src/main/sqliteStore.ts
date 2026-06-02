@@ -201,6 +201,28 @@ export class SqliteStore {
     `);
 
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS mcp_launch_resolutions (
+        server_id TEXT PRIMARY KEY,
+        resolver_kind TEXT NOT NULL,
+        source_fingerprint TEXT NOT NULL,
+        status TEXT NOT NULL,
+        package_name TEXT,
+        requested_version TEXT,
+        resolved_version TEXT,
+        install_dir TEXT,
+        command TEXT,
+        args_json TEXT,
+        env_json TEXT,
+        error TEXT,
+        installed_at INTEGER,
+        resolved_at INTEGER,
+        last_probe_at INTEGER,
+        last_probe_status TEXT,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS user_plugins (
         plugin_id TEXT PRIMARY KEY,
         source TEXT NOT NULL,
