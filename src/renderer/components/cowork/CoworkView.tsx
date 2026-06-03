@@ -470,14 +470,14 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     }
   };
 
-  const handleStopSession = async () => {
+  const handleStopSession = useCallback(async () => {
     if (!currentSession) return;
     if (currentSession.id.startsWith('temp-') && pendingStartRef.current) {
       pendingStartRef.current.cancelled = true;
       pendingStartRef.current.cancellationAction = 'stop';
     }
     await coworkService.stopSession(currentSession.id);
-  };
+  }, [currentSession]);
 
   // Get selected quick action
   const selectedAction = React.useMemo(() => {
@@ -521,15 +521,22 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
       const shouldClear = !currentSession;
       coworkService.clearSession({ restoreAgentSkills: true });
       dispatch(clearSelection());
-      window.dispatchEvent(new CustomEvent('cowork:focus-input', {
+      window.dispatchEvent(new CustomEvent(CoworkUiEvent.FocusInput, {
         detail: { clear: shouldClear },
       }));
     };
-    window.addEventListener('cowork:shortcut:new-session', handleNewSession);
+    window.addEventListener(CoworkUiEvent.ShortcutNewSession, handleNewSession);
     return () => {
-      window.removeEventListener('cowork:shortcut:new-session', handleNewSession);
+      window.removeEventListener(CoworkUiEvent.ShortcutNewSession, handleNewSession);
     };
   }, [dispatch, currentSession]);
+
+  useEffect(() => {
+    window.addEventListener(CoworkUiEvent.ShortcutStopSession, handleStopSession);
+    return () => {
+      window.removeEventListener(CoworkUiEvent.ShortcutStopSession, handleStopSession);
+    };
+  }, [handleStopSession]);
 
   useEffect(() => {
     if (!currentSession || currentSession.status !== 'running') return;

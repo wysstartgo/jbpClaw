@@ -7,6 +7,10 @@ type ParsedShortcut = {
   commandOrControl: boolean;
 };
 
+type ShortcutPlatformOptions = {
+  isMac?: boolean;
+};
+
 type ModifierKey = 'alt' | 'ctrl' | 'shift' | 'meta';
 
 const modifierAliases: Record<string, ModifierKey> = {
@@ -123,4 +127,74 @@ export const matchesShortcut = (event: KeyboardEvent, shortcut?: string): boolea
   }
 
   return true;
+};
+
+const formatKeyForDisplay = (key: string): string => {
+  const normalized = normalizeKey(key);
+  const displayKeyMap: Record<string, string> = {
+    ' ': 'Space',
+    escape: 'Esc',
+    enter: 'Enter',
+    backspace: 'Backspace',
+    delete: 'Delete',
+    tab: 'Tab',
+    arrowup: 'Up',
+    arrowdown: 'Down',
+    arrowleft: 'Left',
+    arrowright: 'Right',
+    pageup: 'PageUp',
+    pagedown: 'PageDown',
+    home: 'Home',
+    end: 'End',
+    insert: 'Insert',
+    ',': ',',
+    '.': '.',
+    '-': '-',
+  };
+  return displayKeyMap[normalized] ?? (normalized.length === 1 ? normalized.toUpperCase() : key);
+};
+
+export const formatShortcutForDisplay = (
+  shortcut?: string,
+  options: ShortcutPlatformOptions = {},
+): string => {
+  if (!shortcut) return '';
+
+  const tokens = shortcut
+    .split('+')
+    .map(token => token.trim())
+    .filter(Boolean);
+
+  const displayTokens = tokens.map((token) => {
+    const normalized = normalizeToken(token);
+    if (commandOrControlAliases.has(normalized)) {
+      return options.isMac ? 'Cmd' : 'Ctrl';
+    }
+    const modifier = modifierAliases[normalized];
+    if (modifier === 'meta') return 'Cmd';
+    if (modifier === 'ctrl') return 'Ctrl';
+    if (modifier === 'alt') return options.isMac ? 'Option' : 'Alt';
+    if (modifier === 'shift') return 'Shift';
+    return formatKeyForDisplay(token);
+  });
+
+  return displayTokens.join('+');
+};
+
+export const getShortcutConflictSignature = (
+  shortcut?: string,
+  options: ShortcutPlatformOptions = {},
+): string | null => {
+  const parsed = parseShortcut(shortcut);
+  if (!parsed) return null;
+
+  const ctrl = parsed.commandOrControl ? !options.isMac : parsed.ctrl;
+  const meta = parsed.commandOrControl ? Boolean(options.isMac) : parsed.meta;
+  return [
+    parsed.key,
+    parsed.alt ? 'alt' : '',
+    parsed.shift ? 'shift' : '',
+    ctrl ? 'ctrl' : '',
+    meta ? 'meta' : '',
+  ].join('|');
 };

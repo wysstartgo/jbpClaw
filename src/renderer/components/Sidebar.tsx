@@ -21,6 +21,7 @@ import {
 } from './agentSidebar/batchSelection';
 import MyAgentSidebarTree from './agentSidebar/MyAgentSidebarTree';
 import Modal from './common/Modal';
+import { CoworkUiEvent } from './cowork/constants';
 import CoworkSearchModal from './cowork/CoworkSearchModal';
 import Cog6ToothIcon from './icons/Cog6ToothIcon';
 import ComposeIcon from './icons/ComposeIcon';
@@ -115,9 +116,9 @@ const Sidebar: React.FC<SidebarProps> = ({
       onShowCowork();
       setIsSearchOpen(true);
     };
-    window.addEventListener('cowork:shortcut:search', handleSearch);
+    window.addEventListener(CoworkUiEvent.ShortcutSearch, handleSearch);
     return () => {
-      window.removeEventListener('cowork:shortcut:search', handleSearch);
+      window.removeEventListener(CoworkUiEvent.ShortcutSearch, handleSearch);
     };
   }, [onShowCowork]);
 

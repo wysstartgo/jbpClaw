@@ -11,6 +11,7 @@ import {
 } from '../shared/appUpdate/constants';
 import { OpenClawProviderId, ProviderName, ProviderRegistry } from '../shared/providers';
 import { CoworkView } from './components/cowork';
+import { CoworkShortcutDirection, CoworkUiEvent } from './components/cowork/constants';
 import CoworkPermissionModal from './components/cowork/CoworkPermissionModal';
 import CoworkQuestionWizard from './components/cowork/CoworkQuestionWizard';
 import EngineStartupOverlay from './components/cowork/EngineStartupOverlay';
@@ -26,7 +27,7 @@ import AppUpdateBadge from './components/update/AppUpdateBadge';
 import AppUpdateModal from './components/update/AppUpdateModal';
 import WelcomeDialog from './components/WelcomeDialog';
 import WindowTitleBar from './components/window/WindowTitleBar';
-import { defaultConfig, getProviderDisplayName } from './config';
+import { defaultConfig, getProviderDisplayName, ShortcutAction } from './config';
 import type { ApiConfig } from './services/api';
 import { apiService } from './services/api';
 import { authService } from './services/auth';
@@ -57,13 +58,43 @@ const getOpenClawProviderIdForConfig = (
   return ProviderRegistry.getOpenClawProviderId(providerName);
 };
 
+const AGENT_TASK_SLOT_SHORTCUT_ACTIONS = [
+  ShortcutAction.OpenAgentTask1,
+  ShortcutAction.OpenAgentTask2,
+  ShortcutAction.OpenAgentTask3,
+  ShortcutAction.OpenAgentTask4,
+  ShortcutAction.OpenAgentTask5,
+  ShortcutAction.OpenAgentTask6,
+  ShortcutAction.OpenAgentTask7,
+  ShortcutAction.OpenAgentTask8,
+  ShortcutAction.OpenAgentTask9,
+] as const;
+
+const SETTINGS_TAB_SHORTCUT_ACTIONS: Array<{
+  action: ShortcutAction;
+  initialTab: NonNullable<SettingsOpenOptions['initialTab']>;
+}> = [
+  { action: ShortcutAction.OpenSettingsGeneral, initialTab: 'general' },
+  { action: ShortcutAction.OpenSettingsAppearance, initialTab: 'appearance' },
+  { action: ShortcutAction.OpenSettingsAgentEngine, initialTab: 'coworkAgentEngine' },
+  { action: ShortcutAction.OpenSettingsModel, initialTab: 'model' },
+  { action: ShortcutAction.OpenSettingsIm, initialTab: 'im' },
+  { action: ShortcutAction.OpenSettingsBrowser, initialTab: 'browserWebAccess' },
+  { action: ShortcutAction.OpenSettingsEmail, initialTab: 'email' },
+  { action: ShortcutAction.OpenSettingsMemory, initialTab: 'coworkMemory' },
+  { action: ShortcutAction.OpenSettingsDreaming, initialTab: 'coworkDreaming' },
+  { action: ShortcutAction.OpenSettingsPlugins, initialTab: 'plugins' },
+  { action: ShortcutAction.OpenSettingsShortcuts, initialTab: 'shortcuts' },
+  { action: ShortcutAction.OpenSettingsAbout, initialTab: 'about' },
+];
+
 /** Used for config + i18n init; longer on Windows where main-process IPC can stall during cold start. */
 const INIT_STEP_TIMEOUT_MS_WINDOWS = 24_000;
 const INIT_STEP_TIMEOUT_MS_DEFAULT = 16_000;
 
 const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsOptions, setSettingsOptions] = useState<SettingsOpenOptions>({});
+  const [settingsOptions, setSettingsOptions] = useState<SettingsOpenOptions & { requestId: number }>({ requestId: 0 });
   const [mainView, setMainView] = useState<'cowork' | 'skills' | 'scheduledTasks' | 'kits' | 'mcp'>('cowork');
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
@@ -291,10 +322,13 @@ const App: React.FC = () => {
   }, [isInitialized, defaultSelectedModel?.id, defaultSelectedModel?.providerKey]);
 
   const handleShowSettings = useCallback((options?: SettingsOpenOptions) => {
-    setSettingsOptions({
+    setSettingsOptions((current) => ({
       initialTab: options?.initialTab,
       notice: options?.notice,
-    });
+      noticeI18nKey: options?.noticeI18nKey,
+      noticeExtra: options?.noticeExtra,
+      requestId: current.requestId + 1,
+    }));
     setShowSettings(true);
   }, []);
 
@@ -328,7 +362,7 @@ const App: React.FC = () => {
     dispatch(setDraftKitIds({ draftKey: '__home__', kitIds: [kitId] }));
     setMainView('cowork');
     window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('cowork:focus-input', {
+      window.dispatchEvent(new CustomEvent(CoworkUiEvent.FocusInput, {
         detail: { text },
       }));
     }, 0);
@@ -345,7 +379,7 @@ const App: React.FC = () => {
     dispatch(clearSelection());
     setMainView('cowork');
     window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('cowork:focus-input', {
+      window.dispatchEvent(new CustomEvent(CoworkUiEvent.FocusInput, {
         detail: { clear: shouldClearInput },
       }));
     }, 0);
@@ -557,9 +591,18 @@ const App: React.FC = () => {
     return activeElement.dataset.shortcutInput === 'true';
   };
 
+  const isTextEditingActive = () => {
+    const activeElement = document.activeElement;
+    if (!(activeElement instanceof HTMLElement)) return false;
+    if (activeElement.isContentEditable) return true;
+    if (activeElement instanceof HTMLTextAreaElement) return true;
+    if (activeElement instanceof HTMLSelectElement) return true;
+    return activeElement instanceof HTMLInputElement;
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || isShortcutInputActive()) return;
+      if (event.repeat || isShortcutInputActive() || isTextEditingActive()) return;
 
       const { shortcuts } = configService.getConfig();
       const activeShortcuts = {
@@ -567,27 +610,171 @@ const App: React.FC = () => {
         ...(shortcuts ?? {}),
       };
 
-      if (matchesShortcut(event, activeShortcuts.newChat)) {
+      const matchesAction = (action: ShortcutAction) => matchesShortcut(event, activeShortcuts[action]);
+
+      if (showSettings) {
+        if (matchesAction(ShortcutAction.ShowShortcuts)) {
+          event.preventDefault();
+          handleShowSettings({ initialTab: 'shortcuts' });
+        }
+        return;
+      }
+
+      if (showUpdateModal || pendingPermission !== null) return;
+
+      if (matchesAction(ShortcutAction.NewChat)) {
         event.preventDefault();
         handleNewChat();
         return;
       }
 
-      if (matchesShortcut(event, activeShortcuts.search)) {
+      if (matchesAction(ShortcutAction.Search)) {
         event.preventDefault();
-        window.dispatchEvent(new CustomEvent('cowork:shortcut:search'));
+        window.dispatchEvent(new CustomEvent(CoworkUiEvent.ShortcutSearch));
         return;
       }
 
-      if (matchesShortcut(event, activeShortcuts.settings)) {
+      if (matchesAction(ShortcutAction.Settings)) {
         event.preventDefault();
         handleShowSettings();
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.ShowShortcuts)) {
+        event.preventDefault();
+        handleShowSettings({ initialTab: 'shortcuts' });
+        return;
+      }
+
+      const settingsTabShortcut = SETTINGS_TAB_SHORTCUT_ACTIONS.find(({ action }) => matchesAction(action));
+      if (settingsTabShortcut) {
+        event.preventDefault();
+        handleShowSettings({ initialTab: settingsTabShortcut.initialTab });
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.FocusPrompt)) {
+        event.preventDefault();
+        setMainView('cowork');
+        window.setTimeout(() => {
+          window.dispatchEvent(new CustomEvent(CoworkUiEvent.FocusInput, {
+            detail: { clear: false },
+          }));
+        }, 0);
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.StopCurrentTask)) {
+        event.preventDefault();
+        if (mainView === 'cowork') {
+          window.dispatchEvent(new CustomEvent(CoworkUiEvent.ShortcutStopSession));
+        } else if (currentSessionId) {
+          void coworkService.stopSession(currentSessionId);
+        }
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.ToggleSidebar)) {
+        event.preventDefault();
+        handleToggleSidebar();
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.ToggleArtifacts)) {
+        event.preventDefault();
+        setMainView('cowork');
+        window.setTimeout(() => {
+          window.dispatchEvent(new CustomEvent(CoworkUiEvent.ShortcutToggleArtifacts));
+        }, 0);
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.PreviousAgent)) {
+        event.preventDefault();
+        setMainView('cowork');
+        setIsSidebarCollapsed(false);
+        window.dispatchEvent(new CustomEvent(CoworkUiEvent.ShortcutSwitchAgent, {
+          detail: { direction: CoworkShortcutDirection.Previous },
+        }));
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.NextAgent)) {
+        event.preventDefault();
+        setMainView('cowork');
+        setIsSidebarCollapsed(false);
+        window.dispatchEvent(new CustomEvent(CoworkUiEvent.ShortcutSwitchAgent, {
+          detail: { direction: CoworkShortcutDirection.Next },
+        }));
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.ShowCurrentAgentTasks)) {
+        event.preventDefault();
+        setMainView('cowork');
+        setIsSidebarCollapsed(false);
+        window.dispatchEvent(new CustomEvent(CoworkUiEvent.ShortcutShowCurrentAgentTasks));
+        return;
+      }
+
+      const taskSlotIndex = AGENT_TASK_SLOT_SHORTCUT_ACTIONS.findIndex(action => matchesAction(action));
+      if (taskSlotIndex >= 0) {
+        event.preventDefault();
+        setMainView('cowork');
+        setIsSidebarCollapsed(false);
+        window.dispatchEvent(new CustomEvent(CoworkUiEvent.ShortcutOpenAgentTaskSlot, {
+          detail: { slot: taskSlotIndex + 1 },
+        }));
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.OpenCowork)) {
+        event.preventDefault();
+        handleShowCowork();
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.OpenScheduledTasks)) {
+        event.preventDefault();
+        handleShowScheduledTasks();
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.OpenKits)) {
+        event.preventDefault();
+        handleShowKits();
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.OpenSkills)) {
+        event.preventDefault();
+        handleShowSkills();
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.OpenMcp)) {
+        event.preventDefault();
+        handleShowMcp();
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleShowSettings, handleNewChat]);
+  }, [
+    currentSessionId,
+    handleNewChat,
+    handleShowCowork,
+    handleShowKits,
+    handleShowMcp,
+    handleShowScheduledTasks,
+    handleShowSettings,
+    handleShowSkills,
+    handleToggleSidebar,
+    mainView,
+    pendingPermission,
+    showSettings,
+    showUpdateModal,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -615,7 +802,7 @@ const App: React.FC = () => {
       setMainView('cowork');
       window.setTimeout(() => {
         window.dispatchEvent(
-          new CustomEvent('cowork:focus-input', {
+          new CustomEvent(CoworkUiEvent.FocusInput, {
             detail: { text },
           }),
         );
@@ -777,6 +964,7 @@ const App: React.FC = () => {
             <Settings
               onClose={handleCloseSettings}
               initialTab={settingsOptions.initialTab}
+              initialTabRequestId={settingsOptions.requestId}
               notice={settingsOptions.notice}
               onUpdateFound={handleUpdateFound}
               enterpriseConfig={enterpriseConfig}
@@ -862,6 +1050,7 @@ const App: React.FC = () => {
         <Settings
           onClose={handleCloseSettings}
           initialTab={settingsOptions.initialTab}
+          initialTabRequestId={settingsOptions.requestId}
           notice={settingsOptions.notice}
           onUpdateFound={handleUpdateFound}
           enterpriseConfig={enterpriseConfig}

@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import { AgentId } from '@shared/agent';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 
 import { agentService } from '../../services/agent';
@@ -10,7 +11,13 @@ import type { SubagentSessionSummary } from '../../types/cowork';
 import { isDefaultAgentId } from '../../utils/agentDisplay';
 import AgentCreateModal from '../agent/AgentCreateModal';
 import AgentSettingsPanel from '../agent/AgentSettingsPanel';
-import { type CoworkOpenShareOptionsEventDetail,CoworkUiEvent } from '../cowork/constants';
+import {
+  type CoworkOpenAgentTaskSlotEventDetail,
+  type CoworkOpenShareOptionsEventDetail,
+  CoworkShortcutDirection,
+  type CoworkSwitchAgentEventDetail,
+  CoworkUiEvent,
+} from '../cowork/constants';
 import AgentTreeNode from './AgentTreeNode';
 import {
   type AgentSidebarBatchItem,
@@ -68,6 +75,8 @@ const MyAgentSidebarTree: React.FC<MyAgentSidebarTreeProps> = ({
     removeAgentTaskPreviews,
     retryLoadTasks,
     loadMoreTasks,
+    expandAgent,
+    expandTasks,
     collapseTasks,
     toggleAgentExpanded,
   } = useAgentSidebarState();
@@ -90,7 +99,7 @@ const MyAgentSidebarTree: React.FC<MyAgentSidebarTreeProps> = ({
     return () => window.removeEventListener(CoworkUiEvent.SelectSubagent, handler);
   }, [currentSessionId, refetchSubagents]);
 
-  const handleSelectTask = async (task: AgentSidebarTaskNode) => {
+  const handleSelectTask = useCallback(async (task: AgentSidebarTaskNode) => {
     if (task.agentId !== currentAgentId) {
       agentService.switchAgent(task.agentId);
       await coworkService.loadSessions(task.agentId);
@@ -99,7 +108,77 @@ const MyAgentSidebarTree: React.FC<MyAgentSidebarTreeProps> = ({
     // Clear subagent detail view so the main session detail is shown
     window.dispatchEvent(new CustomEvent(CoworkUiEvent.SelectSubagent, { detail: null }));
     return coworkService.loadSession(task.id);
-  };
+  }, [currentAgentId, onShowCowork]);
+
+  useEffect(() => {
+    const handleSwitchAgent = (event: Event) => {
+      const detail = (event as CustomEvent<CoworkSwitchAgentEventDetail>).detail;
+      const direction = detail?.direction;
+      if (!direction || agentNodes.length === 0) return;
+
+      const currentIndex = agentNodes.findIndex((agent) => agent.id === currentAgentId);
+      const fallbackIndex = direction === CoworkShortcutDirection.Next ? 0 : agentNodes.length - 1;
+      const nextIndex = currentIndex < 0
+        ? fallbackIndex
+        : direction === CoworkShortcutDirection.Next
+          ? (currentIndex + 1) % agentNodes.length
+          : (currentIndex - 1 + agentNodes.length) % agentNodes.length;
+      const targetAgent = agentNodes[nextIndex];
+      if (!targetAgent) return;
+
+      void (async () => {
+        if (targetAgent.id !== currentAgentId) {
+          agentService.switchAgent(targetAgent.id);
+          await coworkService.loadSessions(targetAgent.id);
+        }
+        expandAgent(targetAgent.id);
+        onShowCowork();
+        window.dispatchEvent(new CustomEvent(CoworkUiEvent.SelectSubagent, { detail: null }));
+      })();
+    };
+
+    const handleShowCurrentAgentTasks = () => {
+      expandAgent(currentAgentId);
+      void expandTasks(currentAgentId);
+      onShowCowork();
+    };
+
+    const handleOpenAgentTaskSlot = (event: Event) => {
+      const slot = (event as CustomEvent<CoworkOpenAgentTaskSlotEventDetail>).detail?.slot;
+      if (!Number.isInteger(slot) || slot < 1) return;
+
+      void (async () => {
+        expandAgent(currentAgentId);
+        void expandTasks(currentAgentId);
+        const result = await coworkService.listSessionsForAgentPreview(currentAgentId, slot, 0);
+        const session = result.sessions?.[slot - 1];
+        if (!result.success || !session) {
+          window.dispatchEvent(new CustomEvent('app:showToast', {
+            detail: i18nService.t('shortcutAgentTaskSlotUnavailable').replace('{slot}', String(slot)),
+          }));
+          return;
+        }
+
+        const agentId = session.agentId?.trim() || AgentId.Main;
+        if (agentId !== currentAgentId) {
+          agentService.switchAgent(agentId);
+          await coworkService.loadSessions(agentId);
+        }
+        onShowCowork();
+        window.dispatchEvent(new CustomEvent(CoworkUiEvent.SelectSubagent, { detail: null }));
+        await coworkService.loadSession(session.id);
+      })();
+    };
+
+    window.addEventListener(CoworkUiEvent.ShortcutSwitchAgent, handleSwitchAgent);
+    window.addEventListener(CoworkUiEvent.ShortcutShowCurrentAgentTasks, handleShowCurrentAgentTasks);
+    window.addEventListener(CoworkUiEvent.ShortcutOpenAgentTaskSlot, handleOpenAgentTaskSlot);
+    return () => {
+      window.removeEventListener(CoworkUiEvent.ShortcutSwitchAgent, handleSwitchAgent);
+      window.removeEventListener(CoworkUiEvent.ShortcutShowCurrentAgentTasks, handleShowCurrentAgentTasks);
+      window.removeEventListener(CoworkUiEvent.ShortcutOpenAgentTaskSlot, handleOpenAgentTaskSlot);
+    };
+  }, [agentNodes, currentAgentId, expandAgent, expandTasks, onShowCowork]);
 
   const handleDeleteTask = async (task: AgentSidebarTaskNode) => {
     const deleted = await coworkService.deleteSession(task.id);
@@ -178,7 +257,7 @@ const MyAgentSidebarTree: React.FC<MyAgentSidebarTreeProps> = ({
     coworkService.clearSession({ restoreAgentSkills: true });
     onShowCowork();
     window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('cowork:focus-input', {
+      window.dispatchEvent(new CustomEvent(CoworkUiEvent.FocusInput, {
         detail: { clear: false },
       }));
     }, 0);

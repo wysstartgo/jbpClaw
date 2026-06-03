@@ -1203,6 +1203,13 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
     setSessionFileListPreviewTabOpen,
   ]);
 
+  useEffect(() => {
+    window.addEventListener(CoworkUiEvent.ShortcutToggleArtifacts, handleToggleArtifactPanel);
+    return () => {
+      window.removeEventListener(CoworkUiEvent.ShortcutToggleArtifacts, handleToggleArtifactPanel);
+    };
+  }, [handleToggleArtifactPanel]);
+
   const handleToggleArtifactAddMenu = useCallback(() => {
     setShowArtifactAddMenu(open => !open);
   }, []);

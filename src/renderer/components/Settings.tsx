@@ -1,4 +1,4 @@
-import { ChatBubbleLeftIcon, CpuChipIcon, CubeIcon, EnvelopeIcon, GlobeAltIcon, InformationCircleIcon, SunIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ChatBubbleLeftIcon, CpuChipIcon, CubeIcon, EnvelopeIcon, GlobeAltIcon, InformationCircleIcon, MagnifyingGlassIcon, SunIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import React, { useCallback,useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
@@ -9,7 +9,7 @@ import {
   normalizeBrowserWebAccessConfig,
 } from '../../shared/browserWebAccess/constants';
 import { ProviderAuthType, ProviderName, ProviderRegistry, resolveCodingPlanBaseUrl } from '../../shared/providers';
-import { type AppConfig, defaultConfig, getProviderDisplayName, getVisibleProviders } from '../config';
+import { type AppConfig, defaultConfig, getProviderDisplayName, getVisibleProviders, ShortcutAction, type ShortcutConfig } from '../config';
 import { APP_ID, EXPORT_FORMAT_TYPE, EXPORT_PASSWORD } from '../constants/app';
 import { apiService } from '../services/api';
 import { configService } from '../services/config';
@@ -17,6 +17,7 @@ import { coworkService } from '../services/cowork';
 import { decryptSecret, decryptWithPassword, EncryptedPayload, encryptWithPassword, PasswordEncryptedPayload } from '../services/encryption';
 import { i18nService, LanguageType } from '../services/i18n';
 import { imService } from '../services/im';
+import { formatShortcutForDisplay, getShortcutConflictSignature, matchesShortcut } from '../services/shortcuts';
 import { themeService } from '../services/theme';
 import type { RootState } from '../store';
 import { selectCoworkConfig } from '../store/selectors/coworkSelectors';
@@ -34,6 +35,7 @@ import DreamingSettingsSection from './cowork/DreamingSettingsSection';
 import EmbeddingSettingsSection from './cowork/EmbeddingSettingsSection';
 import ErrorMessage from './ErrorMessage';
 import BrainIcon from './icons/BrainIcon';
+import EditIcon from './icons/EditIcon';
 import PlugIcon from './icons/PlugIcon';
 import PlusCircleIcon from './icons/PlusCircleIcon';
 import IMSettings from './im/IMSettings';
@@ -67,6 +69,135 @@ import EmailSkillConfig from './skills/EmailSkillConfig';
 import ThemedSelect from './ui/ThemedSelect';
 
 type TabType = 'general' | 'appearance' | 'coworkAgentEngine' | 'model' | 'browserWebAccess' | 'coworkMemory' | 'coworkDreaming' | 'shortcuts' | 'im' | 'email' | 'plugins' | 'about';
+
+type ShortcutCommandDefinition = {
+  key: ShortcutAction;
+  labelKey: string;
+  descriptionKey: string;
+  inputType?: 'recorder' | 'send';
+  slot?: number;
+  tabLabelKey?: string;
+};
+
+const SETTINGS_TAB_SHORTCUT_ACTIONS: Partial<Record<ShortcutAction, TabType>> = {
+  [ShortcutAction.OpenSettingsGeneral]: 'general',
+  [ShortcutAction.OpenSettingsAppearance]: 'appearance',
+  [ShortcutAction.OpenSettingsAgentEngine]: 'coworkAgentEngine',
+  [ShortcutAction.OpenSettingsModel]: 'model',
+  [ShortcutAction.OpenSettingsIm]: 'im',
+  [ShortcutAction.OpenSettingsBrowser]: 'browserWebAccess',
+  [ShortcutAction.OpenSettingsEmail]: 'email',
+  [ShortcutAction.OpenSettingsMemory]: 'coworkMemory',
+  [ShortcutAction.OpenSettingsDreaming]: 'coworkDreaming',
+  [ShortcutAction.OpenSettingsPlugins]: 'plugins',
+  [ShortcutAction.OpenSettingsShortcuts]: 'shortcuts',
+  [ShortcutAction.OpenSettingsAbout]: 'about',
+};
+
+const AGENT_TASK_SLOT_COMMANDS: ShortcutCommandDefinition[] = [
+  ShortcutAction.OpenAgentTask1,
+  ShortcutAction.OpenAgentTask2,
+  ShortcutAction.OpenAgentTask3,
+  ShortcutAction.OpenAgentTask4,
+  ShortcutAction.OpenAgentTask5,
+  ShortcutAction.OpenAgentTask6,
+  ShortcutAction.OpenAgentTask7,
+  ShortcutAction.OpenAgentTask8,
+  ShortcutAction.OpenAgentTask9,
+].map((key, index) => ({
+  key,
+  labelKey: 'shortcutOpenAgentTaskSlot',
+  descriptionKey: 'shortcutDescOpenAgentTaskSlot',
+  slot: index + 1,
+}));
+
+const SETTINGS_TAB_SHORTCUT_COMMANDS: ShortcutCommandDefinition[] = [
+  { key: ShortcutAction.OpenSettingsGeneral, tabLabelKey: 'general' },
+  { key: ShortcutAction.OpenSettingsAppearance, tabLabelKey: 'appearance' },
+  { key: ShortcutAction.OpenSettingsAgentEngine, tabLabelKey: 'coworkAgentEngine' },
+  { key: ShortcutAction.OpenSettingsModel, tabLabelKey: 'settingsCustomModel' },
+  { key: ShortcutAction.OpenSettingsIm, tabLabelKey: 'imBot' },
+  { key: ShortcutAction.OpenSettingsBrowser, tabLabelKey: 'browserWebAccessTab' },
+  { key: ShortcutAction.OpenSettingsEmail, tabLabelKey: 'emailTab' },
+  { key: ShortcutAction.OpenSettingsMemory, tabLabelKey: 'coworkMemoryTitle' },
+  { key: ShortcutAction.OpenSettingsDreaming, tabLabelKey: 'coworkMemoryTabDreaming' },
+  { key: ShortcutAction.OpenSettingsPlugins, tabLabelKey: 'pluginsTab' },
+  { key: ShortcutAction.OpenSettingsShortcuts, tabLabelKey: 'shortcuts' },
+  { key: ShortcutAction.OpenSettingsAbout, tabLabelKey: 'about' },
+].map(command => ({
+  ...command,
+  labelKey: 'shortcutOpenSettingsTab',
+  descriptionKey: 'shortcutDescOpenSettingsTab',
+}));
+
+const SHORTCUT_COMMAND_GROUPS: Array<{
+  titleKey: string;
+  commands: ShortcutCommandDefinition[];
+}> = [
+  {
+    titleKey: 'shortcutGroupCowork',
+    commands: [
+      { key: ShortcutAction.NewChat, labelKey: 'newChat', descriptionKey: 'shortcutDescNewChat' },
+      { key: ShortcutAction.FocusPrompt, labelKey: 'shortcutFocusPrompt', descriptionKey: 'shortcutDescFocusPrompt' },
+      { key: ShortcutAction.StopCurrentTask, labelKey: 'shortcutStopCurrentTask', descriptionKey: 'shortcutDescStopCurrentTask' },
+      { key: ShortcutAction.Search, labelKey: 'search', descriptionKey: 'shortcutDescSearch' },
+      { key: ShortcutAction.ToggleArtifacts, labelKey: 'shortcutToggleArtifacts', descriptionKey: 'shortcutDescToggleArtifacts' },
+      {
+        key: ShortcutAction.SendMessage,
+        labelKey: 'sendMessageShortcut',
+        descriptionKey: 'shortcutDescSendMessage',
+        inputType: 'send',
+      },
+    ],
+  },
+  {
+    titleKey: 'shortcutGroupAgent',
+    commands: [
+      { key: ShortcutAction.PreviousAgent, labelKey: 'shortcutPreviousAgent', descriptionKey: 'shortcutDescPreviousAgent' },
+      { key: ShortcutAction.NextAgent, labelKey: 'shortcutNextAgent', descriptionKey: 'shortcutDescNextAgent' },
+      {
+        key: ShortcutAction.ShowCurrentAgentTasks,
+        labelKey: 'shortcutShowCurrentAgentTasks',
+        descriptionKey: 'shortcutDescShowCurrentAgentTasks',
+      },
+      ...AGENT_TASK_SLOT_COMMANDS,
+    ],
+  },
+  {
+    titleKey: 'shortcutGroupNavigation',
+    commands: [
+      { key: ShortcutAction.OpenCowork, labelKey: 'shortcutOpenCowork', descriptionKey: 'shortcutDescOpenCowork' },
+      { key: ShortcutAction.OpenScheduledTasks, labelKey: 'shortcutOpenScheduledTasks', descriptionKey: 'shortcutDescOpenScheduledTasks' },
+      { key: ShortcutAction.OpenKits, labelKey: 'shortcutOpenKits', descriptionKey: 'shortcutDescOpenKits' },
+      { key: ShortcutAction.OpenSkills, labelKey: 'shortcutOpenSkills', descriptionKey: 'shortcutDescOpenSkills' },
+      { key: ShortcutAction.OpenMcp, labelKey: 'shortcutOpenMcp', descriptionKey: 'shortcutDescOpenMcp' },
+      { key: ShortcutAction.ToggleSidebar, labelKey: 'shortcutToggleSidebar', descriptionKey: 'shortcutDescToggleSidebar' },
+    ],
+  },
+  {
+    titleKey: 'shortcutGroupSettingsTabs',
+    commands: SETTINGS_TAB_SHORTCUT_COMMANDS,
+  },
+  {
+    titleKey: 'shortcutGroupApp',
+    commands: [
+      { key: ShortcutAction.Settings, labelKey: 'openSettings', descriptionKey: 'shortcutDescSettings' },
+      { key: ShortcutAction.ShowShortcuts, labelKey: 'shortcutShowShortcuts', descriptionKey: 'shortcutDescShowShortcuts' },
+    ],
+  },
+];
+
+const SHORTCUT_COMMANDS = SHORTCUT_COMMAND_GROUPS.flatMap(group => group.commands);
+
+const getShortcutCommandText = (
+  command: ShortcutCommandDefinition,
+  field: 'labelKey' | 'descriptionKey',
+) => {
+  const value = i18nService.t(command[field]);
+  return value
+    .replace('{slot}', String(command.slot ?? ''))
+    .replace('{tab}', command.tabLabelKey ? i18nService.t(command.tabLabelKey) : '');
+};
 
 const SettingsSlidersIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg
@@ -112,6 +243,7 @@ export type SettingsOpenOptions = {
 
 interface SettingsProps extends SettingsOpenOptions {
   onClose: () => void;
+  initialTabRequestId?: number;
   onUpdateFound?: (info: AppUpdateInfo) => void;
   enterpriseConfig?: {
     ui?: Record<string, 'hide' | 'disable' | 'readonly'>;
@@ -272,6 +404,21 @@ const isSystemShortcut = (e: KeyboardEvent): boolean => {
   return false;
 };
 
+const isShortcutInputActive = () => {
+  const activeElement = document.activeElement;
+  if (!(activeElement instanceof HTMLElement)) return false;
+  return activeElement.dataset.shortcutInput === 'true';
+};
+
+const isTextEditingActive = () => {
+  const activeElement = document.activeElement;
+  if (!(activeElement instanceof HTMLElement)) return false;
+  if (activeElement.isContentEditable) return true;
+  if (activeElement instanceof HTMLTextAreaElement) return true;
+  if (activeElement instanceof HTMLSelectElement) return true;
+  return activeElement instanceof HTMLInputElement;
+};
+
 const formatShortcutFromEvent = (e: React.KeyboardEvent): string | null => {
   // Skip standalone modifier keys
   if (['Meta', 'Control', 'Alt', 'Shift'].includes(e.key)) return null;
@@ -282,7 +429,7 @@ const formatShortcutFromEvent = (e: React.KeyboardEvent): string | null => {
   const parts: string[] = [];
   if (e.metaKey) parts.push('Cmd');
   if (e.ctrlKey) parts.push('Ctrl');
-  if (e.altKey) parts.push('Alt');
+  if (e.altKey) parts.push(isMacPlatform ? 'Option' : 'Alt');
   if (e.shiftKey) parts.push('Shift');
 
   const keyMap: Record<string, string> = {
@@ -304,9 +451,16 @@ const SEND_SHORTCUT_OPTIONS = [
 
 const isMacPlatform = navigator.platform.includes('Mac');
 
-const ShortcutRecorder: React.FC<{ value: string; onChange: (v: string) => void }> = ({ value, onChange }) => {
+const ShortcutRecorder: React.FC<{
+  value: string;
+  label: string;
+  onChange: (v: string) => void;
+}> = ({ value, label, onChange }) => {
   const [recording, setRecording] = useState(false);
-  const divRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const recorderRef = useRef<HTMLButtonElement>(null);
+  const displayValue = formatShortcutForDisplay(value, { isMac: isMacPlatform });
+  const editLabel = i18nService.t('shortcutEditCommand').replace('{command}', label);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!recording) return;
@@ -321,28 +475,58 @@ const ShortcutRecorder: React.FC<{ value: string; onChange: (v: string) => void 
   useEffect(() => {
     if (!recording) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (divRef.current && !divRef.current.contains(e.target as Node)) setRecording(false);
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setRecording(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [recording]);
 
+  useEffect(() => {
+    if (!recording) return;
+    window.setTimeout(() => recorderRef.current?.focus(), 0);
+  }, [recording]);
+
+  if (recording) {
+    return (
+      <div ref={containerRef} className="flex items-center gap-3">
+        <button
+          ref={recorderRef}
+          type="button"
+          data-shortcut-input="true"
+          onKeyDown={handleKeyDown}
+          className="h-8 min-w-[8rem] rounded-xl border border-border bg-surface px-4 text-xs font-medium text-foreground shadow-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/25"
+        >
+          {i18nService.t('shortcutPressShortcut')}
+        </button>
+        <button
+          type="button"
+          data-shortcut-input="true"
+          onClick={() => setRecording(false)}
+          className="text-xs font-medium text-secondary transition-colors hover:text-foreground"
+        >
+          {i18nService.t('cancel')}
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div
-      ref={divRef}
-      tabIndex={0}
-      data-shortcut-input="true"
-      onKeyDown={handleKeyDown}
-      onClick={() => setRecording(true)}
-      onBlur={() => setRecording(false)}
-      className={`w-36 rounded-xl border px-3 py-1.5 text-sm cursor-pointer select-none text-center outline-none transition-colors
-        dark:bg-claude-darkSurfaceInset bg-claude-surfaceInset dark:text-claude-darkText text-claude-text
-        ${recording
-          ? 'border-claude-accent ring-1 ring-claude-accent/30 dark:text-claude-darkTextSecondary text-claude-textSecondary'
-          : 'dark:border-claude-darkBorder border-claude-border hover:border-claude-accent/50'
-        }`}
-    >
-      {value || i18nService.t('shortcutNotSet')}
+    <div className="flex items-center gap-2">
+      <span
+        title={displayValue || i18nService.t('shortcutNotSet')}
+        className="min-w-[5.5rem] max-w-[9rem] truncate rounded-full bg-surface-raised px-3 py-1 text-center text-xs font-medium text-secondary"
+      >
+        {displayValue || i18nService.t('shortcutNotSet')}
+      </span>
+      <button
+        type="button"
+        onClick={() => setRecording(true)}
+        title={editLabel}
+        aria-label={editLabel}
+        className="pointer-events-none inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-secondary opacity-0 transition-colors hover:bg-surface-raised hover:text-foreground group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+      >
+        <EditIcon className="h-4 w-4" />
+      </button>
     </div>
   );
 };
@@ -362,7 +546,8 @@ const SendShortcutSelect: React.FC<{ value: string; onChange: (v: string) => voi
 
   const currentLabel = (() => {
     const opt = SEND_SHORTCUT_OPTIONS.find(o => o.value === value);
-    if (!opt) return value;
+    if (!value) return i18nService.t('shortcutNotSet');
+    if (!opt) return formatShortcutForDisplay(value, { isMac: isMacPlatform });
     return isMacPlatform ? opt.labelMac : opt.label;
   })();
 
@@ -370,7 +555,7 @@ const SendShortcutSelect: React.FC<{ value: string; onChange: (v: string) => voi
     <div ref={containerRef} className="relative">
       <div
         onClick={() => setOpen(!open)}
-        className={`w-36 rounded-xl border px-3 py-1.5 text-sm cursor-pointer select-none text-center outline-none transition-colors
+        className={`w-28 rounded-lg border px-2.5 py-1 text-xs cursor-pointer select-none text-center outline-none transition-colors
           dark:bg-claude-darkSurfaceInset bg-claude-surfaceInset dark:text-claude-darkText text-claude-text
           ${open
             ? 'border-claude-accent ring-1 ring-claude-accent/30'
@@ -389,7 +574,7 @@ const SendShortcutSelect: React.FC<{ value: string; onChange: (v: string) => voi
                 key={option.value}
                 type="button"
                 onClick={() => { onChange(option.value); setOpen(false); }}
-                className={`flex items-center justify-between w-full px-3 py-1.5 text-sm transition-colors
+                className={`flex items-center justify-between w-full px-3 py-1.5 text-xs transition-colors
                   ${isActive
                     ? 'dark:text-claude-accent text-claude-accent font-medium'
                     : 'dark:text-claude-darkText text-claude-text'
@@ -462,7 +647,16 @@ const SettingsToggleRow: React.FC<{
   </div>
 );
 
-const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, noticeI18nKey, noticeExtra, onUpdateFound, enterpriseConfig }) => {
+const Settings: React.FC<SettingsProps> = ({
+  onClose,
+  initialTab,
+  initialTabRequestId,
+  notice,
+  noticeI18nKey,
+  noticeExtra,
+  onUpdateFound,
+  enterpriseConfig,
+}) => {
   const dispatch = useDispatch();
   // 状态
   const [activeTab, setActiveTab] = useState<TabType>(initialTab ?? 'general');
@@ -543,12 +737,8 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
   const updateCheckTimerRef = useRef<number | null>(null);
 
   // 快捷键设置
-  const [shortcuts, setShortcuts] = useState({
-    newChat: 'Ctrl+N',
-    search: 'Ctrl+F',
-    settings: 'Ctrl+,',
-    sendMessage: defaultConfig.shortcuts!.sendMessage,
-  });
+  const [shortcuts, setShortcuts] = useState<ShortcutConfig>(() => ({ ...defaultConfig.shortcuts! }));
+  const [shortcutSearchQuery, setShortcutSearchQuery] = useState('');
 
   // GitHub Copilot device code auth state
   const [copilotAuthStatus, setCopilotAuthStatus] = useState<'idle' | 'requesting' | 'awaiting_user' | 'polling' | 'authenticated' | 'error'>('idle');
@@ -1109,7 +1299,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
     if (initialTab) {
       setActiveTab(initialTab);
     }
-  }, [initialTab]);
+  }, [initialTab, initialTabRequestId]);
 
   // Subscribe to language changes
   useEffect(() => {
@@ -1945,7 +2135,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
   };
 
   // 标签页切换处理
-  const doTabChange = (tab: TabType) => {
+  const doTabChange = useCallback((tab: TabType) => {
     if (tab !== 'model') {
       setIsAddingModel(false);
       setIsEditingModel(false);
@@ -1956,14 +2146,14 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
       setModelFormError(null);
     }
     setActiveTab(tab);
-  };
+  }, []);
 
-  const handleTabChange = (tab: TabType) => {
+  const handleTabChange = useCallback((tab: TabType) => {
     if (activeTab === 'plugins' && pluginsSettingsRef.current?.guardLeave(() => doTabChange(tab))) {
       return;
     }
     doTabChange(tab);
-  };
+  }, [activeTab, doTabChange]);
 
   // Guarded close: check plugin dirty state before closing
   const guardedClose = useCallback(() => {
@@ -1973,31 +2163,63 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
     onClose();
   }, [activeTab, onClose]);
 
-  // Mapping from shortcut key to i18n label key for conflict messages
-  const shortcutLabelMap: Record<string, string> = {
-    newChat: 'newChat',
-    search: 'search',
-    settings: 'openSettings',
-    sendMessage: 'sendMessageShortcut',
-  };
+  const shortcutCommandMap = useMemo(
+    () => new Map(SHORTCUT_COMMANDS.map(command => [command.key, command])),
+    [],
+  );
+
+  const filteredShortcutGroups = useMemo(() => {
+    const query = shortcutSearchQuery.trim().toLowerCase();
+    if (!query) return SHORTCUT_COMMAND_GROUPS;
+
+    return SHORTCUT_COMMAND_GROUPS
+      .map(group => ({
+        ...group,
+        commands: group.commands.filter(command => {
+          const haystack = [
+            getShortcutCommandText(command, 'labelKey'),
+            getShortcutCommandText(command, 'descriptionKey'),
+            shortcuts[command.key] ?? '',
+            formatShortcutForDisplay(shortcuts[command.key], { isMac: isMacPlatform }),
+          ].join(' ').toLowerCase();
+          return haystack.includes(query);
+        }),
+      }))
+      .filter(group => group.commands.length > 0);
+  }, [shortcutSearchQuery, shortcuts]);
 
   // 快捷键更新处理
-  const handleShortcutChange = (key: keyof typeof shortcuts, value: string) => {
+  const handleShortcutChange = (key: ShortcutAction, value: string) => {
+    const normalizedValue = value.trim();
     // Check for conflicts with other shortcuts
-    const conflictKey = Object.keys(shortcuts).find(
-      k => k !== key && shortcuts[k as keyof typeof shortcuts] === value
-    );
+    const normalizedSignature = getShortcutConflictSignature(normalizedValue, { isMac: isMacPlatform });
+    const conflictKey = normalizedSignature
+      ? Object.values(ShortcutAction).find((action) => {
+          if (action === key) return false;
+          return getShortcutConflictSignature(shortcuts[action], { isMac: isMacPlatform }) === normalizedSignature;
+        })
+      : undefined;
     if (conflictKey) {
-      const conflictLabel = i18nService.t(shortcutLabelMap[conflictKey] ?? conflictKey);
+      const conflictCommand = shortcutCommandMap.get(conflictKey);
+      const conflictLabel = conflictCommand
+        ? getShortcutCommandText(conflictCommand, 'labelKey')
+        : conflictKey;
       setNoticeMessage(
-        i18nService.t('shortcutConflict').replace('{0}', value).replace('{1}', conflictLabel)
+        i18nService
+          .t('shortcutConflict')
+          .replace('{0}', formatShortcutForDisplay(normalizedValue, { isMac: isMacPlatform }))
+          .replace('{1}', conflictLabel)
       );
       return;
     }
     setShortcuts(prev => ({
       ...prev,
-      [key]: value
+      [key]: normalizedValue
     }));
+  };
+
+  const handleResetShortcuts = () => {
+    setShortcuts({ ...defaultConfig.shortcuts! });
   };
 
   // 阻止点击设置窗口时事件传播到背景
@@ -2662,6 +2884,26 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
     return sidebarTabs.find(t => t.key === activeTab)?.label ?? '';
   }, [activeTab, sidebarTabs]);
 
+  useEffect(() => {
+    const handleSettingsTabShortcut = (event: KeyboardEvent) => {
+      if (event.repeat || isShortcutInputActive() || isTextEditingActive()) return;
+
+      const command = SETTINGS_TAB_SHORTCUT_COMMANDS.find((candidate) => {
+        return matchesShortcut(event, shortcuts[candidate.key]);
+      });
+      if (!command) return;
+
+      const targetTab = SETTINGS_TAB_SHORTCUT_ACTIONS[command.key];
+      if (!targetTab || !sidebarTabs.some(tab => tab.key === targetTab)) return;
+
+      event.preventDefault();
+      handleTabChange(targetTab);
+    };
+
+    document.addEventListener('keydown', handleSettingsTabShortcut);
+    return () => document.removeEventListener('keydown', handleSettingsTabShortcut);
+  }, [shortcuts, sidebarTabs, handleTabChange]);
+
   const renderAppearanceSettings = () => (
     <div className="space-y-8">
       <div>
@@ -3206,32 +3448,88 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice, notice
 
       case 'shortcuts':
         return (
-          <div className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-3">
-                {i18nService.t('keyboardShortcuts')}
-              </label>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-foreground">{i18nService.t('newChat')}</span>
-                  <ShortcutRecorder value={shortcuts.newChat} onChange={(v) => handleShortcutChange('newChat', v)} />
+          <div className="space-y-4">
+            <div className="relative">
+              <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-secondary" />
+              <input
+                value={shortcutSearchQuery}
+                onChange={(event) => setShortcutSearchQuery(event.target.value)}
+                placeholder={i18nService.t('shortcutSearchPlaceholder')}
+                className="h-9 w-full rounded-xl border border-border bg-surface pl-9 pr-3 text-xs text-foreground outline-none transition-colors placeholder:text-secondary/70 focus:border-primary focus:ring-1 focus:ring-primary/25"
+              />
+            </div>
+            <p className="text-xs leading-5 text-secondary">
+              {i18nService.t('shortcutScopeHint')}
+            </p>
+            <div className="overflow-hidden rounded-xl border border-border bg-surface">
+              {filteredShortcutGroups.length > 0 ? filteredShortcutGroups.map((group, groupIndex) => (
+                <div key={group.titleKey}>
+                  <div className={`border-border bg-surface-raised/60 px-4 py-2 text-xs font-medium uppercase tracking-wide text-secondary ${
+                    groupIndex === 0 ? '' : 'border-t'
+                  }`}>
+                    {i18nService.t(group.titleKey)}
+                  </div>
+                  {group.commands.map((command, commandIndex) => {
+                    const value = shortcuts[command.key] ?? '';
+                    const commandLabel = getShortcutCommandText(command, 'labelKey');
+                    return (
+                      <div
+                        key={command.key}
+                        className={`group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5 ${
+                          commandIndex === 0 ? '' : 'border-t border-border/70'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-medium text-foreground">
+                            {commandLabel}
+                          </div>
+                          <div className="mt-0.5 line-clamp-2 text-xs text-secondary">
+                            {getShortcutCommandText(command, 'descriptionKey')}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {command.inputType === 'send' ? (
+                            <SendShortcutSelect
+                              value={value}
+                              onChange={(nextValue) => handleShortcutChange(command.key, nextValue)}
+                            />
+                          ) : (
+                            <ShortcutRecorder
+                              value={value}
+                              label={commandLabel}
+                              onChange={(nextValue) => handleShortcutChange(command.key, nextValue)}
+                            />
+                          )}
+                          {value && (
+                            <button
+                              type="button"
+                              onClick={() => handleShortcutChange(command.key, '')}
+                              title={i18nService.t('shortcutClear')}
+                              aria-label={i18nService.t('shortcutClear')}
+                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-secondary transition-colors hover:bg-surface-raised hover:text-foreground"
+                            >
+                              <TrashIcon className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-foreground">{i18nService.t('search')}</span>
-                  <ShortcutRecorder value={shortcuts.search} onChange={(v) => handleShortcutChange('search', v)} />
+              )) : (
+                <div className="px-4 py-8 text-center text-sm text-secondary">
+                  {i18nService.t('shortcutNoResults')}
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-foreground">{i18nService.t('openSettings')}</span>
-                  <ShortcutRecorder value={shortcuts.settings} onChange={(v) => handleShortcutChange('settings', v)} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-foreground">{i18nService.t('sendMessageShortcut')}</span>
-                  <SendShortcutSelect
-                    value={shortcuts.sendMessage}
-                    onChange={(v) => handleShortcutChange('sendMessage', v)}
-                  />
-                </div>
-              </div>
+              )}
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleResetShortcuts}
+                className="rounded-xl bg-surface-raised px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-border/60"
+              >
+                {i18nService.t('shortcutResetAll')}
+              </button>
             </div>
           </div>
         );

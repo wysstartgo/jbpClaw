@@ -52,6 +52,7 @@ import ModelSelector from '../ModelSelector';
 import { ActiveSkillBadge, SkillsPopover } from '../skills';
 import { resolveAgentModelSelection, resolveEffectiveModel, useAgentSelectedModel } from './agentModelSelection';
 import AttachmentCard from './AttachmentCard';
+import { CoworkUiEvent } from './constants';
 import FolderSelectorPopover from './FolderSelectorPopover';
 import { getCaretPixelPosition } from './getCaretPosition';
 import MediaMentionPicker from './MediaMentionPicker';
@@ -154,6 +155,7 @@ const truncateDisplayText = (value: string, maxLength: number): string => {
 };
 
 const getSendShortcutLabel = (value: string): string => {
+  if (!value) return i18nService.t('shortcutNotSet');
   const option = SEND_SHORTCUT_OPTIONS.find(o => o.value === value);
   if (!option) return value;
   return isMacPlatform ? option.labelMac : option.label;
@@ -456,9 +458,9 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
         textareaRef.current?.focus();
       });
     };
-    window.addEventListener('cowork:focus-input', handleFocusInput);
+    window.addEventListener(CoworkUiEvent.FocusInput, handleFocusInput);
     return () => {
-      window.removeEventListener('cowork:focus-input', handleFocusInput);
+      window.removeEventListener(CoworkUiEvent.FocusInput, handleFocusInput);
       if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
     };
   }, [dispatch, draftKey]);
@@ -856,6 +858,9 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
 
     let isSendCombo = false;
     switch (sendKey) {
+      case '':
+        isSendCombo = false;
+        break;
       case 'Enter':
         isSendCombo = !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
         break;
