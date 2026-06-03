@@ -28,6 +28,7 @@ import { migrateScheduledTaskRunsToOpenclaw,migrateScheduledTasksToOpenclaw } fr
 import { type AppUpdateInfo,AppUpdateIpc, AppUpdateSource } from '../shared/appUpdate/constants';
 import { ArtifactIpcChannel } from '../shared/artifact/constants';
 import { ArtifactBrowserPartition, ArtifactPreviewIpc } from '../shared/artifactPreview/constants';
+import { AuthIpcChannel } from '../shared/auth/constants';
 import { ClipboardIpc } from '../shared/clipboard/constants';
 import {
   CoworkIpcChannel,
@@ -120,6 +121,7 @@ import {
 import { mergeAgentInstructionPrompt, mergeAgentSkillIds } from './libs/agentEngine/agentContext';
 import { AppUpdateCoordinator } from './libs/appUpdateCoordinator';
 import { downloadUpdate, installUpdate } from './libs/appUpdateInstaller';
+import { AuthCallbackRouter } from './libs/authCallbackRouter';
 import { AssistantSpeechGuard } from './libs/assistantSpeechGuard';
 import { clearServerModelMetadata,getAllServerModelMetadata, getCurrentApiConfig, resolveCurrentApiConfig, setAuthTokensGetter, setQingShuInvocationContextGetter, setServerBaseUrlGetter, setStoreGetter, updateServerModelMetadata } from './libs/claudeSettings';
 import {
@@ -3314,8 +3316,15 @@ if (!gotTheLock) {
   // Register custom protocol for OAuth callback
   app.setAsDefaultProtocolClient('lobsterai');
 
-  // Buffer for deep link auth code received before renderer is ready
-  let pendingAuthCallback: AuthCallbackPayload | null = null;
+  const authCallbackRouter = new AuthCallbackRouter({
+    getTarget: () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return null;
+      return mainWindow.webContents;
+    },
+    onParseError: error => {
+      console.error('[Main] Failed to parse deep link:', error);
+    },
+  });
   let pendingBridgeCode: { code: string } | null = null;
 
   /**
@@ -3325,16 +3334,7 @@ if (!gotTheLock) {
     try {
       const parsed = new URL(url);
       if (parsed.hostname === 'auth' && parsed.pathname === '/callback') {
-        const code = parsed.searchParams.get('code');
-        const state = parsed.searchParams.get('state') || undefined;
-        if (code) {
-          const payload = { code, ...(state ? { state } : {}) };
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('auth:callback', payload);
-          } else {
-            pendingAuthCallback = payload;
-          }
-        }
+        authCallbackRouter.handleDeepLink(url);
       } else if (parsed.hostname === 'auth' && parsed.pathname === '/bridge') {
         const code = parsed.searchParams.get('code');
         if (code) {
@@ -3364,11 +3364,8 @@ if (!gotTheLock) {
   });
 
   // Allow renderer to retrieve a buffered auth code on init
-  ipcMain.handle('auth:getPendingCallback', () => {
-    const callback = pendingAuthCallback;
-    pendingAuthCallback = null;
-    return callback;
-  });
+  ipcMain.handle(AuthIpcChannel.GetPendingCallback, () =>
+    authCallbackRouter.markListenerReadyAndConsumePending());
 
   ipcMain.handle('auth:getPendingBridgeCode', () => {
     const bridgeCode = pendingBridgeCode;
@@ -3377,7 +3374,6 @@ if (!gotTheLock) {
   });
 
   const clearPendingAuthState = () => {
-    pendingAuthCallback = null;
     pendingBridgeCode = null;
     if (authWindow && !authWindow.isDestroyed()) {
       authWindow.close();
@@ -8146,6 +8142,7 @@ end tell'`, { timeout: 5000 });
 
     // 处理渲染进程崩溃或退出
     mainWindow.webContents.on('render-process-gone', (_event, details) => {
+      authCallbackRouter.markRendererUnavailable();
       console.error('Window render process gone:', details);
       scheduleReload('webContents-crashed');
     });
@@ -8191,6 +8188,9 @@ end tell'`, { timeout: 5000 });
         }, 3000);
       }
     });
+    mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+      authCallbackRouter.handleNavigationStarted({ isMainFrame, isInPlace });
+    });
 
     // 当窗口关闭时，清除引用
     mainWindow.on('closed', () => {
@@ -8198,6 +8198,7 @@ end tell'`, { timeout: 5000 });
         clearTimeout(windowStateSaveTimer);
         windowStateSaveTimer = null;
       }
+      authCallbackRouter.markRendererUnavailable();
       mainWindow = null;
     });
 
@@ -8728,18 +8729,7 @@ end tell'`, { timeout: 5000 });
     // Always buffer since renderer is not ready yet after createWindow()
     const coldStartDeepLink = process.argv.find(arg => arg.startsWith('lobsterai://'));
     if (coldStartDeepLink) {
-      try {
-        const parsed = new URL(coldStartDeepLink);
-        if (parsed.hostname === 'auth' && parsed.pathname === '/callback') {
-          const code = parsed.searchParams.get('code');
-          const state = parsed.searchParams.get('state') || undefined;
-          if (code) {
-            pendingAuthCallback = { code, ...(state ? { state } : {}) };
-          }
-        }
-      } catch (e) {
-        console.error('[Main] Failed to parse cold-start deep link:', e);
-      }
+      handleDeepLink(coldStartDeepLink);
     }
 
     // Auto-reconnect IM bots that were enabled before restart

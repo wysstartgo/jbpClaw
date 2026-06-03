@@ -44,6 +44,7 @@ import {
 } from '../shared/appUpdate/constants';
 import { ArtifactIpcChannel } from '../shared/artifact/constants';
 import { ArtifactPreviewIpc } from '../shared/artifactPreview/constants';
+import { AuthIpcChannel } from '../shared/auth/constants';
 import { ClipboardIpc } from '../shared/clipboard/constants';
 import { CoworkIpcChannel } from '../shared/cowork/constants';
 import { DialogIpc } from '../shared/dialog/constants';
@@ -795,12 +796,12 @@ contextBridge.exposeInMainWorld('electron', {
     getAccessToken: () => ipcRenderer.invoke('auth:getAccessToken'),
     getModels: () => ipcRenderer.invoke('auth:getModels'),
     getProfileSummary: () => ipcRenderer.invoke('auth:getProfileSummary'),
-    getPendingCallback: () => ipcRenderer.invoke('auth:getPendingCallback'),
+    getPendingCallback: () => ipcRenderer.invoke(AuthIpcChannel.GetPendingCallback),
     getPendingBridgeCode: () => ipcRenderer.invoke('auth:getPendingBridgeCode'),
     onCallback: (callback: (data: AuthCallbackPayload) => void) => {
       const handler = (_event: IpcRendererEvent, data: AuthCallbackPayload) => callback(data);
-      ipcRenderer.on('auth:callback', handler);
-      return () => ipcRenderer.removeListener('auth:callback', handler);
+      ipcRenderer.on(AuthIpcChannel.Callback, handler);
+      return () => ipcRenderer.removeListener(AuthIpcChannel.Callback, handler);
     },
     onBridgeCode: (callback: (data: { code: string }) => void) => {
       const handler = (_event: IpcRendererEvent, data: { code: string }) => callback(data);
