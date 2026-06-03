@@ -24,12 +24,26 @@ interface ModelSelectorProps {
 const DROPDOWN_MAX_HEIGHT = 344;
 const DROPDOWN_WIDTH = 240;
 const DROPDOWN_VIEWPORT_MARGIN = 8;
+const HOVER_CARD_WIDTH = 220;
+const HOVER_CARD_GAP = 8;
+const HOVER_CARD_VIEWPORT_MARGIN = 8;
 const MODEL_ICON_CLASS_NAME = 'h-[18px] w-[18px]';
 const ModelSelectorGroup = {
   Server: 'server',
   User: 'user',
 } as const;
 type ModelSelectorGroup = typeof ModelSelectorGroup[keyof typeof ModelSelectorGroup];
+
+export function resolveHoverCardTop(
+  desiredTop: number,
+  cardHeight: number,
+  viewportHeight: number,
+  viewportMargin = HOVER_CARD_VIEWPORT_MARGIN,
+): number {
+  const maxTop = Math.max(viewportMargin, viewportHeight - cardHeight - viewportMargin);
+  return Math.min(Math.max(desiredTop, viewportMargin), maxTop);
+}
+
 const MODEL_ICON_PROVIDER_HINTS: Array<{ pattern: RegExp; providerName: ProviderName | ProviderIconId }> = [
   { pattern: /doubao|豆包/i, providerName: ProviderIconId.Doubao },
   { pattern: /deepseek/i, providerName: ProviderName.DeepSeek },
@@ -62,6 +76,11 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   const dropdownRef = React.useRef<HTMLDivElement>(null);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const selectedItemRef = React.useRef<HTMLButtonElement>(null);
+  const [hoveredModel, setHoveredModel] = React.useState<Model | null>(null);
+  const [hoverCardStyle, setHoverCardStyle] = React.useState<React.CSSProperties>({});
+  const hoverCardRef = React.useRef<HTMLDivElement>(null);
+  const hoverTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const controlled = onChange !== undefined;
   const globalSelectedModel = useSelector((state: RootState) => state.model.selectedModel);
   const currentAgentId = useSelector((state: RootState) => state.agent.currentAgentId);
@@ -211,6 +230,23 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
     setIsOpen(false);
   };
 
+  React.useEffect(() => {
+    if (!isOpen) setHoveredModel(null);
+  }, [isOpen]);
+
+  React.useLayoutEffect(() => {
+    if (!hoveredModel || !hoverCardRef.current) return;
+
+    const cardRect = hoverCardRef.current.getBoundingClientRect();
+    const currentTop = typeof hoverCardStyle.top === 'number'
+      ? hoverCardStyle.top
+      : cardRect.top;
+    const nextTop = resolveHoverCardTop(currentTop, cardRect.height, window.innerHeight);
+
+    if (Math.abs(nextTop - currentTop) < 0.5) return;
+    setHoverCardStyle(style => ({ ...style, top: nextTop }));
+  }, [hoveredModel, hoverCardStyle.top]);
+
   // 如果没有可用模型，显示提示
   if (availableModels.length === 0) {
     return (
@@ -258,6 +294,42 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
     : 'font-medium text-sm';
   const triggerIconClassName = compact ? 'h-3.5 w-3.5' : 'h-4 w-4';
 
+  const handleModelHover = (model: Model, event: React.MouseEvent<HTMLButtonElement>) => {
+    if (model.accessible === false) return;
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    const itemRect = event.currentTarget.getBoundingClientRect();
+    hoverTimerRef.current = setTimeout(() => {
+      if (!model.description && !model.costMultiplier && !model.supportsImage && !model.supportsThinking) {
+        setHoveredModel(null);
+        return;
+      }
+      const dropdownEl = dropdownRef.current;
+      if (!dropdownEl) return;
+      const dropdownRect = dropdownEl.getBoundingClientRect();
+      const spaceRight = window.innerWidth - dropdownRect.right;
+      const style: React.CSSProperties = {
+        position: 'fixed',
+        top: itemRect.top,
+        zIndex: 10001,
+      };
+      if (spaceRight >= HOVER_CARD_WIDTH + HOVER_CARD_GAP) {
+        style.left = dropdownRect.right + HOVER_CARD_GAP;
+      } else {
+        style.right = window.innerWidth - dropdownRect.left + HOVER_CARD_GAP;
+      }
+      setHoverCardStyle(style);
+      setHoveredModel(model);
+    }, 200);
+  };
+
+  const handleModelHoverEnd = () => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setHoveredModel(null);
+  };
+
   const renderModelItem = (model: Model) => {
     const selected = isSelected(model);
 
@@ -267,6 +339,10 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
         type="button"
         key={getModelIdentityKey(model)}
         onClick={() => handleModelSelect(model)}
+        onMouseEnter={(event) => handleModelHover(model, event)}
+        onMouseLeave={handleModelHoverEnd}
+        onFocus={(event) => handleModelHover(model, event)}
+        onBlur={handleModelHoverEnd}
         className={`w-full px-3 py-2 text-left text-foreground hover:bg-surface-raised flex items-center gap-2.5 transition-colors ${
           selected ? 'bg-surface-raised/50' : ''
         }`}
@@ -287,6 +363,40 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
         )}
       </button>
     );
+  };
+
+  const renderHoverCard = () => {
+    if (!hoveredModel) return null;
+    const card = (
+      <div ref={hoverCardRef} style={hoverCardStyle} className="w-[220px] rounded-xl border border-border bg-surface shadow-popover p-3 pointer-events-none">
+        <div className="text-[13px] font-semibold text-foreground leading-5">{hoveredModel.name}</div>
+        {hoveredModel.description && (
+          <div className="mt-1 text-[11px] text-secondary leading-4">{hoveredModel.description}</div>
+        )}
+        {hoveredModel.costMultiplier != null && hoveredModel.costMultiplier > 0 && (
+          <div className="mt-2 text-[11px] text-secondary">
+            ({i18nService.t('modelCostMultiplierLabel')} x{hoveredModel.costMultiplier})
+          </div>
+        )}
+        {(hoveredModel.supportsImage || hoveredModel.supportsThinking) && (
+          <div className="mt-1.5 flex items-center gap-3 text-[11px] text-emerald-600">
+            {hoveredModel.supportsImage && (
+              <span className="flex items-center gap-1">
+                <span>✓</span>
+                <span>{i18nService.t('modelSupportsImageInputBadge')}</span>
+              </span>
+            )}
+            {hoveredModel.supportsThinking && (
+              <span className="flex items-center gap-1">
+                <span>✓</span>
+                <span>{i18nService.t('modelSupportsThinkingBadge')}</span>
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+    return createPortal(card, document.body);
   };
 
   const renderGroupTabs = () => (
@@ -350,6 +460,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
       </button>
 
       {portal && dropdown ? createPortal(dropdown, document.body) : dropdown}
+      {renderHoverCard()}
     </div>
   );
 };
