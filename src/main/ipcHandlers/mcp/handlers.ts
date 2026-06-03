@@ -3,6 +3,7 @@ import https from 'https';
 
 import { McpIpcChannel } from '../../../shared/mcp/constants';
 import { normalizeMcpServerUrlInput } from '../../../shared/mcp/url';
+import { OpenClawConfigImpact } from '../../libs/openclawConfigImpact';
 import type { McpRuntime } from '../../mcp/mcpRuntime';
 import type { McpServerFormData } from '../../mcp/mcpStore';
 
@@ -11,6 +12,7 @@ export interface McpHandlerDeps {
   syncOpenClawConfig: (options: {
     reason: string;
     restartGatewayIfRunning?: boolean;
+    expectedImpact?: OpenClawConfigImpact;
   }) => Promise<{ success: boolean; changed: boolean }>;
 }
 
@@ -42,7 +44,10 @@ function syncMcpConfig(
   syncOpenClawConfig: McpHandlerDeps['syncOpenClawConfig'],
   reason: string,
 ): void {
-  syncOpenClawConfig({ reason }).catch(err =>
+  syncOpenClawConfig({
+    reason,
+    expectedImpact: OpenClawConfigImpact.Restart,
+  }).catch(err =>
     console.error('[MCP] config sync error:', err),
   );
 }

@@ -1412,6 +1412,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
   /** Holds the client between start() and onHelloOk so stopGatewayClient can clean it up. */
   private pendingGatewayClient: GatewayClientLike | null = null;
   private gatewayReadyPromise: Promise<void> | null = null;
+  private gatewayReadyReject: ((error: Error) => void) | null = null;
   /** Serializes concurrent calls to ensureGatewayClientReady to prevent duplicate clients. */
   private gatewayClientInitLock: Promise<void> | null = null;
   private channelSessionSync: OpenClawChannelSessionSync | null = null;
@@ -3431,16 +3432,19 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     this.gatewayReadyPromise = new Promise<void>((resolve, reject) => {
       resolveReady = resolve;
       rejectReady = reject;
+      this.gatewayReadyReject = reject;
     });
 
     const settleResolve = () => {
       if (settled) return;
       settled = true;
+      this.gatewayReadyReject = null;
       resolveReady?.();
     };
     const settleReject = (error: Error) => {
       if (settled) return;
       settled = true;
+      this.gatewayReadyReject = null;
       rejectReady?.(error);
     };
 
@@ -3547,6 +3551,14 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     this.pendingGatewayClient = null;
     this.gatewayClientVersion = null;
     this.gatewayClientEntryPath = null;
+    if (this.gatewayReadyReject) {
+      const stoppedBeforeReadyError = new Error('OpenClaw gateway client stopped before handshake completed.');
+      this.gatewayReadyPromise?.catch(() => {
+        // suppress unhandled rejection when no caller is currently awaiting readiness
+      });
+      this.gatewayReadyReject(stoppedBeforeReadyError);
+      this.gatewayReadyReject = null;
+    }
     this.gatewayReadyPromise = null;
     this.channelSessionSync?.clearCache();
     this.sessionModelPatchStateBySession.clear();

@@ -11,6 +11,7 @@ import {
   type MediaGenerationRequest,
   type MediaGenerationResponse,
 } from '../libs/mcpBridgeServer';
+import { OpenClawConfigImpact } from '../libs/openclawConfigImpact';
 import type { ResolvedMcpServer } from '../libs/openclawConfigSync';
 import { resolveStdioCommand } from '../libs/resolveStdioCommand';
 import type { SqliteStore } from '../sqliteStore';
@@ -25,6 +26,7 @@ export interface McpRuntimeDeps {
   syncOpenClawConfig: (options: {
     reason: string;
     restartGatewayIfRunning?: boolean;
+    expectedImpact?: OpenClawConfigImpact;
   }) => Promise<{ success: boolean; changed: boolean }>;
 }
 
@@ -54,7 +56,10 @@ export class McpRuntime {
         this.getStore(),
         () => this.broadcastServersChanged(),
         reason => {
-          this.deps.syncOpenClawConfig({ reason }).catch(err =>
+          this.deps.syncOpenClawConfig({
+            reason,
+            expectedImpact: OpenClawConfigImpact.Restart,
+          }).catch(err =>
             console.error('[MCP] config sync error after launch resolution:', err),
           );
         },

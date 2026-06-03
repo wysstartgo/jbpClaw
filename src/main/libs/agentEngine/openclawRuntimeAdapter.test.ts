@@ -486,6 +486,22 @@ function createPatchAdapter(options?: {
   return { adapter, requests };
 }
 
+test('disconnectGatewayClient rejects pending gateway readiness immediately', async () => {
+  const adapter = new OpenClawRuntimeAdapter({} as never, {} as never);
+  let rejectReady: ((error: Error) => void) | null = null;
+  const readiness = new Promise<void>((_resolve, reject) => {
+    rejectReady = reject;
+  });
+  adapter.gatewayReadyPromise = readiness;
+  adapter.gatewayReadyReject = rejectReady;
+
+  adapter.disconnectGatewayClient();
+
+  await expect(readiness).rejects.toThrow('OpenClaw gateway client stopped before handshake completed.');
+  expect(adapter.gatewayReadyPromise).toBeNull();
+  expect(adapter.gatewayReadyReject).toBeNull();
+});
+
 test('patchSession uses the persisted IM channel session key after runtime cache is empty', async () => {
   const { adapter, requests } = createPatchAdapter({
     isChannelSession: true,

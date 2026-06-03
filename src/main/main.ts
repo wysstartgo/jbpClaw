@@ -1451,6 +1451,11 @@ const bootstrapOpenClawEngine = async (
 let pendingTokenRefresh: Promise<string | null> | null = null;
 
 const ensureOpenClawRunningForCowork = async () => {
+  const configApplyStatus = await waitForOpenClawConfigApply('cowork engine startup');
+  if (configApplyStatus) {
+    return configApplyStatus;
+  }
+
   const manager = getOpenClawEngineManager();
   const status = manager.getStatus();
   if (status.phase === 'running') {
@@ -1705,12 +1710,80 @@ const clearDeferredRestart = () => {
   }
 };
 
+type SyncOpenClawConfigOptions = {
+  reason: string;
+  restartGatewayIfRunning?: boolean;
+  expectedImpact?: OpenClawConfigImpact;
+};
+
+type SyncOpenClawConfigResult = {
+  success: boolean;
+  changed: boolean;
+  status?: OpenClawEngineStatus;
+  error?: string;
+};
+
+type GatewayConfigApplyState = {
+  reason: string;
+  startedAt: number;
+  restartRequired: boolean;
+  promise: Promise<void>;
+};
+
+let openClawConfigApplyQueue: Promise<void> = Promise.resolve();
+let openClawConfigApplyState: GatewayConfigApplyState | null = null;
+let openClawConfigApplyGeneration = 0;
+let deferredRestartReason: string | null = null;
+
+const buildConfigApplyPendingStatus = (message: string): OpenClawEngineStatus => {
+  const current = getOpenClawEngineManager().getStatus();
+  return {
+    phase: 'starting',
+    version: current.version,
+    message,
+    canRetry: false,
+  };
+};
+
+const waitForOpenClawConfigApply = async (context: string): Promise<OpenClawEngineStatus | null> => {
+  const pendingApply = openClawConfigApplyState;
+  if (pendingApply) {
+    console.log(
+      '[OpenClawConfigApply] waiting for pending config sync before proceeding.',
+      `Context ${context}.`,
+      `Reason ${pendingApply.reason}.`,
+      `Restart required ${pendingApply.restartRequired}.`,
+    );
+    try {
+      await pendingApply.promise;
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : 'OpenClaw config sync failed.';
+      return buildConfigApplyPendingStatus(message);
+    }
+  }
+
+  if (deferredRestartReason) {
+    return buildConfigApplyPendingStatus(
+      'OpenClaw is applying MCP configuration. Please try again shortly.',
+    );
+  }
+
+  return null;
+};
+
 const executeDeferredGatewayRestart = async (reason: string) => {
   clearDeferredRestart();
+  deferredRestartReason = null;
   console.log(
     `${gwDiagTs()} executeDeferredGatewayRestart: performing deferred restart (reason: ${reason})`,
   );
-  await syncOpenClawConfig({ reason: `deferred:${reason}` });
+  await syncOpenClawConfig({
+    reason: `deferred:${reason}`,
+    restartGatewayIfRunning: true,
+    expectedImpact: OpenClawConfigImpact.Restart,
+  });
 };
 
 const scheduleDeferredGatewayRestart = (reason: string) => {
@@ -1726,6 +1799,7 @@ const scheduleDeferredGatewayRestart = (reason: string) => {
   console.log(
     `${gwDiagTs()} scheduleDeferredGatewayRestart: scheduling deferred restart, polling every ${DEFERRED_RESTART_POLL_MS}ms, max wait ${DEFERRED_RESTART_MAX_WAIT_MS}ms (reason: ${reason})`,
   );
+  deferredRestartReason = reason;
   deferredRestartTimer = setInterval(() => {
     if (!hasActiveGatewayWorkloads()) {
       void executeDeferredGatewayRestart(reason);
@@ -1741,17 +1815,12 @@ const scheduleDeferredGatewayRestart = (reason: string) => {
   }, DEFERRED_RESTART_MAX_WAIT_MS);
 };
 
-const syncOpenClawConfig = async (
-  options: { reason: string; restartGatewayIfRunning?: boolean } = { reason: 'unknown' },
-): Promise<{
-  success: boolean;
-  changed: boolean;
-  status?: OpenClawEngineStatus;
-  error?: string;
-}> => {
+const _syncOpenClawConfigImpl = async (
+  options: SyncOpenClawConfigOptions = { reason: 'unknown' },
+): Promise<SyncOpenClawConfigResult> => {
   const D = gwDiagTs;
   console.log(
-    `${D()} ──── syncOpenClawConfig START reason=${options.reason} restartIfRunning=${!!options.restartGatewayIfRunning}`,
+    `${D()} ──── syncOpenClawConfig START reason=${options.reason} restartIfRunning=${!!options.restartGatewayIfRunning} expectedImpact=${options.expectedImpact ?? OpenClawConfigImpact.None}`,
   );
 
   // Resolve MCP servers before sync (async → cache for synchronous callback)
@@ -1764,7 +1833,7 @@ const syncOpenClawConfig = async (
 
   const syncResult = getOpenClawConfigSync().sync(options.reason);
   console.log(
-    `${D()} sync() ok=${syncResult.ok} changed=${syncResult.changed} bindingsChanged=${!!syncResult.bindingsChanged}`,
+    `${D()} sync() ok=${syncResult.ok} changed=${syncResult.changed} bindingsChanged=${!!syncResult.bindingsChanged} restartImpact=${syncResult.restartImpact ?? OpenClawConfigImpact.None}`,
   );
   if (!syncResult.ok) {
     console.log(`${D()} sync FAILED: ${syncResult.error}`);
@@ -1836,13 +1905,20 @@ const syncOpenClawConfig = async (
   // Force a hard restart when env/bindings changed, or when the caller explicitly
   // requires a running gateway restart. Some IM account state changes are stored
   // outside openclaw.json, so the explicit flag must not depend on config diffing.
+  const expectedRestartImpact =
+    syncResult.changed
+    && options.expectedImpact === OpenClawConfigImpact.Restart;
+  const syncRestartImpact =
+    syncResult.restartImpact === OpenClawConfigImpact.Restart;
   const needsHardRestart =
     secretEnvVarsChanged ||
     syncResult.bindingsChanged === true ||
+    syncRestartImpact ||
+    expectedRestartImpact ||
     options.restartGatewayIfRunning === true;
 
   console.log(
-    `${D()} needsHardRestart=${needsHardRestart} (envChanged=${secretEnvVarsChanged} bindingsChanged=${!!syncResult.bindingsChanged} configChanged=${syncResult.changed} restartFlag=${!!options.restartGatewayIfRunning})`,
+    `${D()} needsHardRestart=${needsHardRestart} (envChanged=${secretEnvVarsChanged} bindingsChanged=${!!syncResult.bindingsChanged} configChanged=${syncResult.changed} restartImpact=${syncResult.restartImpact ?? OpenClawConfigImpact.None} expectedRestart=${expectedRestartImpact} restartFlag=${!!options.restartGatewayIfRunning})`,
   );
 
   if (!needsHardRestart) {
@@ -1898,6 +1974,51 @@ const syncOpenClawConfig = async (
     changed: true,
     status: restarted,
   };
+};
+
+const syncOpenClawConfig = async (
+  options: SyncOpenClawConfigOptions = { reason: 'unknown' },
+): Promise<SyncOpenClawConfigResult> => {
+  const generation = ++openClawConfigApplyGeneration;
+  const startAfterPrevious = openClawConfigApplyQueue.catch(() => {});
+  const restartRequired =
+    options.restartGatewayIfRunning === true
+    || options.expectedImpact === OpenClawConfigImpact.Restart;
+  const resultPromise = startAfterPrevious.then(() => _syncOpenClawConfigImpl(options));
+  const barrierPromise = resultPromise.then((result) => {
+    if (!result.success) {
+      throw new Error(result.error || 'OpenClaw config sync failed.');
+    }
+  });
+  barrierPromise.catch(() => {
+    // The awaiter will surface the error when a user action is blocked by this barrier.
+  });
+
+  openClawConfigApplyState = {
+    reason: options.reason,
+    startedAt: Date.now(),
+    restartRequired,
+    promise: barrierPromise,
+  };
+
+  openClawConfigApplyQueue = resultPromise.then(
+    (): void => undefined,
+    (): void => undefined,
+  );
+
+  try {
+    return await resultPromise;
+  } catch (error) {
+    return {
+      success: false,
+      changed: false,
+      error: error instanceof Error ? error.message : 'OpenClaw config sync failed.',
+    };
+  } finally {
+    if (generation === openClawConfigApplyGeneration) {
+      openClawConfigApplyState = null;
+    }
+  }
 };
 
 const bindCoworkRuntimeForwarder = (): void => {
@@ -2129,6 +2250,10 @@ const getIMGatewayManager = () => {
         });
       },
       ensureOpenClawGatewayConnected: async () => {
+        const configApplyStatus = await waitForOpenClawConfigApply('IM gateway client connection');
+        if (configApplyStatus) {
+          throw new Error(configApplyStatus.message || 'OpenClaw is applying configuration changes.');
+        }
         if (openClawRuntimeAdapter) {
           await openClawRuntimeAdapter.connectGatewayIfNeeded();
         }
@@ -2137,6 +2262,10 @@ const getIMGatewayManager = () => {
       ensureOpenClawGatewayReady: async () => {
         if (!openClawRuntimeAdapter) {
           throw new Error('OpenClaw runtime adapter not initialized.');
+        }
+        const configApplyStatus = await waitForOpenClawConfigApply('IM gateway readiness check');
+        if (configApplyStatus) {
+          throw new Error(configApplyStatus.message || 'OpenClaw is applying configuration changes.');
         }
         await openClawRuntimeAdapter.ensureReady();
         await openClawRuntimeAdapter.connectGatewayIfNeeded();
