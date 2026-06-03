@@ -31,7 +31,7 @@ import {
   type WakeActivationOverlayStateChange,
 } from './components/wakeActivationOverlayHelpers';
 import WindowTitleBar from './components/window/WindowTitleBar';
-import { defaultConfig, getProviderDisplayName } from './config';
+import { defaultConfig, getProviderDisplayName, ShortcutAction } from './config';
 import { AppCustomEvent } from './constants/app';
 import { isPetFloatingRoute } from './pet/floatingRoute';
 import PetCompanion from './pet/PetCompanion';
@@ -67,6 +67,7 @@ import { scheduledTaskService } from './services/scheduledTask';
 import { matchesShortcut } from './services/shortcuts';
 import { themeService } from './services/theme';
 import { RootState, store } from './store';
+import { togglePanel } from './store/slices/artifactSlice';
 import { beginLoadSession, setDraftPrompt } from './store/slices/coworkSlice';
 import { setActiveKitIds } from './store/slices/kitSlice';
 import {
@@ -113,6 +114,24 @@ const getOpenClawProviderIdForConfig = (
   }
   return ProviderRegistry.getOpenClawProviderId(providerName);
 };
+
+const SETTINGS_TAB_SHORTCUT_ACTIONS: Array<{
+  action: ShortcutAction;
+  initialTab: NonNullable<SettingsOpenOptions['initialTab']>;
+}> = [
+  { action: ShortcutAction.OpenSettingsGeneral, initialTab: 'general' },
+  { action: ShortcutAction.OpenSettingsAppearance, initialTab: 'appearance' },
+  { action: ShortcutAction.OpenSettingsAgentEngine, initialTab: 'coworkAgentEngine' },
+  { action: ShortcutAction.OpenSettingsModel, initialTab: 'model' },
+  { action: ShortcutAction.OpenSettingsIm, initialTab: 'im' },
+  { action: ShortcutAction.OpenSettingsBrowser, initialTab: 'browserWebAccess' },
+  { action: ShortcutAction.OpenSettingsEmail, initialTab: 'email' },
+  { action: ShortcutAction.OpenSettingsMemory, initialTab: 'coworkMemory' },
+  { action: ShortcutAction.OpenSettingsDreaming, initialTab: 'coworkDreaming' },
+  { action: ShortcutAction.OpenSettingsPlugins, initialTab: 'plugins' },
+  { action: ShortcutAction.OpenSettingsShortcuts, initialTab: 'shortcuts' },
+  { action: ShortcutAction.OpenSettingsAbout, initialTab: 'about' },
+];
 
 const createInitialAppUpdateState = (): AppUpdateRuntimeState => ({
   status: AppUpdateStatus.Idle,
@@ -1212,9 +1231,18 @@ const MainApp: React.FC = () => {
     return activeElement.dataset.shortcutInput === 'true';
   };
 
+  const isTextEditingActive = () => {
+    const activeElement = document.activeElement;
+    if (!(activeElement instanceof HTMLElement)) return false;
+    if (activeElement.isContentEditable) return true;
+    if (activeElement instanceof HTMLTextAreaElement) return true;
+    if (activeElement instanceof HTMLSelectElement) return true;
+    return activeElement instanceof HTMLInputElement;
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || isShortcutInputActive()) return;
+      if (event.repeat || isShortcutInputActive() || isTextEditingActive()) return;
 
       const { shortcuts } = configService.getConfig();
       const activeShortcuts = {
@@ -1222,27 +1250,115 @@ const MainApp: React.FC = () => {
         ...(shortcuts ?? {}),
       };
 
-      if (matchesShortcut(event, activeShortcuts.newChat)) {
+      const matchesAction = (action: ShortcutAction) => matchesShortcut(event, activeShortcuts[action]);
+
+      if (showSettings) {
+        if (matchesAction(ShortcutAction.ShowShortcuts)) {
+          event.preventDefault();
+          handleShowSettings({ initialTab: 'shortcuts' });
+        }
+        return;
+      }
+
+      if (showUpdateModal || pendingPermission !== null) return;
+
+      if (matchesAction(ShortcutAction.NewChat)) {
         event.preventDefault();
         handleNewChat();
         return;
       }
 
-      if (matchesShortcut(event, activeShortcuts.search)) {
+      if (matchesAction(ShortcutAction.Search)) {
         event.preventDefault();
         handleOpenCoworkSearch();
         return;
       }
 
-      if (matchesShortcut(event, activeShortcuts.settings)) {
+      if (matchesAction(ShortcutAction.Settings)) {
         event.preventDefault();
         handleShowSettings();
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.ShowShortcuts)) {
+        event.preventDefault();
+        handleShowSettings({ initialTab: 'shortcuts' });
+        return;
+      }
+
+      const settingsTabShortcut = SETTINGS_TAB_SHORTCUT_ACTIONS.find(({ action }) => matchesAction(action));
+      if (settingsTabShortcut) {
+        event.preventDefault();
+        handleShowSettings({ initialTab: settingsTabShortcut.initialTab });
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.FocusPrompt)) {
+        event.preventDefault();
+        handleFocusCoworkInput(false);
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.StopCurrentTask)) {
+        event.preventDefault();
+        if (currentSessionId) {
+          void coworkService.stopSession(currentSessionId);
+        }
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.ToggleArtifacts)) {
+        event.preventDefault();
+        setMainView(WorkbenchMainViewId.Cowork);
+        setCoworkWorkspaceView('conversation');
+        dispatch(togglePanel({ sessionId: currentSessionId ?? undefined }));
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.OpenCowork)) {
+        event.preventDefault();
+        handleSelectMainView(WorkbenchMainViewId.Cowork);
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.OpenScheduledTasks)) {
+        event.preventDefault();
+        handleSelectMainView(WorkbenchMainViewId.ScheduledTasks);
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.OpenKits)) {
+        event.preventDefault();
+        handleSelectMainView(WorkbenchMainViewId.Kits);
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.OpenSkills)) {
+        event.preventDefault();
+        handleSelectMainView(WorkbenchMainViewId.Skills);
+        return;
+      }
+
+      if (matchesAction(ShortcutAction.OpenMcp)) {
+        event.preventDefault();
+        handleSelectMainView(WorkbenchMainViewId.Applications);
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleOpenCoworkSearch, handleShowSettings, handleNewChat]);
+  }, [
+    currentSessionId,
+    dispatch,
+    handleFocusCoworkInput,
+    handleNewChat,
+    handleOpenCoworkSearch,
+    handleSelectMainView,
+    handleShowSettings,
+    pendingPermission,
+    showSettings,
+    showUpdateModal,
+  ]);
 
   useEffect(() => {
     return () => {

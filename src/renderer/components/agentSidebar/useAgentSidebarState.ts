@@ -458,6 +458,17 @@ export const useAgentSidebarState = () => {
     });
   }, [hasMoreTasksByAgentId, setAgentFailed, setAgentLoading, taskPreviewsByAgentId]);
 
+  const expandAgent = useCallback((agentId: string) => {
+    setExpandedAgentIds((previous) => {
+      return previous.includes(agentId) ? previous : [...previous, agentId];
+    });
+  }, []);
+
+  const expandTasks = useCallback((agentId: string) => {
+    expandAgent(agentId);
+    return loadMoreTasks(agentId);
+  }, [expandAgent, loadMoreTasks]);
+
   const collapseTasks = useCallback((agentId: string) => {
     setExpandedTaskListAgentIds((previous) => {
       return collapseAgentSidebarTaskList(previous, agentId);
@@ -577,6 +588,8 @@ export const useAgentSidebarState = () => {
     removeAgentTaskPreviews,
     retryLoadTasks,
     loadMoreTasks,
+    expandAgent,
+    expandTasks,
     collapseTasks,
     toggleAgentExpanded,
   };

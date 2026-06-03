@@ -10,6 +10,53 @@ import { ProviderRegistry } from '../shared/providers';
 import { TtsEngine } from '../shared/tts/constants';
 import type { WakeInputConfig } from '../shared/wakeInput/constants';
 
+export const ShortcutAction = {
+  NewChat: 'newChat',
+  Search: 'search',
+  Settings: 'settings',
+  SendMessage: 'sendMessage',
+  ShowShortcuts: 'showShortcuts',
+  FocusPrompt: 'focusPrompt',
+  StopCurrentTask: 'stopCurrentTask',
+  ToggleSidebar: 'toggleSidebar',
+  ToggleArtifacts: 'toggleArtifacts',
+  PreviousAgent: 'previousAgent',
+  NextAgent: 'nextAgent',
+  ShowCurrentAgentTasks: 'showCurrentAgentTasks',
+  OpenAgentTask1: 'openAgentTask1',
+  OpenAgentTask2: 'openAgentTask2',
+  OpenAgentTask3: 'openAgentTask3',
+  OpenAgentTask4: 'openAgentTask4',
+  OpenAgentTask5: 'openAgentTask5',
+  OpenAgentTask6: 'openAgentTask6',
+  OpenAgentTask7: 'openAgentTask7',
+  OpenAgentTask8: 'openAgentTask8',
+  OpenAgentTask9: 'openAgentTask9',
+  OpenCowork: 'openCowork',
+  OpenScheduledTasks: 'openScheduledTasks',
+  OpenKits: 'openKits',
+  OpenSkills: 'openSkills',
+  OpenMcp: 'openMcp',
+  OpenSettingsGeneral: 'openSettingsGeneral',
+  OpenSettingsAppearance: 'openSettingsAppearance',
+  OpenSettingsAgentEngine: 'openSettingsAgentEngine',
+  OpenSettingsModel: 'openSettingsModel',
+  OpenSettingsIm: 'openSettingsIm',
+  OpenSettingsBrowser: 'openSettingsBrowser',
+  OpenSettingsEmail: 'openSettingsEmail',
+  OpenSettingsMemory: 'openSettingsMemory',
+  OpenSettingsDreaming: 'openSettingsDreaming',
+  OpenSettingsPlugins: 'openSettingsPlugins',
+  OpenSettingsShortcuts: 'openSettingsShortcuts',
+  OpenSettingsAbout: 'openSettingsAbout',
+} as const;
+
+export type ShortcutAction = typeof ShortcutAction[keyof typeof ShortcutAction];
+
+export type ShortcutConfig = Record<ShortcutAction, string> & {
+  [key: string]: string | undefined;
+};
+
 export interface VoicePostProcessConfig {
   sttLlmCorrectionEnabled: boolean;
   ttsLlmRewriteEnabled: boolean;
@@ -64,12 +111,7 @@ export interface AppConfig {
   // 认证后端配置
   auth: AuthConfig;
   // 快捷键配置
-  shortcuts?: {
-    newChat: string;
-    search: string;
-    settings: string;
-    [key: string]: string | undefined;
-  };
+  shortcuts?: ShortcutConfig;
   speechInput?: {
     stopCommand: string;
     submitCommand: string;
@@ -170,9 +212,44 @@ export const defaultConfig: AppConfig = {
   },
   auth: DEFAULT_AUTH_CONFIG,
   shortcuts: {
-    newChat: 'Ctrl+N',
-    search: 'Ctrl+F',
-    settings: 'Ctrl+,',
+    [ShortcutAction.NewChat]: 'CommandOrControl+N',
+    [ShortcutAction.Search]: 'CommandOrControl+F',
+    [ShortcutAction.Settings]: 'CommandOrControl+,',
+    [ShortcutAction.SendMessage]: 'Enter',
+    [ShortcutAction.ShowShortcuts]: 'CommandOrControl+/',
+    [ShortcutAction.FocusPrompt]: 'CommandOrControl+K',
+    [ShortcutAction.StopCurrentTask]: 'CommandOrControl+.',
+    [ShortcutAction.ToggleSidebar]: 'CommandOrControl+B',
+    [ShortcutAction.ToggleArtifacts]: 'CommandOrControl+Shift+B',
+    [ShortcutAction.PreviousAgent]: 'CommandOrControl+Shift+[',
+    [ShortcutAction.NextAgent]: 'CommandOrControl+Shift+]',
+    [ShortcutAction.ShowCurrentAgentTasks]: 'CommandOrControl+Shift+H',
+    [ShortcutAction.OpenAgentTask1]: 'CommandOrControl+Shift+1',
+    [ShortcutAction.OpenAgentTask2]: 'CommandOrControl+Shift+2',
+    [ShortcutAction.OpenAgentTask3]: 'CommandOrControl+Shift+3',
+    [ShortcutAction.OpenAgentTask4]: 'CommandOrControl+Shift+4',
+    [ShortcutAction.OpenAgentTask5]: 'CommandOrControl+Shift+5',
+    [ShortcutAction.OpenAgentTask6]: 'CommandOrControl+Shift+6',
+    [ShortcutAction.OpenAgentTask7]: 'CommandOrControl+Shift+7',
+    [ShortcutAction.OpenAgentTask8]: 'CommandOrControl+Shift+8',
+    [ShortcutAction.OpenAgentTask9]: 'CommandOrControl+Shift+9',
+    [ShortcutAction.OpenCowork]: 'CommandOrControl+1',
+    [ShortcutAction.OpenScheduledTasks]: 'CommandOrControl+2',
+    [ShortcutAction.OpenKits]: 'CommandOrControl+3',
+    [ShortcutAction.OpenSkills]: 'CommandOrControl+4',
+    [ShortcutAction.OpenMcp]: 'CommandOrControl+5',
+    [ShortcutAction.OpenSettingsGeneral]: '',
+    [ShortcutAction.OpenSettingsAppearance]: '',
+    [ShortcutAction.OpenSettingsAgentEngine]: '',
+    [ShortcutAction.OpenSettingsModel]: '',
+    [ShortcutAction.OpenSettingsIm]: '',
+    [ShortcutAction.OpenSettingsBrowser]: '',
+    [ShortcutAction.OpenSettingsEmail]: '',
+    [ShortcutAction.OpenSettingsMemory]: '',
+    [ShortcutAction.OpenSettingsDreaming]: '',
+    [ShortcutAction.OpenSettingsPlugins]: '',
+    [ShortcutAction.OpenSettingsShortcuts]: '',
+    [ShortcutAction.OpenSettingsAbout]: '',
   },
   speechInput: DEFAULT_SPEECH_INPUT_CONFIG,
   wakeInput: DEFAULT_WAKE_INPUT_CONFIG,
