@@ -46,6 +46,7 @@ import {
 } from '../shared/htmlShare/constants';
 import { type ListLocalWebServicesOptions, type LocalWebService, LocalWebServicesIpc } from '../shared/localWebServices/constants';
 import { McpIpcChannel } from '../shared/mcp/constants';
+import { normalizeMcpServerUrlInput } from '../shared/mcp/url';
 import { PetStatus } from '../shared/pet/constants';
 import { type Platform as SharedPlatform,PlatformRegistry } from '../shared/platform';
 import { isQingShuServerProvider,OpenClawProviderId, ProviderName } from '../shared/providers';
@@ -544,6 +545,20 @@ function sanitizeUpdateHtmlShareStatusInput(input: unknown): HtmlShareUpdateStat
     shareId: sanitizeHtmlShareString(source.shareId, 'shareId', 64),
     status,
   };
+}
+
+function normalizeMcpServerInput(data: Partial<McpServerFormData>): Partial<McpServerFormData> {
+  if (
+    (data.transportType === 'sse' || data.transportType === 'http')
+    && data.url !== undefined
+  ) {
+    const normalized = normalizeMcpServerUrlInput(data.url);
+    if (!normalized.ok) {
+      throw new Error('MCP server URL must be an absolute HTTP or HTTPS URL.');
+    }
+    return { ...data, url: normalized.url };
+  }
+  return data;
 }
 
 function normalizeHtmlShareSourceFilePath(filePath: string): string {
@@ -4625,7 +4640,8 @@ if (!gotTheLock) {
 
   ipcMain.handle(McpIpcChannel.Create, async (_event, data: McpServerFormData) => {
     try {
-      const server = getMcpStore().createServer(data);
+      const normalizedData = normalizeMcpServerInput(data) as McpServerFormData;
+      const server = getMcpStore().createServer(normalizedData);
       if (server.enabled) {
         ensureMcpLaunchResolution(server.id, 'mcp-server-created');
       }
@@ -4639,7 +4655,8 @@ if (!gotTheLock) {
 
   ipcMain.handle(McpIpcChannel.Update, async (_event, id: string, data: Partial<McpServerFormData>) => {
     try {
-      const server = getMcpStore().updateServer(id, data);
+      const normalizedData = normalizeMcpServerInput(data);
+      const server = getMcpStore().updateServer(id, normalizedData);
       if (server?.enabled) {
         ensureMcpLaunchResolution(server.id, 'mcp-server-updated');
       }

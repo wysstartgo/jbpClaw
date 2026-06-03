@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { McpUrlValidationError, normalizeMcpServerUrlInput } from '../../../shared/mcp/url';
 import { i18nService } from '../../services/i18n';
 import { McpServerConfig, McpServerFormData, McpRegistryEntry } from '../../types/mcp';
 
@@ -132,6 +133,23 @@ const McpServerFormModal: React.FC<McpServerFormModalProps> = ({
       return;
     }
 
+    let normalizedUrl = '';
+    if (transportType === 'sse' || transportType === 'http') {
+      const normalized = normalizeMcpServerUrlInput(url);
+      if (!normalized.ok) {
+        setError(
+          normalized.error === McpUrlValidationError.Multiple
+            ? i18nService.t('mcpUrlMultiple')
+            : i18nService.t('mcpUrlInvalid'),
+        );
+        return;
+      }
+      normalizedUrl = normalized.url;
+      if (normalized.extracted && normalizedUrl !== url) {
+        setUrl(normalizedUrl);
+      }
+    }
+
     const missingRequiredEnv: Record<number, boolean> = {};
     envRows.forEach((row, index) => {
       if (row.required && !row.value.trim()) {
@@ -171,7 +189,7 @@ const McpServerFormModal: React.FC<McpServerFormModalProps> = ({
       if (args.length > 0) data.args = args;
       if (Object.keys(env).length > 0) data.env = env;
     } else {
-      data.url = url.trim();
+      data.url = normalizedUrl;
       if (Object.keys(headers).length > 0) data.headers = headers;
     }
 

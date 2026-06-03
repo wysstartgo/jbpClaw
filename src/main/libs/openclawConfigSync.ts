@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { buildScheduledTaskEnginePrompt } from '../../scheduledTask/enginePrompt';
+import { normalizeMcpServerUrlInput } from '../../shared/mcp/url';
 import { QINGSHU_FILE_PUBLISH_PROMPT } from '../../shared/qingshuFile/prompt';
 import { AuthType, OpenClawApi as OpenClawApiConst, OpenClawProviderId, ProviderName, ProviderRegistry } from '../../shared/providers';
 import type { Agent,CoworkConfig, CoworkExecutionMode, UserInstalledPlugin } from '../coworkStore';
@@ -941,6 +942,16 @@ export function buildOpenClawMcpServers(
   const result: Record<string, Record<string, unknown>> = {};
   for (const server of servers) {
     const entry: Record<string, unknown> = {};
+    let normalizedRemoteUrl = '';
+    if (server.transportType !== 'stdio') {
+      const normalizedUrl = normalizeMcpServerUrlInput(server.url);
+      if (!normalizedUrl.ok) {
+        console.warn(`[OpenClawConfigSync] skipped MCP server "${server.name}" because its URL is invalid`);
+        continue;
+      }
+      normalizedRemoteUrl = normalizedUrl.url;
+    }
+
     switch (server.transportType) {
       case 'stdio':
         if (server.command) entry.command = server.command;
@@ -948,13 +959,13 @@ export function buildOpenClawMcpServers(
         if (server.env && Object.keys(server.env).length > 0) entry.env = server.env;
         break;
       case 'sse':
-        if (server.url) entry.url = server.url;
+        entry.url = normalizedRemoteUrl;
         if (server.headers && Object.keys(server.headers).length > 0) {
           entry.headers = lowercaseHeaderKeys(server.headers);
         }
         break;
       case 'http':
-        if (server.url) entry.url = server.url;
+        entry.url = normalizedRemoteUrl;
         if (server.headers && Object.keys(server.headers).length > 0) {
           entry.headers = lowercaseHeaderKeys(server.headers);
         }
