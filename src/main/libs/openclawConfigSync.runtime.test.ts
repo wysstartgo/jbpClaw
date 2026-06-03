@@ -1215,4 +1215,23 @@ describe('OpenClawConfigSync runtime config output', () => {
     expect(fs.existsSync(path.join(workspaceDir, 'memory'))).toBe(true);
     expect(fs.existsSync(path.join(workspaceDir, 'MEMORY.md'))).toBe(true);
   });
+
+  test('marks MCP server config changes as restart impact', async () => {
+    const { OpenClawConfigImpact } = await import('./openclawConfigImpact');
+    const sync = await createSync({
+      getResolvedMcpServers: () => [{
+        name: 'Tavily',
+        transportType: 'stdio',
+        command: 'node',
+        args: ['server.js'],
+        env: { TAVILY_API_KEY: '${LOBSTER_TAVILY_API_KEY}' },
+      }],
+    });
+
+    const result = sync.sync('mcp-server-toggled');
+
+    expect(result.ok).toBe(true);
+    expect(result.changedTopLevelKeys).toContain('mcp');
+    expect(result.restartImpact).toBe(OpenClawConfigImpact.Restart);
+  });
 });

@@ -30,6 +30,7 @@ import {
 } from './openclawAgentModels';
 import { isManagedSessionKey, parseChannelSessionKey } from './openclawChannelSessionSync';
 import { enforceLegacyFeishuPluginDisabled } from './openclawConfigGuards';
+import { OpenClawConfigImpact } from './openclawConfigImpact';
 import type { OpenClawEngineManager } from './openclawEngineManager';
 import {
   hasBundledOpenClawExtension,
@@ -1120,6 +1121,8 @@ export type OpenClawConfigSyncResult = {
   configPath: string;
   error?: string;
   agentsMdWarning?: string;
+  changedTopLevelKeys?: string[];
+  restartImpact?: OpenClawConfigImpact;
 };
 
 type OpenClawConfigSyncDeps = {
@@ -2112,7 +2115,20 @@ export class OpenClawConfigSync {
         return currentContent !== nextContent;
       }
     })();
+    let changedTopLevelKeys: string[] = [];
     if (configChanged) {
+      try {
+        const currentObj = currentContent ? JSON.parse(currentContent) : {};
+        const nextObj = JSON.parse(nextContent);
+        const allKeys = new Set([...Object.keys(currentObj), ...Object.keys(nextObj)]);
+        changedTopLevelKeys = [...allKeys].filter((key) => {
+          if (key === 'meta') return false;
+          return JSON.stringify(currentObj[key]) !== JSON.stringify(nextObj[key]);
+        });
+        console.log('[OpenClawConfigSync] top-level changed keys:', changedTopLevelKeys.join(',') || '(none)');
+      } catch {
+        // Ignore parse errors; configChanged already falls back to text comparison.
+      }
       try {
         ensureDir(path.dirname(configPath));
         const stampedContent = `${JSON.stringify(this.stampConfigMeta(managedConfig), null, 2)}\n`;
@@ -2147,6 +2163,8 @@ export class OpenClawConfigSync {
       ok: true,
       changed: configChanged || sessionStoreChanged,
       configPath,
+      ...(changedTopLevelKeys.length > 0 ? { changedTopLevelKeys } : {}),
+      ...(changedTopLevelKeys.includes('mcp') ? { restartImpact: OpenClawConfigImpact.Restart } : {}),
       ...(agentsMdWarning ? { agentsMdWarning } : {}),
     };
   }

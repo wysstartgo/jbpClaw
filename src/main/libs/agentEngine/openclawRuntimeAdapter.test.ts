@@ -673,6 +673,22 @@ test('syncFinalAssistantWithHistory updates metadata when content is already cur
   }]);
 });
 
+test('disconnectGatewayClient rejects pending gateway readiness immediately', async () => {
+  const adapter = new OpenClawRuntimeAdapter({} as never, {} as never);
+  let rejectReady: ((error: Error) => void) | null = null;
+  const readiness = new Promise<void>((_resolve, reject) => {
+    rejectReady = reject;
+  });
+  adapter.gatewayReadyPromise = readiness;
+  adapter.gatewayReadyReject = rejectReady;
+
+  adapter.disconnectGatewayClient();
+
+  await expect(readiness).rejects.toThrow('OpenClaw gateway client stopped before handshake completed.');
+  expect(adapter.gatewayReadyPromise).toBeNull();
+  expect(adapter.gatewayReadyReject).toBeNull();
+});
+
 test('chat.final persists usage and model metadata from final payload', async () => {
   const { session, store } = createReconcileStore([
     { id: 'msg-1', type: 'user', content: '你是哪个模型', timestamp: 1, metadata: {} },
