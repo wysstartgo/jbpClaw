@@ -2117,6 +2117,76 @@ test('prefetchChannelUserMessages preserves repeated identical user messages', a
   ))).toHaveLength(2);
 });
 
+test('prefetchChannelUserMessages uses latest user only for recreated channel sessions', async () => {
+  const { session, store, getReplaceCallCount } = createReconcileStore([]);
+  const historyMessages = [
+    { role: 'user', content: 'old user' },
+    { role: 'assistant', content: 'old assistant' },
+    { role: 'user', content: 'new user turn' },
+  ];
+
+  const adapter = new OpenClawRuntimeAdapter(store, {});
+  adapter.gatewayClient = {
+    start: () => {},
+    stop: () => {},
+    request: async () => ({ messages: historyMessages }),
+  };
+  adapter.reCreatedChannelSessionIds.add(session.id);
+
+  await adapter.prefetchChannelUserMessages(
+    session.id,
+    'agent:main:feishu:3e462f80:direct:ou_ca9972aed8fa926570225cf3714aa63a',
+  );
+
+  expect(getReplaceCallCount()).toBe(0);
+  expect(session.messages.filter((message) => message.type === 'user').map((message) => message.content)).toEqual([
+    'new user turn',
+  ]);
+  expect(session.messages.some((message) => message.content === 'old user')).toBe(false);
+  expect(adapter.channelSyncCursor.get(session.id)).toBe(3);
+  expect(adapter.gatewayHistoryCountBySession.get(session.id)).toBe(historyMessages.length);
+});
+
+test('onSessionDeleted deletes gateway transcripts for all session keys', async () => {
+  const request = vi.fn(async () => ({}));
+  const subagentRunStore = {
+    listSubagentRuns: () => [],
+    deleteSubagentRunsByParent: vi.fn(),
+  };
+  const adapter = new OpenClawRuntimeAdapter({} as never, {}, {}, subagentRunStore as never);
+  const channelSessionKey = 'agent:main:feishu:3e462f80:direct:ou_ca9972aed8fa926570225cf3714aa63a';
+  const managedSessionKey = 'agent:main:lobsterai:session-1';
+  adapter.gatewayClient = {
+    start: () => {},
+    stop: () => {},
+    request,
+  };
+  adapter.channelSessionSync = {
+    isChannelSessionKey: (key: string) => key === channelSessionKey,
+    onSessionDeleted: vi.fn(),
+  } as never;
+  adapter.sessionIdBySessionKey.set(channelSessionKey, 'session-1');
+  adapter.sessionIdBySessionKey.set(managedSessionKey, 'session-1');
+
+  adapter.onSessionDeleted('session-1');
+
+  await vi.waitFor(() => {
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledWith(
+      'sessions.delete',
+      { key: channelSessionKey, deleteTranscript: true },
+      { timeoutMs: 5_000 },
+    );
+    expect(request).toHaveBeenCalledWith(
+      'sessions.delete',
+      { key: managedSessionKey, deleteTranscript: true },
+      { timeoutMs: 5_000 },
+    );
+  });
+  expect(adapter.deletedChannelKeys.has(channelSessionKey)).toBe(true);
+  expect(adapter.deletedChannelKeys.has(managedSessionKey)).toBe(false);
+});
+
 test('syncSystemMessagesFromHistory skips pure heartbeat ack system messages', () => {
   const { session, store } = createHistoryStore([]);
   const adapter = new OpenClawRuntimeAdapter(store, {});

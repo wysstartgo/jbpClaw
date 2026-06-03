@@ -997,6 +997,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
   private static readonly SESSION_CONTEXT_CACHE_LIMIT = 500;
   private static readonly SESSION_KEY_CACHE_LIMIT = 1000;
   private static readonly DELETED_CHANNEL_KEY_LIMIT = 500;
+  private static readonly GATEWAY_SESSION_DELETE_TIMEOUT_MS = 5_000;
 
   /** Gateway tick heartbeat watchdog state */
   private lastTickTimestamp = 0;
@@ -4260,6 +4261,34 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     }
   }
 
+  private async syncLatestChannelUserMessage(sessionId: string, sessionKey: string): Promise<void> {
+    const client = this.gatewayClient;
+    if (!client) {
+      console.log('[ChannelSync] no gateway client, skipping latest channel user sync');
+      return;
+    }
+
+    const history = await client.request<{ messages?: unknown[] }>('chat.history', {
+      sessionKey,
+      limit: FINAL_HISTORY_SYNC_LIMIT,
+    }, { timeoutMs: 10_000 });
+    if (!Array.isArray(history?.messages) || history.messages.length === 0) {
+      this.channelSyncCursor.set(sessionId, 0);
+      return;
+    }
+
+    this.markGatewayHistoryWindowConsumed(sessionId, history.messages);
+    this.syncChannelUserMessages(
+      sessionId,
+      history.messages,
+      true,
+      sessionKey.includes(':discord:'),
+      sessionKey.includes(':qqbot:'),
+      sessionKey.includes(':moltbot-popo:'),
+      sessionKey.includes(':feishu:'),
+    );
+  }
+
   private async syncFinalAssistantWithHistory(sessionId: string, turn: ActiveTurn): Promise<void> {
     console.debug('[OpenClawRuntime] syncing final assistant text with gateway history');
     const client = this.gatewayClient;
@@ -4766,6 +4795,11 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
    * Delegates to reconcileWithHistory which handles diff and update.
    */
   private async incrementalChannelSync(sessionId: string, sessionKey: string): Promise<void> {
+    if (this.reCreatedChannelSessionIds.has(sessionId)) {
+      await this.syncLatestChannelUserMessage(sessionId, sessionKey);
+      return;
+    }
+
     await this.reconcileWithHistory(sessionId, sessionKey);
   }
 
@@ -4870,15 +4904,23 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       }
     }
 
+    const removedChannelKeys = removedKeys.filter((key) =>
+      this.channelSessionSync?.isChannelSessionKey(key) ?? false,
+    );
+
     // Suppress polling re-creation for deleted channel keys.
     // Only real-time events (new IM messages) will re-create the session.
-    for (const key of removedKeys) {
+    for (const key of removedChannelKeys) {
       this.deletedChannelKeys.add(key);
     }
     this.pruneSetToLimit(
       this.deletedChannelKeys,
       OpenClawRuntimeAdapter.DELETED_CHANNEL_KEY_LIMIT,
     );
+
+    if (removedKeys.length > 0) {
+      void this.deleteGatewaySessionTranscripts(removedKeys);
+    }
 
     // Allow polling to rediscover channel sessions
     this.knownChannelSessionIds.delete(sessionId);
@@ -4930,6 +4972,27 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
 
   async deleteSubagentSession(parentSessionId: string, runId: string): Promise<boolean> {
     return this.subagentTracker?.deleteSubagentRun(parentSessionId, runId) ?? false;
+  }
+
+  private async deleteGatewaySessionTranscripts(sessionKeys: string[]): Promise<void> {
+    const client = this.gatewayClient;
+    if (!client) {
+      console.warn('[OpenClawRuntime] could not delete gateway session transcripts because the gateway client is unavailable');
+      return;
+    }
+
+    const uniqueKeys = Array.from(new Set(sessionKeys.filter(Boolean)));
+    for (const sessionKey of uniqueKeys) {
+      try {
+        await client.request('sessions.delete', {
+          key: sessionKey,
+          deleteTranscript: true,
+        }, { timeoutMs: OpenClawRuntimeAdapter.GATEWAY_SESSION_DELETE_TIMEOUT_MS });
+        console.log(`[OpenClawRuntime] deleted gateway session transcript for ${sessionKey}`);
+      } catch (error) {
+        console.warn(`[OpenClawRuntime] failed to delete gateway session transcript for ${sessionKey}:`, error);
+      }
+    }
   }
 
   /**
