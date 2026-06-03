@@ -3,7 +3,7 @@ import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 
-import { getElectronNodeRuntimePath } from './libs/coworkUtil';
+import { ensureElectronNodeShim, getElectronNodeRuntimePath } from './libs/coworkUtil';
 import { findSystemNodePath } from './libs/resolveStdioCommand';
 import {
   createMcpLaunchSourceFingerprint,
@@ -53,6 +53,28 @@ function log(level: 'INFO' | 'WARN' | 'ERROR', message: string, error?: unknown)
 
 function sanitizeForPath(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'mcp';
+}
+
+function prependPathEntries(
+  env: Record<string, string>,
+  entries: string[],
+): Record<string, string> {
+  const next = { ...env };
+  const pathKeys = Object.keys(next).filter(key => key.toLowerCase() === 'path');
+  const pathKey = pathKeys.find(key => key === 'PATH') || pathKeys[0] || 'PATH';
+  const pathValues = pathKeys
+    .map(key => next[key])
+    .filter((value): value is string => Boolean(value));
+  const mergedPath = [...entries.filter(Boolean), ...pathValues]
+    .filter(Boolean)
+    .join(path.delimiter);
+  for (const key of pathKeys) {
+    delete next[key];
+  }
+  if (mergedPath) {
+    next[pathKey] = mergedPath;
+  }
+  return next;
 }
 
 function parsePackageSpec(spec: string): { packageName: string; requestedVersion: string } | null {
@@ -171,10 +193,14 @@ async function runCommand(
   },
 ): Promise<RunResult> {
   const startedAt = Date.now();
+  const childEnv = prependPathEntries(
+    { ...process.env, ...(options.env || {}) } as Record<string, string>,
+    [],
+  );
   return await new Promise<RunResult>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
-      env: { ...process.env, ...(options.env || {}) },
+      env: childEnv,
       windowsHide: true,
     });
     let stdout = '';
@@ -213,18 +239,34 @@ function resolveNpmCommand(): NpmCommand {
 
   const systemNode = findSystemNodePath();
   if (systemNode) {
+    const systemNodeDir = path.dirname(systemNode);
     const systemNpmCli = path.join(path.dirname(systemNode), 'node_modules', 'npm', 'bin', 'npm-cli.js');
     if (fs.existsSync(systemNpmCli)) {
-      return { command: systemNode, baseArgs: [systemNpmCli], env: {} };
+      return {
+        command: systemNode,
+        baseArgs: [systemNpmCli],
+        env: prependPathEntries({}, [systemNodeDir]),
+      };
     }
   }
 
   const bundledNpmCli = npmCliCandidates.find(candidate => fs.existsSync(candidate));
   if (bundledNpmCli) {
+    const npmBinDir = path.dirname(bundledNpmCli);
+    const shimDir = ensureElectronNodeShim(electronNode, npmBinDir);
     return {
       command: systemNode || electronNode,
       baseArgs: [bundledNpmCli],
-      env: systemNode ? {} : { ELECTRON_RUN_AS_NODE: '1' },
+      env: prependPathEntries(
+        systemNode
+          ? {}
+          : {
+            ELECTRON_RUN_AS_NODE: '1',
+            LOBSTERAI_ELECTRON_PATH: electronNode,
+            LOBSTERAI_NPM_BIN_DIR: npmBinDir,
+          },
+        [systemNode ? path.dirname(systemNode) : '', shimDir || ''],
+      ),
     };
   }
 
@@ -382,6 +424,9 @@ export class McpLaunchResolverManager {
         'INFO',
         `resolved npm metadata for "${server.name}" in ${Date.now() - viewStartedAt}ms (exit=${viewResult.code})`,
       );
+      if (viewResult.code !== 0) {
+        throw new Error(viewResult.stderr.trim() || `npm view exited with code ${viewResult.code}`);
+      }
 
       const installStartedAt = Date.now();
       const installResult = await runCommand(
