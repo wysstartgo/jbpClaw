@@ -50,6 +50,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
     coworkErrorAuthInvalid: 'API 密钥无效或已过期，请检查配置。',
     coworkErrorInsufficientBalance: 'API 余额不足，请充值后重试。',
     coworkErrorInputTooLong: '输入内容过长，超出模型上下文限制。',
+    coworkErrorMessageTooLarge:
+      '本次消息过大，请减少附件、压缩图片或拆分提交。（单次整体需小于约 30MB）',
     coworkErrorCouldNotProcessPdf: '无法处理 PDF 文件。',
     coworkErrorModelNotFound: '请求的模型不存在或不可用。',
     coworkErrorGatewayDisconnected: 'AI 引擎连接中断，请重试。',
@@ -225,6 +227,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
     coworkErrorAuthInvalid: 'Invalid or expired API key. Please check your configuration.',
     coworkErrorInsufficientBalance: 'Insufficient API balance. Please top up and try again.',
     coworkErrorInputTooLong: 'Input too long, exceeding model context limit.',
+    coworkErrorMessageTooLarge:
+      'This message is too large. Reduce attachments, compress images, or split it up. (Keep each message under about 30 MB.)',
     coworkErrorCouldNotProcessPdf: 'Unable to process the PDF file.',
     coworkErrorModelNotFound: 'The requested model does not exist or is unavailable.',
     coworkErrorGatewayDisconnected: 'AI engine connection lost. Please retry.',

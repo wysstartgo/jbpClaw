@@ -95,6 +95,24 @@ test('model: Ollama model xxx not found', () => {
   expect(classifyError("model 'llama3' not found")).toBe('coworkErrorModelNotFound');
 });
 
+// ==================== Gateway / connection ====================
+
+test('gateway: chat send payload too large', () => {
+  expect(classifyError('chat.send payload too large: estimated 38128542 bytes exceeds safe limit 30932992 bytes')).toBe('coworkErrorMessageTooLarge');
+});
+
+test('gateway: max payload exceeded', () => {
+  expect(classifyError('[ws] error conn=abc remote=127.0.0.1: Max payload size exceeded')).toBe('coworkErrorMessageTooLarge');
+});
+
+test('gateway: websocket 1009 close', () => {
+  expect(classifyError('gateway closed (1009):')).toBe('coworkErrorMessageTooLarge');
+});
+
+test('gateway: message too big', () => {
+  expect(classifyError('WebSocket message too big')).toBe('coworkErrorMessageTooLarge');
+});
+
 test('gateway: disconnect', () => {
   expect(classifyError('gateway disconnected unexpectedly')).toBe('coworkErrorGatewayDisconnected');
 });

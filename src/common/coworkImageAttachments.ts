@@ -2,6 +2,9 @@ export interface CoworkRuntimeImageAttachment {
   name: string;
   mimeType: string;
   base64Data: string;
+  sizeBytes?: number;
+  previewMimeType?: string;
+  previewBase64Data?: string;
 }
 
 export interface CoworkCachedImageAttachment {

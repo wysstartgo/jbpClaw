@@ -4,6 +4,11 @@ import React, { useCallback,useEffect, useRef, useState } from 'react';
 import { useDispatch,useSelector } from 'react-redux';
 
 import { SpeechErrorCode } from '../../../shared/speech/constants';
+import {
+  COWORK_IMAGE_ATTACHMENT_PREVIEW_FALLBACK_MAX_BYTES,
+  formatCoworkImageAttachmentLimit,
+  validateCoworkImageAttachmentSize,
+} from '../../../shared/cowork/imageAttachments';
 import { DEFAULT_SPEECH_INPUT_CONFIG, DEFAULT_VOICE_POST_PROCESS_CONFIG, DEFAULT_WAKE_INPUT_CONFIG } from '../../config';
 import { AppCustomEvent } from '../../constants/app';
 import { agentService } from '../../services/agent';
@@ -104,6 +109,37 @@ const inferImageMimeTypeFromPath = (filePath: string): string => {
   const ext = filePath.slice(dotIndex).toLowerCase();
   return IMAGE_MIME_BY_EXT[ext] || 'application/octet-stream';
 };
+
+const extractBase64FromDataUrl = (dataUrl: string): { mimeType: string; base64Data: string } | null => {
+  const match = /^data:([^;]+);base64,(.*)$/s.exec(dataUrl);
+  if (!match) return null;
+  return {
+    mimeType: match[1] || 'image/png',
+    base64Data: match[2],
+  };
+};
+
+const createImagePreviewDataUrl = (dataUrl: string): Promise<string> => new Promise((resolve, reject) => {
+  const image = new Image();
+  image.onload = () => {
+    const maxSide = 512;
+    const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      reject(new Error('Canvas context is unavailable.'));
+      return;
+    }
+    context.drawImage(image, 0, 0, width, height);
+    resolve(canvas.toDataURL('image/jpeg', 0.82));
+  };
+  image.onerror = () => reject(new Error('Image preview load failed.'));
+  image.src = dataUrl;
+});
 
 const SlashCommandMenu: React.FC<{
   matches: PromptSlashCommandMatch[];
@@ -902,13 +938,56 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     const imageAtts: CoworkImageAttachment[] = [];
     for (const attachment of attachments) {
       if (attachment.isImage && attachment.dataUrl) {
-        const match = /^data:([^;]+);base64,(.*)$/.exec(attachment.dataUrl);
-        if (match) {
+        const extracted = extractBase64FromDataUrl(attachment.dataUrl);
+        if (extracted) {
+          const sizeValidation = validateCoworkImageAttachmentSize({
+            base64Data: extracted.base64Data,
+          });
+          if (!sizeValidation.ok) {
+            console.warn('[CoworkPromptInput] image attachment exceeded single-file limit:', {
+              name: attachment.name,
+              mimeType: extracted.mimeType,
+              sizeBytes: sizeValidation.sizeBytes,
+              maxBytes: sizeValidation.maxBytes,
+              base64Length: extracted.base64Data.length,
+            });
+            showToast(
+              i18nService.t('coworkImageAttachmentTooLarge')
+                .replace('{name}', attachment.name)
+                .replace('{limit}', formatCoworkImageAttachmentLimit(sizeValidation.maxBytes)),
+            );
+            return;
+          }
+
+          let previewMimeType: string | undefined;
+          let previewBase64Data: string | undefined;
+          if (sizeValidation.sizeBytes > COWORK_IMAGE_ATTACHMENT_PREVIEW_FALLBACK_MAX_BYTES) {
+            try {
+              const previewDataUrl = await createImagePreviewDataUrl(attachment.dataUrl);
+              const preview = extractBase64FromDataUrl(previewDataUrl);
+              if (preview) {
+                previewMimeType = preview.mimeType;
+                previewBase64Data = preview.base64Data;
+              }
+            } catch (error) {
+              console.warn('[CoworkPromptInput] failed to create image preview:', error);
+            }
+            if (!previewBase64Data) {
+              showToast(
+                i18nService.t('coworkImageAttachmentPreviewFailed')
+                  .replace('{name}', attachment.name),
+              );
+              return;
+            }
+          }
+
           imageAtts.push({
             name: attachment.name,
-            mimeType: match[1] || attachment.mimeType || 'image/png',
-            base64Data: match[2],
-          });
+            mimeType: extracted.mimeType || attachment.mimeType || 'image/png',
+            base64Data: extracted.base64Data,
+            ...(previewMimeType ? { previewMimeType } : {}),
+            ...(previewBase64Data ? { previewBase64Data } : {}),
+          } as CoworkImageAttachment);
         }
         continue;
       }

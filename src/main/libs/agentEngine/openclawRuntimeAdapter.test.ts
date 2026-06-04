@@ -14,6 +14,9 @@ vi.mock('electron', () => ({
 
 import {
   __openclawRuntimeAdapterTestUtils,
+  buildOpenClawChatSendPayloadTooLargeError,
+  estimateOpenClawChatSendFrameBytes,
+  OPENCLAW_CHAT_SEND_PAYLOAD_SAFE_LIMIT_BYTES,
   OpenClawRuntimeAdapter,
   pickPersistedAssistantSegment,
 } from './openclawRuntimeAdapter';
@@ -84,6 +87,43 @@ test('pickPersistedAssistantSegment: empty branches', () => {
     content: 'prev',
     reason: 'previous_only',
   });
+});
+
+test('estimateOpenClawChatSendFrameBytes measures the full RPC frame as UTF-8 JSON', () => {
+  const params = {
+    sessionKey: 'agent:main:lobsterai:session-1',
+    message: '分析这张图',
+    deliver: false,
+    idempotencyKey: 'run-1',
+    attachments: [{
+      type: 'image',
+      mimeType: 'image/png',
+      content: 'A'.repeat(16),
+    }],
+  };
+
+  const expected = Buffer.byteLength(JSON.stringify({
+    id: 'estimate',
+    method: 'chat.send',
+    params,
+  }), 'utf8');
+
+  expect(estimateOpenClawChatSendFrameBytes(params)).toBe(expected);
+  expect(expected).toBeGreaterThan(params.attachments[0].content.length);
+});
+
+test('buildOpenClawChatSendPayloadTooLargeError includes a stable classification marker', () => {
+  const error = buildOpenClawChatSendPayloadTooLargeError({
+    estimatedFrameBytes: OPENCLAW_CHAT_SEND_PAYLOAD_SAFE_LIMIT_BYTES + 1,
+    safeLimitBytes: OPENCLAW_CHAT_SEND_PAYLOAD_SAFE_LIMIT_BYTES,
+    attachmentCount: 4,
+    attachmentBase64Bytes: 36_335_652,
+  });
+
+  expect(error.message).toContain('chat.send payload too large');
+  expect(error.message).toContain(String(OPENCLAW_CHAT_SEND_PAYLOAD_SAFE_LIMIT_BYTES + 1));
+  expect(error.message).toContain('attachments 4');
+  expect(error.message).toContain('attachment base64 bytes 36335652');
 });
 
 // ==================== Reconcile tests ====================
