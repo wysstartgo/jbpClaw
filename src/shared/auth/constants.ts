@@ -1,5 +1,6 @@
 export const AuthIpcChannel = {
   Callback: 'auth:callback',
+  GetPricingCatalog: 'auth:getPricingCatalog',
   GetPendingCallback: 'auth:getPendingCallback',
 } as const;
 

@@ -7,6 +7,7 @@ import net from 'net';
 import os from 'os';
 import path from 'path';
 
+import type { OpenClawEnginePhase } from '../../shared/openclawEngine/constants';
 import { ensureElectronNodeShim, getElectronNodeRuntimePath, getSkillsRoot } from './coworkUtil';
 import {
   formatGatewayLogDateKey,
@@ -38,13 +39,7 @@ const GATEWAY_BOOT_TIMEOUT_MS = 300 * 1000;
 const GATEWAY_MAX_RESTART_ATTEMPTS = 5;
 const GATEWAY_RESTART_DELAYS = [3_000, 5_000, 10_000, 20_000, 30_000];
 
-export type OpenClawEnginePhase =
-  | 'not_installed'
-  | 'installing'
-  | 'ready'
-  | 'starting'
-  | 'running'
-  | 'error';
+export type { OpenClawEnginePhase } from '../../shared/openclawEngine/constants';
 
 export interface OpenClawEngineStatus {
   phase: OpenClawEnginePhase;

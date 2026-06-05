@@ -1,4 +1,4 @@
-import { ChatBubbleLeftIcon, CpuChipIcon, CubeIcon, EnvelopeIcon, GlobeAltIcon, InformationCircleIcon, MagnifyingGlassIcon, SunIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ArchiveBoxIcon, ArrowPathIcon, ArrowPathRoundedSquareIcon, ChatBubbleLeftIcon, CheckCircleIcon, CpuChipIcon, CubeIcon, EnvelopeIcon, ExclamationTriangleIcon, GlobeAltIcon, InformationCircleIcon, MagnifyingGlassIcon, SunIcon, TrashIcon, WrenchScrewdriverIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import React, { useCallback,useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
@@ -8,6 +8,7 @@ import {
   defaultBrowserWebAccessConfig,
   normalizeBrowserWebAccessConfig,
 } from '../../shared/browserWebAccess/constants';
+import { OpenClawEnginePhase, OpenClawGatewayRepairErrorCode } from '../../shared/openclawEngine/constants';
 import { ProviderAuthType, ProviderName, ProviderRegistry, resolveCodingPlanBaseUrl } from '../../shared/providers';
 import { type AppConfig, defaultConfig, getProviderDisplayName, getVisibleProviders, ShortcutAction, type ShortcutConfig } from '../config';
 import { APP_ID, EXPORT_FORMAT_TYPE, EXPORT_PASSWORD } from '../constants/app';
@@ -27,6 +28,7 @@ import type {
   CoworkMemoryStats,
   CoworkUserMemoryEntry,
   OpenClawEngineStatus,
+  OpenClawGatewayRepairResult,
   OpenClawSessionKeepAlive,
 } from '../types/cowork';
 import { OpenClawSessionKeepAlive as OpenClawSessionKeepAliveValues } from '../types/cowork';
@@ -965,6 +967,9 @@ const Settings: React.FC<SettingsProps> = ({
   const [coworkMemoryDraftText, setCoworkMemoryDraftText] = useState<string>('');
   const [showMemoryModal, setShowMemoryModal] = useState<boolean>(false);
   const [openClawEngineStatus, setOpenClawEngineStatus] = useState<OpenClawEngineStatus | null>(null);
+  const [showOpenClawRepairConfirm, setShowOpenClawRepairConfirm] = useState<boolean>(false);
+  const [isRepairingOpenClaw, setIsRepairingOpenClaw] = useState<boolean>(false);
+  const [openClawRepairResult, setOpenClawRepairResult] = useState<OpenClawGatewayRepairResult | null>(null);
 
   useEffect(() => {
     setCoworkAgentEngine(coworkConfig.agentEngine || 'openclaw');
@@ -1749,29 +1754,118 @@ const Settings: React.FC<SettingsProps> = ({
     return Math.max(0, Math.min(100, Math.round(openClawEngineStatus.progressPercent)));
   }, [openClawEngineStatus]);
 
+  const openClawStatusTone = useMemo(() => {
+    const phase = openClawEngineStatus?.phase;
+
+    if (phase === OpenClawEnginePhase.Error) {
+      return {
+        Icon: ExclamationTriangleIcon,
+        cardClassName: 'border-border bg-surface text-foreground',
+        iconClassName: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+        progressClassName: 'bg-red-500',
+        spinIcon: false,
+      };
+    }
+
+    if (phase === OpenClawEnginePhase.Running || phase === OpenClawEnginePhase.Ready) {
+      return {
+        Icon: CheckCircleIcon,
+        cardClassName: 'border-border bg-surface text-foreground',
+        iconClassName: 'bg-primary-muted text-primary',
+        progressClassName: 'bg-primary',
+        spinIcon: false,
+      };
+    }
+
+    if (phase === OpenClawEnginePhase.Installing || phase === OpenClawEnginePhase.Starting) {
+      return {
+        Icon: ArrowPathIcon,
+        cardClassName: 'border-border bg-surface text-foreground',
+        iconClassName: 'bg-primary-muted text-primary',
+        progressClassName: 'bg-primary',
+        spinIcon: true,
+      };
+    }
+
+    return {
+      Icon: CpuChipIcon,
+      cardClassName: 'border-border bg-surface text-foreground',
+      iconClassName: 'bg-surface-raised text-secondary',
+      progressClassName: 'bg-primary',
+      spinIcon: false,
+    };
+  }, [openClawEngineStatus?.phase]);
+
+  const OpenClawStatusIcon = openClawStatusTone.Icon;
+
   const resolveOpenClawStatusText = (status: OpenClawEngineStatus | null): string => {
     if (!status) {
       return i18nService.t('coworkOpenClawNotInstalledNotice');
     }
-    if (status.message?.trim()) {
-      return status.message.trim();
-    }
     switch (status.phase) {
-      case 'not_installed':
+      case OpenClawEnginePhase.NotInstalled:
         return i18nService.t('coworkOpenClawNotInstalledNotice');
-      case 'installing':
+      case OpenClawEnginePhase.Installing:
         return i18nService.t('coworkOpenClawInstalling');
-      case 'ready':
+      case OpenClawEnginePhase.Ready:
         return i18nService.t('coworkOpenClawReadyNotice');
-      case 'starting':
+      case OpenClawEnginePhase.Starting:
         return i18nService.t('coworkOpenClawStarting');
-      case 'error':
+      case OpenClawEnginePhase.Error:
         return i18nService.t('coworkOpenClawError');
-      case 'running':
-      default:
+      case OpenClawEnginePhase.Running:
         return i18nService.t('coworkOpenClawRunning');
+      default:
+        return status.message?.trim() || i18nService.t('coworkOpenClawRunning');
     }
   };
+
+  const resolveOpenClawRepairMessage = (result: OpenClawGatewayRepairResult): string => {
+    if (result.success) {
+      return result.backupPath
+        ? i18nService.t('openClawRepairSuccess')
+        : i18nService.t('openClawRepairSuccessNoBackup');
+    }
+    if (result.errorCode === OpenClawGatewayRepairErrorCode.Busy) {
+      return i18nService.t('openClawRepairBusyError');
+    }
+    if (result.errorCode === OpenClawGatewayRepairErrorCode.ConfigApplyPending) {
+      return i18nService.t('openClawRepairConfigApplyPendingError');
+    }
+    return result.error?.trim() || i18nService.t('openClawRepairFailed');
+  };
+
+  const handleConfirmOpenClawRepair = useCallback(async () => {
+    if (isRepairingOpenClaw) return;
+    setShowOpenClawRepairConfirm(false);
+    setOpenClawRepairResult(null);
+    setError(null);
+    setIsRepairingOpenClaw(true);
+    try {
+      const result = await coworkService.repairOpenClawGatewayState();
+      setOpenClawRepairResult(result);
+    } catch (repairError) {
+      setOpenClawRepairResult({
+        success: false,
+        error: repairError instanceof Error ? repairError.message : i18nService.t('openClawRepairFailed'),
+      });
+    } finally {
+      setIsRepairingOpenClaw(false);
+    }
+  }, [isRepairingOpenClaw]);
+
+  const handleRevealOpenClawRepairBackup = useCallback(async () => {
+    const backupPath = openClawRepairResult?.backupPath;
+    if (!backupPath) return;
+    try {
+      const result = await window.electron.shell.showItemInFolder(backupPath);
+      if (!result?.success) {
+        setError(result?.error || i18nService.t('showInFolderFailed'));
+      }
+    } catch (revealError) {
+      setError(revealError instanceof Error ? revealError.message : i18nService.t('showInFolderFailed'));
+    }
+  }, [openClawRepairResult?.backupPath]);
 
   const loadCoworkMemoryData = useCallback(async () => {
     setCoworkMemoryListLoading(true);
@@ -3186,52 +3280,166 @@ const Settings: React.FC<SettingsProps> = ({
 
       case 'coworkAgentEngine':
         return (
-          <div className="space-y-6">
-            <div className="space-y-3">
-              <div className="flex items-start gap-3 rounded-xl border px-3 py-2 text-sm border-border">
-                <input
-                  type="radio"
-                  checked={true}
-                  readOnly
-                  className="mt-1"
-                />
-                <span>
-                  <span className="block font-medium text-foreground">
-                    {i18nService.t('coworkAgentEngineOpenClaw')}
-                  </span>
-                  <span className="block text-xs text-secondary">
-                    {i18nService.t('coworkAgentEngineOpenClawHint')}
-                  </span>
-                </span>
-              </div>
-            </div>
+          <div className="space-y-8 pb-2">
             {isOpenClawAgentEngine && (
-              <div className="space-y-3 rounded-xl border px-4 py-4 border-border">
-                <div className="text-xs text-secondary">
-                  {i18nService.t('coworkOpenClawInstallHint')}
-                </div>
-                <div className={`rounded-xl border px-4 py-3 text-sm ${openClawEngineStatus?.phase === 'error'
-                  ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300'
-                  : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300'}`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      {resolveOpenClawStatusText(openClawEngineStatus)}
-                      {openClawProgressPercent !== null && (
-                        <span className="ml-2 text-xs opacity-80">{openClawProgressPercent}%</span>
-                      )}
+              <>
+                <section className="space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <h4 className="min-w-0 flex-1 text-sm font-medium text-foreground">
+                      {i18nService.t('openClawRuntimeStatusTitle')}
+                    </h4>
+                    {openClawProgressPercent !== null && (
+                      <span className="shrink-0 rounded-full bg-surface-raised px-3 py-1 text-xs font-medium text-secondary">
+                        {openClawProgressPercent}%
+                      </span>
+                    )}
+                  </div>
+
+                  <div className={`rounded-xl border px-4 py-4 ${openClawStatusTone.cardClassName}`}>
+                    <div className="flex items-start gap-3">
+                      <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${openClawStatusTone.iconClassName}`}>
+                        <OpenClawStatusIcon className={`h-4 w-4 ${openClawStatusTone.spinIcon ? 'animate-spin' : ''}`} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium leading-5 text-foreground">
+                          {resolveOpenClawStatusText(openClawEngineStatus)}
+                        </div>
+                        <p className="mt-2 text-sm text-secondary">
+                          {i18nService.t('coworkOpenClawInstallHint')}
+                        </p>
+                        {openClawProgressPercent !== null && (
+                          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-raised">
+                            <div
+                              className={`h-full rounded-full transition-all ${openClawStatusTone.progressClassName}`}
+                              style={{ width: `${openClawProgressPercent}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  {openClawProgressPercent !== null && (
-                    <div className="mt-2 h-2 rounded-full bg-black/10 overflow-hidden">
-                      <div
-                        className="h-full bg-primary transition-all"
-                        style={{ width: `${openClawProgressPercent}%` }}
-                      />
+                </section>
+
+                <section className="space-y-3">
+                  <div>
+                    <h4 className="text-sm font-medium text-foreground">
+                      {i18nService.t('openClawMaintenanceTitle')}
+                    </h4>
+                  </div>
+
+                  <div className="overflow-hidden rounded-xl border border-border bg-surface">
+                    <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-muted text-primary">
+                          <WrenchScrewdriverIcon className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-foreground">
+                            {i18nService.t('openClawRepairGatewayStateTitle')}
+                          </div>
+                          <div className="mt-1 text-sm text-secondary">
+                            {i18nService.t('openClawRepairGatewayStateDesc')}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowOpenClawRepairConfirm(true)}
+                        disabled={isRepairingOpenClaw}
+                        className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-xs font-medium text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.98]"
+                      >
+                        {isRepairingOpenClaw ? (
+                          <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <WrenchScrewdriverIcon className="h-3.5 w-3.5" />
+                        )}
+                        {isRepairingOpenClaw
+                          ? i18nService.t('openClawRepairRunning')
+                          : i18nService.t('openClawRepairConfirmAction')}
+                      </button>
                     </div>
-                  )}
-                </div>
-              </div>
+
+                    <div className="border-t border-border px-4 py-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-raised text-secondary">
+                            <ArchiveBoxIcon className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-foreground">
+                              {i18nService.t('openClawDataBackupTitle')}
+                            </div>
+                            <div className="mt-1 text-sm text-secondary">
+                              {i18nService.t('openClawDataBackupDesc')}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-surface-raised px-3 py-1 text-xs font-medium text-secondary">
+                          {i18nService.t('openClawMaintenanceComingSoon')}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-border px-4 py-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-raised text-secondary">
+                            <ArrowPathRoundedSquareIcon className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-foreground">
+                              {i18nService.t('openClawDataMigrationTitle')}
+                            </div>
+                            <div className="mt-1 text-sm text-secondary">
+                              {i18nService.t('openClawDataMigrationDesc')}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-surface-raised px-3 py-1 text-xs font-medium text-secondary">
+                          {i18nService.t('openClawMaintenanceComingSoon')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {openClawRepairResult && (
+                  <div className={`rounded-lg border px-3 py-3 text-sm ${openClawRepairResult.success
+                    ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-300'
+                    : 'border-red-300 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300'}`}
+                  >
+                    <div className="font-medium">
+                      {resolveOpenClawRepairMessage(openClawRepairResult)}
+                    </div>
+                    {openClawRepairResult.backupPath && (
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0 text-xs opacity-90">
+                          <span>{i18nService.t('openClawRepairBackupPath')}: </span>
+                          <span className="font-mono break-all">{openClawRepairResult.backupPath}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { void handleRevealOpenClawRepairBackup(); }}
+                          className="inline-flex shrink-0 items-center justify-center rounded-lg border border-current/30 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-current/10"
+                        >
+                          {i18nService.t('showInFolder')}
+                        </button>
+                      </div>
+                    )}
+                    {!openClawRepairResult.success && (
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() => { void coworkService.restartOpenClawGateway(); }}
+                          className="inline-flex items-center justify-center rounded-lg border border-current/30 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-current/10"
+                        >
+                          {i18nService.t('coworkOpenClawRestartGateway')}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
         );
@@ -3815,6 +4023,58 @@ const Settings: React.FC<SettingsProps> = ({
           handleCancelModelEdit={handleCancelModelEdit}
           handleModelDialogKeyDown={handleModelDialogKeyDown}
         />
+
+          {showOpenClawRepairConfirm && (
+            <div
+              className="absolute inset-0 z-30 flex items-center justify-center bg-black/35 px-4 rounded-2xl"
+              onClick={() => {
+                if (!isRepairingOpenClaw) setShowOpenClawRepairConfirm(false);
+              }}
+            >
+              <div
+                className="bg-surface border-border border rounded-2xl shadow-xl w-full max-w-md"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="px-5 pt-5 pb-4 border-b border-border">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-muted text-primary">
+                      <WrenchScrewdriverIcon className="h-5 w-5" />
+                    </span>
+                    <h3 className="text-base font-semibold text-foreground">
+                      {i18nService.t('openClawRepairConfirmTitle')}
+                    </h3>
+                  </div>
+                </div>
+
+                <div className="space-y-3 px-5 py-4 text-sm text-secondary">
+                  <p>{i18nService.t('openClawRepairConfirmDesc')}</p>
+                  <p>{i18nService.t('openClawRepairConfirmSafeDesc')}</p>
+                </div>
+
+                <div className="flex justify-end space-x-2 px-5 pb-5">
+                  <button
+                    type="button"
+                    onClick={() => setShowOpenClawRepairConfirm(false)}
+                    disabled={isRepairingOpenClaw}
+                    className="px-3 py-1.5 text-sm text-foreground hover:bg-surface-raised rounded-xl border border-border disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {i18nService.t('cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { void handleConfirmOpenClawRepair(); }}
+                    disabled={isRepairingOpenClaw}
+                    className="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm text-white bg-primary hover:bg-primary-hover rounded-xl disabled:opacity-60 disabled:cursor-not-allowed transition-colors active:scale-[0.98]"
+                  >
+                    <WrenchScrewdriverIcon className="h-4 w-4" />
+                    {isRepairingOpenClaw
+                      ? i18nService.t('openClawRepairRunning')
+                      : i18nService.t('openClawRepairConfirmAction')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Memory Modal */}
           {showMemoryModal && (

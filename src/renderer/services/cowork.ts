@@ -53,6 +53,7 @@ import type {
   CoworkStartOptions,
   CoworkUserMemoryEntry,
   OpenClawEngineStatus,
+  OpenClawGatewayRepairResult,
   OpenClawSessionPolicyConfig,
 } from '../types/cowork';
 import { i18nService } from './i18n';
@@ -1200,6 +1201,24 @@ class CoworkService {
       return result.status;
     }
     return this.openClawStatus;
+  }
+
+  async repairOpenClawGatewayState(): Promise<OpenClawGatewayRepairResult> {
+    const engineApi = window.electron?.openclaw?.engine;
+    if (!engineApi?.repairGatewayState) {
+      return {
+        success: false,
+        error: i18nService.t('openClawRepairApiUnavailable'),
+      };
+    }
+    const result = await engineApi.repairGatewayState();
+    if (result?.status) {
+      this.notifyOpenClawStatus(result.status);
+    }
+    return result ?? {
+      success: false,
+      error: i18nService.t('openClawRepairFailed'),
+    };
   }
 
   async generateSessionTitle(prompt: string | null): Promise<string | null> {

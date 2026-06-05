@@ -1,14 +1,16 @@
-import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, ChevronDownIcon, LockClosedIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { ProviderName } from '@shared/providers';
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 
 import { getProviderIcon, ProviderIconId } from '../providers/uiRegistry';
+import { authService } from '../services/auth';
 import { i18nService } from '../services/i18n';
 import { RootState } from '../store';
 import type { Model } from '../store/slices/modelSlice';
 import { getModelIdentityKey, isSameModelIdentity, setSelectedModel } from '../store/slices/modelSlice';
+import Modal from './common/Modal';
 
 interface ModelSelectorProps {
   dropdownDirection?: 'up' | 'down' | 'auto';
@@ -43,6 +45,11 @@ const ModelSelectorGroup = {
   User: 'user',
 } as const;
 type ModelSelectorGroup = typeof ModelSelectorGroup[keyof typeof ModelSelectorGroup];
+const RestrictedPromptKind = {
+  Login: 'login',
+  Subscribe: 'subscribe',
+} as const;
+type RestrictedPromptKind = typeof RestrictedPromptKind[keyof typeof RestrictedPromptKind];
 
 export function resolveHoverCardTop(
   desiredTop: number,
@@ -88,12 +95,14 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   const selectedItemRef = React.useRef<HTMLButtonElement>(null);
   const [hoveredModel, setHoveredModel] = React.useState<Model | null>(null);
   const [hoverCardStyle, setHoverCardStyle] = React.useState<React.CSSProperties>({});
+  const [restrictedPrompt, setRestrictedPrompt] = React.useState<RestrictedPromptKind | null>(null);
   const hoverCardRef = React.useRef<HTMLDivElement>(null);
   const hoverTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const controlled = onChange !== undefined;
   const globalSelectedModel = useSelector((state: RootState) => state.model.defaultSelectedModel);
   const currentAgentId = useSelector((state: RootState) => state.agent.currentAgentId);
+  const isLoggedIn = useSelector((state: RootState) => state.auth.isLoggedIn);
   const selectedModel = controlled ? value ?? null : globalSelectedModel;
   const selectedModelKey = selectedModel ? getModelIdentityKey(selectedModel) : '';
   const availableModels = useSelector((state: RootState) => state.model.availableModels);
@@ -227,17 +236,25 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 
   const handleModelSelect = (model: Model | null) => {
     if (disabled) return;
-    if (model && model.accessible === false) return;
+    if (model && model.accessible === false) {
+      setRestrictedPrompt(isLoggedIn ? RestrictedPromptKind.Subscribe : RestrictedPromptKind.Login);
+      setHoveredModel(null);
+      setIsOpen(false);
+      return;
+    }
     if (controlled) {
       onChange(model);
     } else if (model) {
       dispatch(setSelectedModel({ agentId: currentAgentId, model }));
     }
+    setRestrictedPrompt(null);
     setIsOpen(false);
   };
 
   React.useEffect(() => {
-    if (!isOpen) setHoveredModel(null);
+    if (!isOpen) {
+      setHoveredModel(null);
+    }
   }, [isOpen]);
 
   React.useLayoutEffect(() => {
@@ -298,7 +315,6 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   const triggerIconClassName = compact ? 'h-3.5 w-3.5' : 'h-4 w-4';
 
   const handleModelHover = (model: Model, event: React.MouseEvent<HTMLButtonElement>) => {
-    if (model.accessible === false) return;
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     const itemRect = event.currentTarget.getBoundingClientRect();
     hoverTimerRef.current = setTimeout(() => {
@@ -345,9 +361,10 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
         onClick={() => handleModelSelect(model)}
         onMouseEnter={(e) => handleModelHover(model, e)}
         onMouseLeave={handleModelHoverEnd}
+        aria-disabled={restricted}
         className={`w-full px-3 py-2 text-left dark:text-claude-darkText text-claude-text flex items-center gap-2.5 transition-colors ${
           restricted
-            ? 'cursor-not-allowed'
+            ? 'cursor-pointer opacity-60 dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover'
             : `dark:hover:bg-claude-darkSurfaceHover hover:bg-claude-surfaceHover ${selected ? 'dark:bg-claude-darkSurfaceHover/50 bg-claude-surfaceHover/50' : ''}`
         }`}
       >
@@ -363,10 +380,13 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
           </span>
         )}
         <span className="flex-1" />
-        {model.supportsImage && !restricted && (
+        {model.supportsImage && (
           <span className="shrink-0 rounded-md bg-surface-raised px-1.5 py-0.5 text-[10px] font-medium leading-none text-secondary">
             {i18nService.t('modelSupportsImageInputBadge')}
           </span>
+        )}
+        {restricted && (
+          <LockClosedIcon className="h-3.5 w-3.5 shrink-0 text-secondary" />
         )}
         {selected && !restricted && (
           <CheckIcon className="h-4 w-4 shrink-0 text-emerald-500" />
@@ -432,6 +452,70 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
     </div>
   );
 
+  const openSubscriptionPage = async () => {
+    setRestrictedPrompt(null);
+    setIsOpen(false);
+    const { getPortalPricingUrl } = await import('../services/endpoints');
+    await window.electron.shell.openExternal(getPortalPricingUrl());
+  };
+
+  const handleRestrictedPromptPrimary = async () => {
+    if (restrictedPrompt === RestrictedPromptKind.Login) {
+      setRestrictedPrompt(null);
+      setIsOpen(false);
+      await authService.login();
+      return;
+    }
+    await openSubscriptionPage();
+  };
+
+  const renderRestrictedPrompt = () => {
+    if (!restrictedPrompt) return null;
+    const loginPrompt = restrictedPrompt === RestrictedPromptKind.Login;
+    return (
+      <Modal
+        onClose={() => setRestrictedPrompt(null)}
+        overlayClassName="fixed inset-0 z-[10050] flex items-center justify-center modal-backdrop px-4"
+        className="modal-content w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-modal"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-base font-semibold leading-6 text-foreground">
+              {i18nService.t(loginPrompt ? 'modelSelectorLoginTitle' : 'modelSelectorSubscribeTitle')}
+            </div>
+            <div className="mt-1.5 text-sm leading-5 text-secondary">
+              {i18nService.t(loginPrompt ? 'modelSelectorLoginDesc' : 'modelSelectorSubscribeDesc')}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRestrictedPrompt(null)}
+            className="-mr-1 -mt-1 rounded-lg p-1 text-secondary transition-colors hover:bg-surface-raised hover:text-foreground"
+            aria-label={i18nService.t('close')}
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => { void handleRestrictedPromptPrimary(); }}
+          className="mt-5 w-full rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+        >
+          {i18nService.t(loginPrompt ? 'modelSelectorLoginBtn' : 'modelSelectorSubscribeBtn')}
+        </button>
+        {loginPrompt && (
+          <button
+            type="button"
+            onClick={() => { void openSubscriptionPage(); }}
+            className="mt-3 w-full text-center text-sm text-secondary transition-colors hover:text-foreground"
+          >
+            {i18nService.t('modelSelectorLearnMore')}
+          </button>
+        )}
+      </Modal>
+    );
+  };
+
   const dropdown = isOpen ? (
     <div
       ref={dropdownRef}
@@ -454,31 +538,9 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
         )}
         {accessibleModels.map(renderModelItem)}
         {restrictedModels.length > 0 && (
-          <>
-            <div className="flex justify-center py-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  const { getPortalPricingUrl } = await import('../services/endpoints');
-                  await window.electron.shell.openExternal(getPortalPricingUrl());
-                }}
-                className="flex items-center gap-1.5 rounded-full bg-surface/80 backdrop-blur-md px-3.5 py-1.5 shadow-sm border border-border/40 cursor-pointer hover:bg-surface-raised hover:shadow-md transition-all"
-              >
-                <svg className="h-3.5 w-3.5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10.02 17.52C10.48 18.11 11.2 18.5 12 18.5C13.38 18.5 14.5 17.38 14.5 16C14.5 15.43 14.31 14.9 13.99 14.48" />
-                  <path d="M2.82 20.8C2.21 20.04 2 18.83 2 17V15C2 11 3 10 7 10H17C17.36 10 17.69 10.01 18 10.03C21.17 10.21 22 11.36 22 15V17C22 21 21 22 17 22H7C6.64 22 6.31 21.99 6 21.97" />
-                  <path d="M6 10V8C6 4.69 7 2 12 2C16.15 2 17.54 3.38 17.9 5.56" />
-                  <path d="M22 2L2 22" />
-                </svg>
-                <span className="text-[11px] text-blue-500 font-medium leading-none">
-                  {i18nService.t('modelSelectorLockedOverlay')}
-                </span>
-              </button>
-            </div>
-            <div className="pointer-events-none opacity-50">
-              {restrictedModels.map(renderModelItem)}
-            </div>
-          </>
+          <div>
+            {restrictedModels.map(renderModelItem)}
+          </div>
         )}
       </div>
     </div>
@@ -498,6 +560,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
 
       {portal && dropdown ? createPortal(dropdown, document.body) : dropdown}
       {renderHoverCard()}
+      {renderRestrictedPrompt()}
     </div>
   );
 };

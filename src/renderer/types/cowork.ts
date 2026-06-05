@@ -3,15 +3,19 @@ import type {
   CoworkContextUsageSource,
   CoworkForkMode,
 } from '../../shared/cowork/constants';
-import type { CoworkSelectedTextSnippet } from '../../shared/cowork/selectedText';
 import type {
   CoworkImageAttachmentPayload,
   CoworkImageAttachmentPreview,
 } from '../../shared/cowork/imageAttachments';
+import type { CoworkSelectedTextSnippet } from '../../shared/cowork/selectedText';
 import type {
   KitReference,
   ResolvedKitCapabilities,
 } from '../../shared/kit/constants';
+import type {
+  OpenClawEnginePhase as SharedOpenClawEnginePhase,
+  OpenClawGatewayRepairErrorCode,
+} from '../../shared/openclawEngine/constants';
 
 // Cowork image attachment for vision-capable models
 export type CoworkImageAttachment = CoworkImageAttachmentPayload;
@@ -202,13 +206,7 @@ export interface CoworkApiConfig {
   apiType?: 'anthropic' | 'openai';
 }
 
-export type OpenClawEnginePhase =
-  | 'not_installed'
-  | 'installing'
-  | 'ready'
-  | 'starting'
-  | 'running'
-  | 'error';
+export type OpenClawEnginePhase = SharedOpenClawEnginePhase;
 
 export interface OpenClawEngineStatus {
   phase: OpenClawEnginePhase;
@@ -216,6 +214,16 @@ export interface OpenClawEngineStatus {
   progressPercent?: number;
   message?: string;
   canRetry: boolean;
+}
+
+export interface OpenClawGatewayRepairResult {
+  success: boolean;
+  status?: OpenClawEngineStatus;
+  originalPath?: string;
+  backupPath?: string;
+  error?: string;
+  errorCode?: OpenClawGatewayRepairErrorCode;
+  recoverable?: boolean;
 }
 
 export interface CoworkUserMemoryEntry {

@@ -55,6 +55,11 @@ const MIN_SIDEBAR_WIDTH = 220;
 const MAX_SIDEBAR_WIDTH = 420;
 const SIDEBAR_COLLAPSE_TRANSITION_MS = 200;
 const normalizeAgentId = (agentId?: string | null) => agentId?.trim() || AgentId.Main;
+const SidebarNewFeatureBadge = {
+  KitsDismissedVersionKey: 'sidebar.kitsNewFeatureBadge.dismissedVersion',
+  // Bump this value in a release when the kits entry should show the badge again.
+  KitsVersion: '2026-06-05',
+} as const;
 const sidebarNavItemClassName =
   'w-full inline-flex h-7 items-center gap-2 rounded-md px-1.5 text-left text-[14px] font-normal text-foreground/80 transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]';
 const activeSidebarNavItemClassName =
@@ -90,6 +95,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [isResizing, setIsResizing] = useState(false);
   const [agentScrollEdges, setAgentScrollEdges] = useState({ top: false, bottom: false });
+  const [showKitsNewBadge, setShowKitsNewBadge] = useState(false);
   const isResizingRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(DEFAULT_SIDEBAR_WIDTH);
@@ -110,6 +116,41 @@ const Sidebar: React.FC<SidebarProps> = ({
   const isBatchSelectAllChecked =
     batchSelectableItems.length > 0 && selectedBatchSelectableCount === batchSelectableItems.length;
   const batchAgentName = batchAgentId ? getAgentDisplayNameById(batchAgentId, agents) : null;
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    const loadKitsNewBadgeState = async () => {
+      try {
+        const dismissedVersion = await window.electron.store.get(
+          SidebarNewFeatureBadge.KitsDismissedVersionKey,
+        );
+        if (!isCurrent) return;
+        setShowKitsNewBadge(dismissedVersion !== SidebarNewFeatureBadge.KitsVersion);
+      } catch (error) {
+        console.warn('[Sidebar] failed to load kits new feature badge state:', error);
+      }
+    };
+
+    void loadKitsNewBadgeState();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
+  const dismissKitsNewBadge = useCallback(() => {
+    if (!showKitsNewBadge) return;
+    setShowKitsNewBadge(false);
+    void window.electron.store
+      .set(
+        SidebarNewFeatureBadge.KitsDismissedVersionKey,
+        SidebarNewFeatureBadge.KitsVersion,
+      )
+      .catch((error) => {
+        console.warn('[Sidebar] failed to save kits new feature badge state:', error);
+      });
+  }, [showKitsNewBadge]);
 
   useEffect(() => {
     const handleSearch = () => {
@@ -383,13 +424,19 @@ const Sidebar: React.FC<SidebarProps> = ({
             type="button"
             onClick={() => {
               setIsSearchOpen(false);
+              dismissKitsNewBadge();
               onShowKits();
             }}
             className={activeView === 'kits' ? activeSidebarNavItemClassName : sidebarNavItemClassName}
             aria-current={activeView === 'kits' ? 'page' : undefined}
           >
             <SidebarKitsIcon className="h-4 w-4 shrink-0" />
-            {i18nService.t('kits')}
+            <span className="min-w-0 truncate">{i18nService.t('kits')}</span>
+            {showKitsNewBadge && (
+              <span className="inline-flex h-4 shrink-0 items-center rounded-[4px] bg-[#ff4f6d] px-1.5 text-[10px] font-semibold leading-none text-white">
+                {i18nService.t('newFeatureBadge')}
+              </span>
+            )}
           </button>
           <button
             type="button"

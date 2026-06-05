@@ -27,6 +27,10 @@ import type {
   ListLocalWebServicesOptions,
   LocalWebService,
 } from '../../shared/localWebServices/constants';
+import type {
+  OpenClawEnginePhase as SharedOpenClawEnginePhase,
+  OpenClawGatewayRepairErrorCode,
+} from '../../shared/openclawEngine/constants';
 import type { ShellOpenFailureReason } from '../../shared/shell/constants';
 interface ApiResponse {
   ok: boolean;
@@ -189,13 +193,7 @@ interface CoworkApiConfig {
   apiType?: 'anthropic' | 'openai';
 }
 
-type OpenClawEnginePhase =
-  | 'not_installed'
-  | 'installing'
-  | 'ready'
-  | 'starting'
-  | 'running'
-  | 'error';
+type OpenClawEnginePhase = SharedOpenClawEnginePhase;
 
 interface OpenClawEngineStatus {
   phase: OpenClawEnginePhase;
@@ -203,6 +201,16 @@ interface OpenClawEngineStatus {
   progressPercent?: number;
   message?: string;
   canRetry: boolean;
+}
+
+interface OpenClawGatewayRepairResult {
+  success: boolean;
+  status?: OpenClawEngineStatus;
+  originalPath?: string;
+  backupPath?: string;
+  error?: string;
+  errorCode?: OpenClawGatewayRepairErrorCode;
+  recoverable?: boolean;
 }
 
 interface OpenClawSessionPolicyConfig {
@@ -536,6 +544,7 @@ interface IElectronAPI {
         status?: OpenClawEngineStatus;
         error?: string;
       }>;
+      repairGatewayState: () => Promise<OpenClawGatewayRepairResult>;
       onProgress: (callback: (status: OpenClawEngineStatus) => void) => () => void;
     };
     sessionPolicy: {
@@ -1292,6 +1301,21 @@ interface IElectronAPI {
     getModels: () => Promise<{
       success: boolean;
       models?: Array<{ modelId: string; modelName: string; provider: string; apiFormat: string }>;
+    }>;
+    getPricingCatalog: () => Promise<{
+      success: boolean;
+      textModels?: Array<{
+        modelId: string;
+        modelName: string;
+        provider?: string;
+        providerLabel?: string;
+        description?: string;
+        supportsImage?: boolean;
+        supportsThinking?: boolean;
+        contextWindow?: number | null;
+        costMultiplier?: number;
+      }>;
+      error?: string;
     }>;
     getProfileSummary: () => Promise<{ success: boolean; data?: ProfileSummaryData }>;
     getPendingCallback: () => Promise<string | null>;

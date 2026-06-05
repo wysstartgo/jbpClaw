@@ -81,6 +81,10 @@ import {
   type LocalWebService,
   LocalWebServicesIpc,
 } from '../shared/localWebServices/constants';
+import {
+  OpenClawEngineIpc,
+  OpenClawGatewayRepairErrorCode,
+} from '../shared/openclawEngine/constants';
 import { PlatformRegistry } from '../shared/platform';
 import { ProviderName } from '../shared/providers';
 import type { ShellOpenFailureReason as ShellOpenFailureReasonType } from '../shared/shell/constants';
@@ -208,6 +212,10 @@ import {
 } from './libs/openclawConfigImpact';
 import { buildProviderSelection, OpenClawConfigSync } from './libs/openclawConfigSync';
 import { OpenClawEngineManager, type OpenClawEngineStatus } from './libs/openclawEngineManager';
+import {
+  backupOpenClawConfig,
+  getOpenClawGatewayRepairBusyError,
+} from './libs/openclawGatewayRepair';
 import {
   addMemoryEntry,
   deleteMemoryEntry,
@@ -1347,7 +1355,7 @@ const forwardOpenClawStatus = (status: OpenClawEngineStatus): void => {
   windows.forEach(win => {
     if (win.isDestroyed()) return;
     try {
-      win.webContents.send('openclaw:engine:onProgress', status);
+      win.webContents.send(OpenClawEngineIpc.OnProgress, status);
     } catch (error) {
       console.error('Failed to forward OpenClaw engine status:', error);
     }
@@ -2021,6 +2029,141 @@ const syncOpenClawConfig = async (
       openClawConfigApplyState = null;
     }
   }
+};
+
+type OpenClawGatewayRepairResult = {
+  success: boolean;
+  status?: OpenClawEngineStatus;
+  originalPath: string;
+  backupPath?: string;
+  error?: string;
+  errorCode?: OpenClawGatewayRepairErrorCode;
+  recoverable?: boolean;
+};
+
+let openClawGatewayRepairPromise: Promise<OpenClawGatewayRepairResult> | null = null;
+
+const isOpenClawGatewayRepairSuccess = (status: OpenClawEngineStatus): boolean => {
+  return status.phase === 'running' || status.phase === 'ready';
+};
+
+const buildOpenClawRepairBusyResult = (
+  originalPath: string,
+  status: OpenClawEngineStatus,
+): OpenClawGatewayRepairResult | null => {
+  const busyError = getOpenClawGatewayRepairBusyError(hasActiveGatewayWorkloads());
+  if (!busyError) {
+    return null;
+  }
+  return {
+    success: false,
+    status,
+    originalPath,
+    error: busyError,
+    errorCode: OpenClawGatewayRepairErrorCode.Busy,
+    recoverable: true,
+  };
+};
+
+const repairOpenClawGatewayState = (): Promise<OpenClawGatewayRepairResult> => {
+  if (openClawGatewayRepairPromise) {
+    console.log('[OpenClawRepair] repair already in progress, joining existing request.');
+    return openClawGatewayRepairPromise;
+  }
+
+  let promise: Promise<OpenClawGatewayRepairResult>;
+  promise = (async (): Promise<OpenClawGatewayRepairResult> => {
+    const manager = getOpenClawEngineManager();
+    const originalPath = manager.getConfigPath();
+
+    const initialBusyResult = buildOpenClawRepairBusyResult(originalPath, manager.getStatus());
+    if (initialBusyResult) {
+      console.warn('[OpenClawRepair] repair was blocked because gateway work is still running.');
+      return initialBusyResult;
+    }
+
+    const pendingApplyStatus = await waitForOpenClawConfigApply('manual OpenClaw repair');
+    if (pendingApplyStatus) {
+      console.warn('[OpenClawRepair] repair was blocked while configuration changes are still applying.');
+      return {
+        success: false,
+        status: pendingApplyStatus,
+        originalPath,
+        error: pendingApplyStatus.message || 'OpenClaw is still applying configuration changes.',
+        errorCode: OpenClawGatewayRepairErrorCode.ConfigApplyPending,
+        recoverable: true,
+      };
+    }
+
+    const postApplyBusyResult = buildOpenClawRepairBusyResult(originalPath, manager.getStatus());
+    if (postApplyBusyResult) {
+      console.warn('[OpenClawRepair] repair was blocked because gateway work started during the check.');
+      return postApplyBusyResult;
+    }
+
+    if (openClawBootstrapPromise) {
+      console.log('[OpenClawRepair] waiting for the current OpenClaw startup attempt to finish.');
+      await openClawBootstrapPromise.catch((error: unknown): null => {
+        console.warn('[OpenClawRepair] existing startup attempt failed before repair:', error);
+        return null;
+      });
+    }
+
+    const postBootstrapBusyResult = buildOpenClawRepairBusyResult(originalPath, manager.getStatus());
+    if (postBootstrapBusyResult) {
+      console.warn('[OpenClawRepair] repair was blocked because gateway work started after startup finished.');
+      return postBootstrapBusyResult;
+    }
+
+    try {
+      console.log('[OpenClawRepair] starting gateway state repair.');
+      if (openClawRuntimeAdapter) {
+        openClawRuntimeAdapter.disconnectGatewayClient();
+      }
+
+      await manager.stopGateway();
+      const backupResult = backupOpenClawConfig(originalPath);
+      if (backupResult.backupPath) {
+        console.log(`[OpenClawRepair] backed up OpenClaw config to ${backupResult.backupPath}.`);
+      } else {
+        console.log('[OpenClawRepair] no OpenClaw config file was present, continuing with regeneration.');
+      }
+
+      const status = await bootstrapOpenClawEngine({
+        forceReinstall: false,
+        reason: 'manual-repair',
+      });
+      const success = isOpenClawGatewayRepairSuccess(status);
+      if (success) {
+        console.log('[OpenClawRepair] gateway state repair completed successfully.');
+      } else {
+        console.warn('[OpenClawRepair] gateway state repair completed but the gateway is not ready.');
+      }
+
+      return {
+        success,
+        status,
+        originalPath: backupResult.originalPath,
+        backupPath: backupResult.backupPath,
+        error: success ? undefined : status.message || 'Failed to restart OpenClaw gateway after repair.',
+      };
+    } catch (error) {
+      console.error('[OpenClawRepair] gateway state repair failed:', error);
+      return {
+        success: false,
+        status: manager.getStatus(),
+        originalPath,
+        error: error instanceof Error ? error.message : 'Failed to repair OpenClaw gateway state.',
+      };
+    }
+  })().finally(() => {
+    if (openClawGatewayRepairPromise === promise) {
+      openClawGatewayRepairPromise = null;
+    }
+  });
+
+  openClawGatewayRepairPromise = promise;
+  return promise;
 };
 
 const bindCoworkRuntimeForwarder = (): void => {
@@ -4230,6 +4373,47 @@ if (!gotTheLock) {
     return tokens?.accessToken || null;
   });
 
+  ipcMain.handle(AuthIpcChannel.GetPricingCatalog, async () => {
+    try {
+      const serverBaseUrl = getServerApiBaseUrl();
+      const url = `${serverBaseUrl}/api/models/pricing-catalog`;
+      console.log(`[Auth:getPricingCatalog] requesting public pricing catalog at ${url}`);
+      const resp = await net.fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+      console.log(`[Auth:getPricingCatalog] server returned HTTP ${resp.status}.`);
+      if (!resp.ok) {
+        return { success: false, error: `HTTP ${resp.status}` };
+      }
+      const body = await resp.json() as {
+        code: number;
+        message?: string;
+        data?: {
+          textModels?: unknown[];
+          imageModels?: unknown[];
+          videoModels?: unknown[];
+        };
+      };
+      if (body.code !== 0) {
+        console.warn('[Auth:getPricingCatalog] server rejected pricing catalog request:', serializeForLog({
+          code: body.code,
+          message: body.message,
+        }));
+        return { success: false, error: body.message || 'Failed to load pricing catalog.' };
+      }
+      const textModels = Array.isArray(body.data?.textModels) ? body.data.textModels : [];
+      console.log(`[Auth:getPricingCatalog] loaded ${textModels.length} public text models.`);
+      return { success: true, textModels };
+    } catch (error) {
+      console.error('[Auth:getPricingCatalog] pricing catalog request failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  });
+
   ipcMain.handle('auth:getModels', async () => {
     try {
       const tokens = getAuthTokens();
@@ -4524,7 +4708,7 @@ if (!gotTheLock) {
     getSkillManager,
   });
 
-  ipcMain.handle('openclaw:engine:getStatus', async () => {
+  ipcMain.handle(OpenClawEngineIpc.GetStatus, async () => {
     try {
       const manager = getOpenClawEngineManager();
       return {
@@ -4539,7 +4723,7 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('openclaw:engine:install', async () => {
+  ipcMain.handle(OpenClawEngineIpc.Install, async () => {
     try {
       const status = await bootstrapOpenClawEngine({
         forceReinstall: false,
@@ -4559,7 +4743,7 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('openclaw:engine:retryInstall', async () => {
+  ipcMain.handle(OpenClawEngineIpc.RetryInstall, async () => {
     try {
       const status = await bootstrapOpenClawEngine({
         forceReinstall: true,
@@ -4580,13 +4764,13 @@ if (!gotTheLock) {
   });
 
   let restartGatewayPromise: Promise<OpenClawEngineStatus> | null = null;
-  ipcMain.handle('openclaw:engine:restartGateway', async () => {
+  ipcMain.handle(OpenClawEngineIpc.RestartGateway, async () => {
     console.log(
-      `${gwDiagTs()} IPC openclaw:engine:restartGateway: manual restart requested from renderer`,
+      `${gwDiagTs()} IPC ${OpenClawEngineIpc.RestartGateway}: manual restart requested from renderer`,
     );
     if (restartGatewayPromise) {
       console.log(
-        `${gwDiagTs()} IPC openclaw:engine:restartGateway: restart already in progress, joining existing promise`,
+        `${gwDiagTs()} IPC ${OpenClawEngineIpc.RestartGateway}: restart already in progress, joining existing promise`,
       );
       const status = await restartGatewayPromise;
       return { success: status.phase === 'running' || status.phase === 'ready', status };
@@ -4608,6 +4792,20 @@ if (!gotTheLock) {
       };
     } finally {
       restartGatewayPromise = null;
+    }
+  });
+
+  ipcMain.handle(OpenClawEngineIpc.RepairGatewayState, async () => {
+    try {
+      return await repairOpenClawGatewayState();
+    } catch (error) {
+      const manager = getOpenClawEngineManager();
+      return {
+        success: false,
+        status: manager.getStatus(),
+        originalPath: manager.getConfigPath(),
+        error: error instanceof Error ? error.message : 'Failed to repair OpenClaw gateway state',
+      };
     }
   });
 
@@ -8604,7 +8802,7 @@ if (!gotTheLock) {
       windowStatePersist.emitState();
       if (openClawEngineManager && !mainWindow?.isDestroyed()) {
         mainWindow.webContents.send(
-          'openclaw:engine:onProgress',
+          OpenClawEngineIpc.OnProgress,
           openClawEngineManager.getStatus(),
         );
       }

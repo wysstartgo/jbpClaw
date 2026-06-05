@@ -29,6 +29,7 @@ import {
   LocalWebServicesIpc,
 } from '../shared/localWebServices/constants';
 import { McpIpcChannel } from '../shared/mcp/constants';
+import { OpenClawEngineIpc } from '../shared/openclawEngine/constants';
 import type { Platform } from '../shared/platform';
 import { NimQrLoginIpc } from './ipcHandlers/nimQrLogin';
 import { OpenClawSessionIpc } from './openclawSession/constants';
@@ -202,14 +203,15 @@ contextBridge.exposeInMainWorld('electron', {
   getRecentCwds: (limit?: number) => ipcRenderer.invoke('get-recent-cwds', limit),
   openclaw: {
     engine: {
-      getStatus: () => ipcRenderer.invoke('openclaw:engine:getStatus'),
-      install: () => ipcRenderer.invoke('openclaw:engine:install'),
-      retryInstall: () => ipcRenderer.invoke('openclaw:engine:retryInstall'),
-      restartGateway: () => ipcRenderer.invoke('openclaw:engine:restartGateway'),
+      getStatus: () => ipcRenderer.invoke(OpenClawEngineIpc.GetStatus),
+      install: () => ipcRenderer.invoke(OpenClawEngineIpc.Install),
+      retryInstall: () => ipcRenderer.invoke(OpenClawEngineIpc.RetryInstall),
+      restartGateway: () => ipcRenderer.invoke(OpenClawEngineIpc.RestartGateway),
+      repairGatewayState: () => ipcRenderer.invoke(OpenClawEngineIpc.RepairGatewayState),
       onProgress: (callback: (status: any) => void) => {
         const handler = (_event: any, status: any) => callback(status);
-        ipcRenderer.on('openclaw:engine:onProgress', handler);
-        return () => ipcRenderer.removeListener('openclaw:engine:onProgress', handler);
+        ipcRenderer.on(OpenClawEngineIpc.OnProgress, handler);
+        return () => ipcRenderer.removeListener(OpenClawEngineIpc.OnProgress, handler);
       },
     },
     sessionPolicy: {
@@ -887,6 +889,7 @@ contextBridge.exposeInMainWorld('electron', {
     refreshToken: () => ipcRenderer.invoke('auth:refreshToken'),
     getAccessToken: () => ipcRenderer.invoke('auth:getAccessToken'),
     getModels: () => ipcRenderer.invoke('auth:getModels'),
+    getPricingCatalog: () => ipcRenderer.invoke(AuthIpcChannel.GetPricingCatalog),
     getProfileSummary: () => ipcRenderer.invoke('auth:getProfileSummary'),
     getPendingCallback: () => ipcRenderer.invoke(AuthIpcChannel.GetPendingCallback),
     onCallback: (callback: (data: { code: string }) => void) => {
