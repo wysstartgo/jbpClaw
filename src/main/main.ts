@@ -34,6 +34,7 @@ import { AgentId, AgentIpcChannel } from '../shared/agent/constants';
 import { AppUpdateIpc } from '../shared/appUpdate/constants';
 import { ArtifactBrowserPartition, ArtifactPreviewIpc, ArtifactPreviewProtocol } from '../shared/artifactPreview/constants';
 import { AuthIpcChannel } from '../shared/auth/constants';
+import { canonicalizeMediaModelId, mediaModelDisplayName } from '../shared/mediaModelAliases';
 import {
   type BrowserDiagnosticResultStep,
   BrowserDiagnosticStatus,
@@ -189,7 +190,7 @@ import {
 import { packageHtmlFile } from './libs/htmlShare/htmlSharePackager';
 import { getKeyfromAttribution, initializeKeyfromAttribution } from './libs/keyfromAttribution';
 import { exportLogsZip } from './libs/logExport';
-import { type PersistedGeneratedImageAsset, persistGeneratedImageAssets, type PersistGeneratedImageAssetsResult, persistGeneratedVideoAssets, type RemoteGeneratedMediaAsset } from './libs/mediaAssetPersistence';
+import { inferImageMimeTypeFromDataUrl, type PersistedGeneratedImageAsset, persistGeneratedImageAssets, type PersistGeneratedImageAssetsResult, persistGeneratedVideoAssets, type RemoteGeneratedMediaAsset } from './libs/mediaAssetPersistence';
 import { migrateAgentModelRefs, parsePrimaryModelRef, resolveQualifiedAgentModelRef } from './libs/openclawAgentModels';
 import {
   buildManagedSessionKey,
@@ -2551,6 +2552,13 @@ const mediaReferencesBySession = new Map<string, MediaAttachmentRefMain[]>();
 const persistedGeneratedImageAssetsByUrl = new Map<string, PersistedGeneratedImageAsset>();
 const persistedGeneratedVideoAssetsByUrl = new Map<string, PersistedGeneratedImageAsset>();
 
+const resolveGeneratedMediaAssetMimeType = (mediaType: 'image' | 'video', url: string): string => {
+  if (mediaType === 'image') {
+    return inferImageMimeTypeFromDataUrl(url) || 'image/png';
+  }
+  return 'video/mp4';
+};
+
 // Async video task polling (FR-8)
 interface MediaTaskTracker {
   taskId: string;
@@ -2575,6 +2583,32 @@ const MEDIA_POLL_SLOW_COUNT = 18;
 const MEDIA_POLL_MEDIUM_COUNT = 10;
 const MEDIA_TASK_DEFAULT_TIMEOUT_MS = 172_800_000;
 const TERMINAL_MEDIA_TASK_STATUSES = new Set(['succeeded', 'failed', 'cancelled']);
+
+const normalizeOptionalMediaModelId = (modelId: string | undefined): string | undefined => {
+  const canonicalModelId = canonicalizeMediaModelId(modelId);
+  return canonicalModelId || undefined;
+};
+
+const normalizeMediaSelectionState = (selection?: MediaSelectionState): MediaSelectionState | undefined => {
+  if (!selection) return undefined;
+  const normalized: MediaSelectionState = {
+    ...selection,
+    modelId: normalizeOptionalMediaModelId(selection.modelId),
+    imageModelId: normalizeOptionalMediaModelId(selection.imageModelId),
+    videoModelId: normalizeOptionalMediaModelId(selection.videoModelId),
+  };
+  const displayModelId = normalized.modelId || normalized.imageModelId || normalized.videoModelId;
+  if (displayModelId) {
+    normalized.modelName = mediaModelDisplayName(displayModelId, selection.modelName);
+  }
+  return normalized;
+};
+
+const mediaModelIdForOutput = (model: unknown, fallback?: string): string => {
+  const rawModel = typeof model === 'string' && model.trim() ? model : fallback;
+  return mediaModelDisplayName(rawModel, rawModel) || 'default';
+};
+
 type MediaStatusPollUpdate = {
   sessionId: string;
   toolCallId: string;
@@ -3219,12 +3253,12 @@ if (!gotTheLock) {
     const action = (args.action as string) || 'generate';
     const serverBaseUrl = getServerApiBaseUrl();
     const sessionId = extractSessionIdFromKey(request.context.sessionKey);
-    const selection = sessionId ? mediaSelectionBySession.get(sessionId) : undefined;
+    const selection = normalizeMediaSelectionState(sessionId ? mediaSelectionBySession.get(sessionId) : undefined);
     const prompt = typeof args.prompt === 'string' ? args.prompt : '';
-    const explicitModel = typeof args.model === 'string' ? args.model.trim() : '';
+    const explicitModel = canonicalizeMediaModelId(typeof args.model === 'string' ? args.model : '');
     const resolvedModelFromSelection = tool === MediaGenerationTool.Image
-      ? (selection?.imageModelId || selection?.modelId || '')
-      : (selection?.videoModelId || selection?.modelId || '');
+      ? canonicalizeMediaModelId(selection?.imageModelId || selection?.modelId || '')
+      : canonicalizeMediaModelId(selection?.videoModelId || selection?.modelId || '');
     let selectedModel = explicitModel || resolvedModelFromSelection;
     let selectedModelSource = explicitModel ? 'tool' : resolvedModelFromSelection ? 'selection' : 'none';
 
@@ -3274,7 +3308,15 @@ if (!gotTheLock) {
           console.warn('[MediaGeneration] server rejected model list request:', serializeForLog({ mediaType, code: body.code, message: body.message }));
           return { content: [{ type: 'text', text: body.message || 'Failed to list models.' }], isError: true };
         }
-        const models = body.data || [];
+        const models = (body.data || []).map(model => {
+          const mediaModel = model as { modelId?: string; displayName?: string };
+          const modelId = canonicalizeMediaModelId(mediaModel.modelId);
+          return {
+            ...(model as Record<string, unknown>),
+            modelId,
+            displayName: mediaModelDisplayName(modelId, mediaModel.displayName),
+          };
+        });
         console.log(`[MediaGeneration] server returned ${models.length} ${mediaType} models.`);
         let text = models.length > 0
           ? `Available ${mediaType} models:\n\n${(models as Array<{ modelId: string; displayName: string; capabilities?: string; parameterSpec?: Record<string, unknown> }>).map(m => {
@@ -3319,7 +3361,7 @@ if (!gotTheLock) {
         const assets = resultUrls.map(url => ({
           type: statusMediaType,
           url,
-          mimeType: statusMediaType === 'image' ? 'image/png' : 'video/mp4',
+          mimeType: resolveGeneratedMediaAssetMimeType(statusMediaType, url),
         }));
 
         let resultLines: string[];
@@ -3362,7 +3404,7 @@ if (!gotTheLock) {
           ...(task.upstreamTaskId ? { upstreamTaskId: String(task.upstreamTaskId) } : {}),
           status,
           ...(pollCount > 1 ? { pollCount } : {}),
-          model: task.model as string,
+          model: mediaModelIdForOutput(task.model),
           mediaType: statusMediaType,
           ...(detailsAssets.length > 0 ? { assets: detailsAssets } : {}),
           ...(task.quotaRemaining != null ? { billing: { quotaRemaining: task.quotaRemaining } } : {}),
@@ -3465,6 +3507,14 @@ if (!gotTheLock) {
       if (args.aspectRatio) params.aspectRatio = args.aspectRatio;
       if (args.resolution) params.resolution = args.resolution;
       if (args.size) params.size = args.size;
+      if (mediaType === 'image') {
+        if (args.n != null) params.n = args.n;
+        if (args.quality) params.quality = args.quality;
+        if (args.outputFormat) params.outputFormat = args.outputFormat;
+        if (args.output_format) params.output_format = args.output_format;
+        if (args.temperature != null) params.temperature = args.temperature;
+        if (args.imageSize) params.imageSize = args.imageSize;
+      }
       if (args.count) params.count = args.count;
       if (args.durationSeconds != null) params.durationSeconds = args.durationSeconds;
       if (args.audio != null) params.audio = args.audio;
@@ -3628,18 +3678,19 @@ if (!gotTheLock) {
       const task = body.data!;
       const status = task.status as string;
       const resultUrls = (task.resultUrls as string[]) || [];
+      const outputModel = mediaModelIdForOutput(task.model, selectedModel);
       console.log('[MediaGeneration] server accepted generate request:', serializeForLog({
         mediaType,
         taskId: task.taskId,
         status,
-        model: task.model || selectedModel,
+        model: outputModel,
         resultCount: resultUrls.length,
         quotaRemaining: task.quotaRemaining,
       }));
       const assets = resultUrls.map(url => ({
         type: mediaType,
         url,
-        mimeType: mediaType === 'image' ? 'image/png' : 'video/mp4',
+        mimeType: resolveGeneratedMediaAssetMimeType(mediaType, url),
         ...(args.filename ? { filename: args.filename as string } : {}),
       }));
       let detailsAssets: unknown[] = assets;
@@ -3648,6 +3699,7 @@ if (!gotTheLock) {
       if (task.quotaRemaining != null) billing.quotaRemaining = task.quotaRemaining;
       if (mediaType === 'image') {
         if (args.count) billing.frozenImages = args.count;
+        else if (args.n) billing.frozenImages = args.n;
       } else {
         if (args.durationSeconds) billing.frozenVideoSeconds = args.durationSeconds;
       }
@@ -3655,7 +3707,7 @@ if (!gotTheLock) {
       const lines = [
         `${mediaType === 'image' ? 'Image' : 'Video'} generation task created.`,
         `Task ID: ${task.upstreamTaskId || task.taskId}`,
-        `Model: ${task.model || selectedModel || 'default'}`,
+        `Model: ${outputModel}`,
         `Status: ${status}`,
         ...(task.quotaRemaining != null ? [`Quota remaining: ${task.quotaRemaining}`] : []),
       ];
@@ -3701,7 +3753,7 @@ if (!gotTheLock) {
             taskId: String(task.taskId),
             sessionId,
             mediaType,
-            model: (task.model as string) || selectedModel,
+            model: outputModel,
             startedAt: Date.now(),
             pollCount: 0,
             timeoutMs,
@@ -3715,7 +3767,7 @@ if (!gotTheLock) {
           taskId: String(task.taskId),
           ...(task.upstreamTaskId ? { upstreamTaskId: String(task.upstreamTaskId) } : {}),
           status,
-          model: (task.model as string) || selectedModel,
+          model: outputModel,
           ...(detailsAssets.length > 0 ? { assets: detailsAssets } : {}),
           ...(Object.keys(billing).length > 0 ? { billing } : {}),
         },
@@ -3810,7 +3862,7 @@ if (!gotTheLock) {
           const assets = resultUrls.map(url => ({
             type: tracker.mediaType,
             url,
-            mimeType: tracker.mediaType === 'image' ? 'image/png' : 'video/mp4',
+            mimeType: resolveGeneratedMediaAssetMimeType(tracker.mediaType, url),
           }));
           if (status === 'succeeded' && tracker.mediaType === 'image') {
             const persistResult = await persistGeneratedImages(tracker.sessionId, assets);
@@ -4482,7 +4534,16 @@ if (!gotTheLock) {
       if (!resp.ok) return { success: false, error: `HTTP ${resp.status}` };
       const body = await resp.json() as { code: number; data?: unknown[]; message?: string };
       if (body.code !== 0) return { success: false, error: body.message };
-      return { success: true, models: body.data || [] };
+      const models = (body.data || []).map(model => {
+        const mediaModel = model as { modelId?: string; displayName?: string };
+        const modelId = canonicalizeMediaModelId(mediaModel.modelId);
+        return {
+          ...(model as Record<string, unknown>),
+          modelId,
+          displayName: mediaModelDisplayName(modelId, mediaModel.displayName),
+        };
+      });
+      return { success: true, models };
     } catch (e) {
       console.error('[Media:getModels] Error:', e);
       return { success: false, error: e instanceof Error ? e.message : 'Unknown error' };
@@ -4883,8 +4944,9 @@ if (!gotTheLock) {
           );
         }
 
-        if (options.mediaSelection && options.mediaSelection.mode !== 'none') {
-          mediaSelectionBySession.set(session.id, options.mediaSelection);
+        const normalizedMediaSelection = normalizeMediaSelectionState(options.mediaSelection);
+        if (normalizedMediaSelection && normalizedMediaSelection.mode !== 'none') {
+          mediaSelectionBySession.set(session.id, normalizedMediaSelection);
         } else {
           mediaSelectionBySession.delete(session.id);
         }
@@ -4941,7 +5003,7 @@ if (!gotTheLock) {
             confirmationMode: 'modal',
             imageAttachments: options.imageAttachments,
             agentId: options.agentId,
-            mediaSelection: options.mediaSelection,
+            mediaSelection: normalizedMediaSelection,
             mediaReferences: options.mediaReferences,
             selectedTextSnippets,
           })
@@ -5036,8 +5098,9 @@ if (!gotTheLock) {
           };
         }
 
-        if (options.mediaSelection && options.mediaSelection.mode !== 'none') {
-          mediaSelectionBySession.set(options.sessionId, options.mediaSelection);
+        const normalizedMediaSelection = normalizeMediaSelectionState(options.mediaSelection);
+        if (normalizedMediaSelection && normalizedMediaSelection.mode !== 'none') {
+          mediaSelectionBySession.set(options.sessionId, normalizedMediaSelection);
         } else {
           mediaSelectionBySession.delete(options.sessionId);
         }
@@ -5076,7 +5139,7 @@ if (!gotTheLock) {
             kitReferences: options.kitReferences,
             resolvedKitCapabilities: options.resolvedKitCapabilities,
             imageAttachments: options.imageAttachments,
-            mediaSelection: options.mediaSelection,
+            mediaSelection: normalizedMediaSelection,
             mediaReferences: options.mediaReferences,
             selectedTextSnippets,
           })

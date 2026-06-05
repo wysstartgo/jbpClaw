@@ -7,6 +7,7 @@ import {
   type FetchResponseLike,
   inferImageExtensionFromBytes,
   inferImageExtensionFromUrl,
+  inferImageMimeTypeFromDataUrl,
   persistGeneratedImageAssets,
   persistGeneratedVideoAssets,
   sanitizeGeneratedImageFileName,
@@ -45,6 +46,7 @@ describe('mediaAssetPersistence', () => {
   test('infers image extensions from urls and bytes', () => {
     expect(inferImageExtensionFromUrl('https://example.com/path/image.png?signature=temporary')).toBe('.png');
     expect(inferImageExtensionFromBytes(pngBuffer)).toBe('.png');
+    expect(inferImageMimeTypeFromDataUrl(`data:image/webp;base64,${Buffer.from('raw').toString('base64')}`)).toBe('image/webp');
   });
 
   test('persists downloaded images into cwd and avoids overwriting existing files', async () => {
@@ -70,6 +72,57 @@ describe('mediaAssetPersistence', () => {
     expect(result.saved[0].filename).toBe('generated-image-2.png');
     expect(result.saved[0].filePath).toBe(path.join(cwd, 'generated-image-2.png'));
     expect(await fs.promises.readFile(result.saved[0].filePath)).toEqual(pngBuffer);
+  });
+
+  test('persists image data urls without fetching and prefers byte-detected extension', async () => {
+    const cwd = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lobster-media-assets-'));
+    const dataUrl = `data:image/jpeg;base64,${pngBuffer.toString('base64')}`;
+
+    const result = await persistGeneratedImageAssets({
+      cwd,
+      now: new Date(2026, 4, 14, 11, 50, 32),
+      assets: [
+        {
+          type: 'image',
+          url: dataUrl,
+          mimeType: 'image/jpeg',
+        },
+      ],
+      fetchAsset: async () => {
+        throw new Error('data URL should not be fetched');
+      },
+    });
+
+    expect(result.failed).toHaveLength(0);
+    expect(result.saved).toHaveLength(1);
+    expect(result.saved[0].filename).toBe('generated-image-20260514-115032-1.png');
+    expect(result.saved[0].mimeType).toBe('image/png');
+    expect(await fs.promises.readFile(result.saved[0].filePath)).toEqual(pngBuffer);
+  });
+
+  test('persists image data urls using declared mime when bytes are unknown', async () => {
+    const cwd = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lobster-media-assets-'));
+    const rawBuffer = Buffer.from('image-bytes-without-known-signature');
+
+    const result = await persistGeneratedImageAssets({
+      cwd,
+      now: new Date(2026, 4, 14, 11, 50, 32),
+      assets: [
+        {
+          type: 'image',
+          url: `data:image/webp;base64,${rawBuffer.toString('base64')}`,
+        },
+      ],
+      fetchAsset: async () => {
+        throw new Error('data URL should not be fetched');
+      },
+    });
+
+    expect(result.failed).toHaveLength(0);
+    expect(result.saved).toHaveLength(1);
+    expect(result.saved[0].filename).toBe('generated-image-20260514-115032-1.webp');
+    expect(result.saved[0].mimeType).toBe('image/webp');
+    expect(await fs.promises.readFile(result.saved[0].filePath)).toEqual(rawBuffer);
   });
 
   test('reports failed downloads without writing files', async () => {
