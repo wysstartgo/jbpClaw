@@ -153,7 +153,7 @@ const showLoginWelcome = () => {
 const AVATAR_TONES = [
   'from-amber-500 to-orange-500',
   'from-cyan-500 to-sky-500',
-  'from-emerald-500 to-teal-500',
+  'from-zinc-900 to-red-700',
   'from-fuchsia-500 to-pink-500',
   'from-indigo-500 to-blue-500',
   'from-rose-500 to-red-500',
@@ -709,8 +709,8 @@ const QtbLoginPanel: React.FC<{
 
   return (
     <div className={`absolute z-[70] rounded-2xl border border-claude-border bg-claude-surface p-4 shadow-popover dark:border-claude-darkBorder dark:bg-claude-darkSurface popover-enter ${panelClassName ?? 'bottom-full left-0 mb-2'} ${loginMode === AuthLoginMode.Scan ? 'w-[19rem]' : 'w-[16.5rem]'}`}>
-      <div className="mb-2 inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium tracking-[0.02em] text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-400/15">
-        灵工打卡
+      <div className="mb-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium tracking-[0.02em] text-red-700 ring-1 ring-red-100 dark:bg-red-500/10 dark:text-red-200 dark:ring-red-400/15">
+        聚宝盆
       </div>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="text-sm font-semibold text-claude-text dark:text-claude-darkText">
@@ -729,7 +729,7 @@ const QtbLoginPanel: React.FC<{
 
       {loginMode === AuthLoginMode.Scan ? (
         <div className="space-y-2.5">
-          <div className="rounded-[20px] bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.09),_transparent_58%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(249,252,251,0.96))] px-4 pb-4 pt-4 ring-1 ring-emerald-100/70 dark:bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_54%),linear-gradient(180deg,rgba(8,18,16,0.98),rgba(10,24,21,0.96))] dark:ring-emerald-500/10">
+          <div className="rounded-[20px] bg-[radial-gradient(circle_at_top,_rgba(185,28,28,0.10),_transparent_58%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(253,250,250,0.96))] px-4 pb-4 pt-4 ring-1 ring-red-100/70 dark:bg-[radial-gradient(circle_at_top,_rgba(185,28,28,0.18),_transparent_54%),linear-gradient(180deg,rgba(15,15,18,0.98),rgba(24,10,12,0.96))] dark:ring-red-500/10">
             <div className="flex flex-col items-center text-center">
               <FeishuSdkQrPanel
                 authorizeUrl={feishuScanSession?.authorizeUrl}
@@ -738,8 +738,8 @@ const QtbLoginPanel: React.FC<{
               <div className="mt-3 text-[11px] leading-5 text-claude-textSecondary dark:text-claude-darkTextSecondary">
                 {notice || i18nService.t('authFeishuScanPanelHint')}
               </div>
-              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/68 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200/60 dark:bg-emerald-950/24 dark:text-emerald-200 dark:ring-emerald-400/10">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/68 px-2 py-0.5 text-[10px] font-medium text-red-700 ring-1 ring-red-200/60 dark:bg-red-950/24 dark:text-red-200 dark:ring-red-400/10">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-600" />
                 {i18nService.t('authFeishuLoginCountdown').replace('{seconds}', String(feishuCountdown))}
               </div>
             </div>
@@ -749,7 +749,7 @@ const QtbLoginPanel: React.FC<{
                 type="button"
                 onClick={() => void handleRefreshFeishuScan()}
                 disabled={isCreatingFeishuSession || submittingMode !== null}
-                className="text-[10px] font-medium text-emerald-700/90 transition-colors hover:text-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-200/90 dark:hover:text-emerald-100"
+                className="text-[10px] font-medium text-red-700/90 transition-colors hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-200/90 dark:hover:text-red-100"
               >
                 {isCreatingFeishuSession
                   ? i18nService.t('authFeishuScanLoading')
@@ -940,7 +940,7 @@ const UserMenu: React.FC<{
                 </div>
               )}
             </div>
-            <div className="shrink-0 text-[11px] text-claude-accent dark:text-emerald-300">
+            <div className="shrink-0 text-[11px] text-claude-accent dark:text-red-300">
               {i18nService.t('authOpenQtbWeb')}
             </div>
           </div>
@@ -1146,12 +1146,12 @@ const LoginButton: React.FC<LoginButtonProps> = ({ variant = 'default' }) => {
                 <UserAvatar
                   avatarUrl={user?.avatarUrl}
                   displayName={primaryIdentity}
-                  className="h-11 w-11 ring-1 ring-emerald-400/12"
+                  className="h-11 w-11 ring-1 ring-red-400/12"
                 />
                 <span className="absolute -bottom-1 -right-1">
                   <QingShuBrandMark
-                    className="relative flex h-4.5 w-4.5 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-500 shadow-sm shadow-emerald-500/25 ring-2 ring-background"
-                    iconClassName="text-[8px] font-semibold tracking-[0.08em] text-white"
+                    className="relative flex h-4.5 w-4.5 items-center justify-center overflow-hidden rounded-full bg-red-600 shadow-sm shadow-red-950/25 ring-2 ring-background"
+                    iconClassName="text-[9px] font-semibold leading-none text-white"
                   />
                 </span>
               </span>
@@ -1169,12 +1169,12 @@ const LoginButton: React.FC<LoginButtonProps> = ({ variant = 'default' }) => {
         ) : (
           <>
             {isSidebarVariant ? (
-              <span className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-400/12 text-emerald-600 shadow-subtle ring-1 ring-emerald-400/10">
+              <span className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-red-500/10 text-red-700 shadow-subtle ring-1 ring-red-400/10 dark:text-red-300">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 0 0-16 0" /></svg>
                 <span className="absolute -bottom-1 -right-1">
                   <QingShuBrandMark
-                    className="relative flex h-4.5 w-4.5 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-500 shadow-sm shadow-emerald-500/25 ring-2 ring-background"
-                    iconClassName="text-[8px] font-semibold tracking-[0.08em] text-white"
+                    className="relative flex h-4.5 w-4.5 items-center justify-center overflow-hidden rounded-full bg-red-600 shadow-sm shadow-red-950/25 ring-2 ring-background"
+                    iconClassName="text-[9px] font-semibold leading-none text-white"
                   />
                 </span>
               </span>

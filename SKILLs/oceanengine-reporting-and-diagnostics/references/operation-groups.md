@@ -1,0 +1,20 @@
+# 报表、洞察与诊断操作分组
+
+| Top | Sub | 数量 | 示例 |
+| --- | --- | ---: | --- |
+| `file` | `rebate` | 7 | `file_rebate_common_download_create_task_v2`, `file_rebate_common_download_download_file_v2`, `file_rebate_common_download_get_download_task_list_v2`, `file_rebate_material_download_create_task_v2`, `file_rebate_material_download_download_file_v2` |
+| `report` | `custom` | 5 | `report_custom_async_task_create_v3`, `report_custom_async_task_download_v3`, `report_custom_async_task_get_v3`, `report_custom_config_get_v3`, `report_custom_get_v3` |
+| `report` | `live_room` | 5 | `report_live_room_analysis_get_v2`, `report_live_room_analysis_get_v3`, `report_live_room_attribute_get_v2`, `report_live_room_audience_portrait_get_v2`, `report_live_room_flow_category_get_v2` |
+| `diagnosis_task` | `adv` | 3 | `diagnosis_task_adv_create_v2`, `diagnosis_task_adv_get_v2`, `diagnosis_task_adv_list_v2` |
+| `diagnosis_task` | `agent` | 3 | `diagnosis_task_agent_create_v2`, `diagnosis_task_agent_get_v2`, `diagnosis_task_agent_list_v2` |
+| `tools` | `promotion_diagnosis` | 2 | `tools_promotion_diagnosis_suggestion_accept_v3`, `tools_promotion_diagnosis_suggestion_get_v3` |
+| `report` | `agent` | 1 | `report_agent_get_v2_v2` |
+| `report` | `report` | 1 | `report_report_live_room_audience_portrait_get_v3` |
+| `report` | `rta_cus_exp` | 1 | `report_rta_cus_exp_get_v2` |
+| `report` | `rta_exp` | 1 | `report_rta_exp_get_v2` |
+| `report` | `rta_exp_local_daily` | 1 | `report_rta_exp_local_daily_get_v3` |
+| `report` | `rta_exp_local_hourly` | 1 | `report_rta_exp_local_hourly_get_v3` |
+| `report` | `site` | 1 | `report_site_page_v2` |
+| `tools` | `bids` | 1 | `tools_bids_suggest_v3` |
+| `tools` | `log_search` | 1 | `tools_log_search_v2` |
+| `tools` | `suggest_budget` | 1 | `tools_suggest_budget_get_v3` |

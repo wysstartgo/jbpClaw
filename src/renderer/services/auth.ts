@@ -106,7 +106,7 @@ class AuthService {
         },
         body: JSON.stringify({
           channelType: 'qingshu',
-          clientName: 'QingShuClaw',
+          clientName: 'JBPClaw',
           clientVersion: 'dev',
         }),
       }),
@@ -189,7 +189,7 @@ class AuthService {
 
     const catalogResult = results[1];
     if (catalogResult.status === 'rejected') {
-      console.warn('[AuthService] failed to sync QingShu managed catalog:', catalogResult.reason);
+      console.warn('[AuthService] failed to sync JBP managed catalog:', catalogResult.reason);
     }
 
     if (!shouldApply()) {

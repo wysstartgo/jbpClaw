@@ -2,6 +2,7 @@ import type { PermissionResult } from '@anthropic-ai/claude-agent-sdk';
 import { EventEmitter } from 'events';
 
 import type { OpenClawSessionPatch } from '../../../common/openclawSession';
+import type { CoworkMessage } from '../../coworkStore';
 import type {
   CoworkAgentEngine,
   CoworkContinueOptions,
@@ -143,6 +144,18 @@ export class CoworkEngineRouter extends EventEmitter implements CoworkRuntime {
     }
     return this.runtimeByEngine.openclaw.getSessionConfirmationMode(sessionId)
       ?? this.runtimeByEngine.yd_cowork.getSessionConfirmationMode(sessionId);
+  }
+
+  async getSubTaskHistory(parentSessionId: string, agentId: string, sessionKey?: string): Promise<CoworkMessage[]> {
+    return this.runtimeByEngine.openclaw.getSubTaskHistory?.(parentSessionId, agentId, sessionKey) ?? [];
+  }
+
+  listSubagentRuns(parentSessionId: string): unknown[] {
+    return this.runtimeByEngine.openclaw.listSubagentRuns?.(parentSessionId) ?? [];
+  }
+
+  async deleteSubagentSession(parentSessionId: string, runId: string): Promise<boolean> {
+    return this.runtimeByEngine.openclaw.deleteSubagentSession?.(parentSessionId, runId) ?? false;
   }
 
   onSessionDeleted(sessionId: string): void {

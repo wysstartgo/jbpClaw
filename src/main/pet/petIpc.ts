@@ -387,6 +387,16 @@ export function registerPetIpc(options: RegisterPetIpcOptions): {
     return { success: true };
   });
 
+  ipcMain.handle(PetIpcChannel.SetFloatingWindowIgnoresMouseEvents, (_event, ignores: unknown) => {
+    options.windowController.setIgnoresMouseEvents(ignores === true);
+    return { success: true };
+  });
+
+  ipcMain.handle(PetIpcChannel.ResizeFloatingWindowBy, (_event, payload: { deltaX?: number; deltaY?: number } = {}) => {
+    const config = options.windowController.resizeBy(Number(payload.deltaX ?? 0), Number(payload.deltaY ?? 0));
+    return { success: true, config, state: emitState() };
+  });
+
   ipcMain.handle(PetIpcChannel.PersistFloatingWindowPosition, () => {
     options.windowController.persistPosition();
     return { success: true };

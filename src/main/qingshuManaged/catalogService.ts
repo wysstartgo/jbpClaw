@@ -1,8 +1,9 @@
+import { QingShuFileToolName } from '../../shared/qingshuFile/constants';
 import {
+  buildQingShuManagedToolAlias,
   QingShuManagedToolRuntime,
   QingShuObjectSourceType,
 } from '../../shared/qingshuManaged/constants';
-import { QingShuFileToolName } from '../../shared/qingshuFile/constants';
 import type {
   QingShuManagedAgentDescriptor,
   QingShuManagedCatalogSnapshot,
@@ -11,7 +12,14 @@ import type {
 } from '../../shared/qingshuManaged/types';
 import type { AuthAdapter } from '../auth/adapter';
 import type { Agent } from '../coworkStore';
+import {
+  buildQingShuClientRequestContext,
+  buildQingShuContextHeaderRecord,
+} from '../qingshuRequestContext';
 import type { SkillManager } from '../skillManager';
+import { EladminMpSessionService } from './eladminMpSessionService';
+import { EladminMpToolRuntime } from './eladminMpToolRuntime';
+import type { QingShuManagedToolRuntimeContext } from './toolRuntimeContext';
 
 type FetchFn = (url: string, options?: RequestInit) => Promise<Response>;
 
@@ -19,8 +27,11 @@ type QingShuManagedCatalogServiceDeps = {
   fetchFn: FetchFn;
   getAuthAdapter: () => AuthAdapter;
   resolveApiBaseUrl: () => string | null;
+  resolveEladminMpBaseUrl?: () => string | null;
   isAuthenticated: () => boolean;
   getDeviceId?: () => string | null;
+  getClientIp?: () => string | null;
+  getRuntimeContext?: () => QingShuManagedToolRuntimeContext | null;
   skillManager: SkillManager;
   store?: {
     get<T = unknown>(key: string): T | undefined;
@@ -64,12 +75,6 @@ const QINGSHU_AUTHENTICATION_FAILED_PATTERN = /authentication failed|please logi
 const QINGSHU_LOCAL_ONLY_TOOL_NAMES = new Set<string>([
   QingShuFileToolName.Publish,
 ]);
-const QINGSHU_MANAGED_TOOL_HEADERS = {
-  TraceId: 'traceId',
-  RequestId: 'x-qingshu-request-id',
-  DeviceId: 'x-qingshu-device-id',
-} as const;
-
 const emptySnapshot = (): QingShuManagedCatalogSnapshot => ({
   catalogVersion: '',
   syncedAt: 0,
@@ -103,10 +108,6 @@ const stringifyToolPayload = (payload: unknown): string => {
 const clipText = (value: string, maxLength: number): string =>
   value.length <= maxLength ? value : `${value.slice(0, maxLength)}...`;
 
-const buildManagedToolAlias = (toolName: string): string =>
-  `mcp_${QingShuManagedToolRuntime.ServerName.replace(/[^a-z0-9]+/gi, '_')}_${toolName.replace(/[^a-z0-9]+/gi, '_')}`
-    .toLowerCase();
-
 const summarizeToolArgs = (args: Record<string, unknown>): string =>
   clipText(stringifyToolPayload(args), 512);
 
@@ -130,6 +131,10 @@ const isQingShuAuthFailure = (response: Response, body?: QtbResult<unknown> | nu
 export class QingShuManagedCatalogService {
   private snapshot: QingShuManagedCatalogSnapshot;
 
+  private eladminMpSessionService: EladminMpSessionService | null = null;
+
+  private eladminMpToolRuntime: EladminMpToolRuntime | null = null;
+
   constructor(private readonly deps: QingShuManagedCatalogServiceDeps) {
     this.snapshot = this.loadPersistedSnapshot();
   }
@@ -145,6 +150,7 @@ export class QingShuManagedCatalogService {
 
   reset(): void {
     this.snapshot = emptySnapshot();
+    this.eladminMpSessionService?.clear();
     this.persistSnapshot();
     this.deps.onCatalogChanged?.();
   }
@@ -231,7 +237,7 @@ export class QingShuManagedCatalogService {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to sync QingShu managed catalog',
+        error: error instanceof Error ? error.message : 'Failed to sync JBP managed catalog',
       };
     }
   }
@@ -366,7 +372,7 @@ export class QingShuManagedCatalogService {
       .map((tool) => ({
         server: QingShuManagedToolRuntime.ServerName,
         name: tool.toolName,
-        description: `${tool.description} [MCP alias: ${buildManagedToolAlias(tool.toolName)}]`,
+        description: `${tool.description} [MCP alias: ${buildQingShuManagedToolAlias(tool.toolName)}]`,
         inputSchema: tool.inputSchema ?? {},
       }));
   }
@@ -385,7 +391,7 @@ export class QingShuManagedCatalogService {
     options?: { signal?: AbortSignal },
   ): Promise<{ content: Array<{ type: string; text?: string }>; isError: boolean }> {
     if (QINGSHU_LOCAL_ONLY_TOOL_NAMES.has(toolName)) {
-      const errorMessage = `Tool "${toolName}" must be invoked through QingShuClaw local MCP runtime.`;
+      const errorMessage = `Tool "${toolName}" must be invoked through JBPClaw local MCP runtime.`;
       console.warn(`[QingShuManaged] blocked backend invocation for local-only tool "${toolName}"`);
       return {
         content: [{ type: 'text', text: errorMessage }],
@@ -393,21 +399,34 @@ export class QingShuManagedCatalogService {
       };
     }
 
-    const toolAlias = buildManagedToolAlias(toolName);
+    const descriptor = this.snapshot.tools.find((tool) => tool.toolName === toolName);
+    if (descriptor?.toolType === 'eladmin-mp-api') {
+      const body = await this.getEladminMpToolRuntime().invoke(descriptor, args, options);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: stringifyToolPayload(body.data ?? body.summary ?? body.errorMessage ?? {}),
+          },
+        ],
+        isError: body.success !== true,
+      };
+    }
+
+    const toolAlias = buildQingShuManagedToolAlias(toolName);
     const backendPath = `/api/qingshu-claw/managed/tools/${encodeURIComponent(toolName)}/invoke`;
     const requestId = createManagedToolRequestId();
-    const traceId = requestId;
-    const deviceId = this.deps.getDeviceId?.()?.trim() || null;
-    const headers: Record<string, string> = {
+    const context = buildQingShuClientRequestContext({
+      requestId,
+      deviceId: this.deps.getDeviceId?.(),
+      clientIp: this.deps.getClientIp?.(),
+      runtimeContext: this.deps.getRuntimeContext?.() ?? null,
+    });
+    const headers = buildQingShuContextHeaderRecord(context, {
       'Content-Type': 'application/json',
-      [QINGSHU_MANAGED_TOOL_HEADERS.TraceId]: traceId,
-      [QINGSHU_MANAGED_TOOL_HEADERS.RequestId]: requestId,
-    };
-    if (deviceId) {
-      headers[QINGSHU_MANAGED_TOOL_HEADERS.DeviceId] = deviceId;
-    }
+    });
     console.log(
-      `[QingShuManaged] invoking MCP tool "${toolAlias}" mapped to "${toolName}" requestId=${requestId} traceId=${traceId} deviceId=${deviceId ?? 'unknown'} with args ${summarizeToolArgs(args)}`,
+      `[QingShuManaged] invoking MCP tool "${toolAlias}" mapped to "${toolName}" requestId=${context.requestId ?? requestId} traceId=${context.traceId ?? requestId} deviceId=${context.deviceId ?? 'unknown'} agentId=${context.agentId ?? 'unknown'} sessionId=${context.sessionId ?? 'unknown'} skillIds=${context.skillIds?.join(',') || 'none'} with args ${summarizeToolArgs(args)}`,
     );
     try {
       const body = await this.fetchResult<ManagedToolInvokeResponse>(
@@ -429,7 +448,7 @@ export class QingShuManagedCatalogService {
         || (body.success ? 'Managed tool invocation succeeded' : body.errorMessage?.trim())
         || 'Managed tool invocation finished';
       console.log(
-        `[QingShuManaged] MCP tool "${toolAlias}" completed requestId=${requestId} traceId=${traceId} deviceId=${deviceId ?? 'unknown'} success=${body.success === true} summary="${clipText(summaryText, 240)}" payload=${summarizeToolPayload(body.data ?? body.errorMessage ?? {})}`,
+        `[QingShuManaged] MCP tool "${toolAlias}" completed requestId=${context.requestId ?? requestId} traceId=${context.traceId ?? requestId} deviceId=${context.deviceId ?? 'unknown'} agentId=${context.agentId ?? 'unknown'} sessionId=${context.sessionId ?? 'unknown'} success=${body.success === true} summary="${clipText(summaryText, 240)}" payload=${summarizeToolPayload(body.data ?? body.errorMessage ?? {})}`,
       );
 
       return {
@@ -445,7 +464,7 @@ export class QingShuManagedCatalogService {
       if (isAbortError(error)) {
         const message = `Managed tool invocation timed out after ${Math.floor(MANAGED_TOOL_TIMEOUT_MS / 1000)}s`;
         console.error(
-          `[QingShuManaged] MCP tool "${toolAlias}" mapped to "${toolName}" timed out requestId=${requestId} traceId=${traceId} deviceId=${deviceId ?? 'unknown'} via "${backendPath}":`,
+          `[QingShuManaged] MCP tool "${toolAlias}" mapped to "${toolName}" timed out requestId=${context.requestId ?? requestId} traceId=${context.traceId ?? requestId} deviceId=${context.deviceId ?? 'unknown'} via "${backendPath}":`,
           error,
         );
         return {
@@ -459,7 +478,7 @@ export class QingShuManagedCatalogService {
         };
       }
       console.error(
-        `[QingShuManaged] MCP tool "${toolAlias}" mapped to "${toolName}" failed requestId=${requestId} traceId=${traceId} deviceId=${deviceId ?? 'unknown'} via "${backendPath}":`,
+        `[QingShuManaged] MCP tool "${toolAlias}" mapped to "${toolName}" failed requestId=${context.requestId ?? requestId} traceId=${context.traceId ?? requestId} deviceId=${context.deviceId ?? 'unknown'} via "${backendPath}":`,
         error,
       );
       throw error;
@@ -477,7 +496,7 @@ export class QingShuManagedCatalogService {
       this.notifyAuthSessionInvalidated(`qingshu-managed-auth-failed:${path}`);
     }
     if (!response.ok || !body || body.code !== 200) {
-      throw new Error(body?.msg || `QingShu managed request failed: ${response.status}`);
+      throw new Error(body?.msg || `JBP managed request failed: ${response.status}`);
     }
     return body.data as T;
   }
@@ -495,7 +514,7 @@ export class QingShuManagedCatalogService {
     const adapter = this.deps.getAuthAdapter();
     const accessToken = await adapter.getAccessToken();
     if (!accessToken) {
-      throw new Error('QingShu auth token is not available');
+      throw new Error('JBP auth token is not available');
     }
 
     const timeoutMs = options?.timeoutMs;
@@ -575,7 +594,27 @@ export class QingShuManagedCatalogService {
   }
 
   private notifyAuthSessionInvalidated(reason: string): void {
+    this.eladminMpSessionService?.clear();
     this.deps.onAuthSessionInvalidated?.(reason);
+  }
+
+  private getEladminMpToolRuntime(): EladminMpToolRuntime {
+    if (!this.eladminMpSessionService) {
+      this.eladminMpSessionService = new EladminMpSessionService({
+        fetchFn: this.deps.fetchFn,
+        getAuthAdapter: this.deps.getAuthAdapter,
+        resolveQtbApiBaseUrl: this.deps.resolveApiBaseUrl,
+        resolveEladminMpBaseUrl: () => this.deps.resolveEladminMpBaseUrl?.() ?? null,
+      });
+    }
+    if (!this.eladminMpToolRuntime) {
+      this.eladminMpToolRuntime = new EladminMpToolRuntime({
+        fetchFn: this.deps.fetchFn,
+        sessionService: this.eladminMpSessionService,
+        resolveEladminMpBaseUrl: () => this.deps.resolveEladminMpBaseUrl?.() ?? null,
+      });
+    }
+    return this.eladminMpToolRuntime;
   }
 
   private loadPersistedSnapshot(): QingShuManagedCatalogSnapshot {

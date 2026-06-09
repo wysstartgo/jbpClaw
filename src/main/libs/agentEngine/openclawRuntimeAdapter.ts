@@ -16,6 +16,12 @@ import type {
   CoworkStore,
 } from '../../coworkStore';
 import { t } from '../../i18n';
+import {
+  clearQingShuManagedToolRuntimeContext,
+  setQingShuManagedToolRuntimeContext,
+} from '../../qingshuManaged/toolRuntimeContext';
+import type { SubagentMessageStore } from '../../subagentMessageStore';
+import type { SubagentRunStore } from '../../subagentRunStore';
 import { getCommandDangerLevel,isDeleteCommand } from '../commandSafety';
 import { setCoworkProxyAgentId, setCoworkProxySessionId } from '../coworkOpenAICompatProxy';
 import { extractOpenClawAssistantStreamText } from '../openclawAssistantText';
@@ -43,8 +49,6 @@ import {
 } from '../openclawHistory';
 import { buildOpenClawLocalTimeContextPrompt } from '../openclawLocalTimeContextPrompt';
 import { buildTransientSessionFromOpenClawTranscript } from '../openclawTranscript';
-import type { SubagentMessageStore } from '../../subagentMessageStore';
-import type { SubagentRunStore } from '../../subagentRunStore';
 import { mergeAgentInstructionPrompt, mergeAgentSkillIds } from './agentContext';
 import { AgentLifecyclePhase, type AgentLifecyclePhase as AgentLifecyclePhaseValue } from './constants';
 import { SubagentTracker } from './subagentTracker';
@@ -1757,6 +1761,13 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     }
 
     const agentId = options.agentId || session.agentId || 'main';
+    const agentForContext = this.store.getAgent(agentId);
+    const effectiveSkillIds = mergeAgentSkillIds(options.skillIds, agentForContext);
+    setQingShuManagedToolRuntimeContext({
+      agentId,
+      sessionId,
+      skillIds: effectiveSkillIds,
+    });
     const sessionKey = this.toSessionKey(sessionId, agentId);
     this.rememberSessionKey(sessionId, sessionKey);
 
@@ -2576,7 +2587,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
 
     // Use require() with file path directly. TypeScript's CJS output downgrades
     // dynamic import() to require(), which doesn't support file:// URLs.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+
     const loaded = require(clientEntryPath) as Record<string, unknown>;
     const directCtor = resolveCtorFromExports(loaded);
     if (directCtor) {
@@ -2595,7 +2606,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       for (const entry of fallbackEntries) {
         const fallbackPath = path.join(distDir, entry);
         try {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
+
           const fallbackLoaded = require(fallbackPath) as Record<string, unknown>;
           const fallbackCtor = resolveCtorFromExports(fallbackLoaded);
           if (fallbackCtor) {
@@ -4798,6 +4809,7 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
     this.activeTurns.delete(sessionId);
     setCoworkProxySessionId(null);
     setCoworkProxyAgentId(null);
+    clearQingShuManagedToolRuntimeContext(sessionId);
     // NOTE: Do NOT clear lastSystemPromptBySession here — it must persist
     // across turns so that the system prompt is only injected on the first
     // turn of a session (or when it actually changes).  Cleanup happens in
@@ -4902,6 +4914,10 @@ export class OpenClawRuntimeAdapter extends EventEmitter implements CoworkRuntim
       timestamp: message.timestamp,
       metadata: message.metadata,
     }));
+  }
+
+  async deleteSubagentSession(parentSessionId: string, runId: string): Promise<boolean> {
+    return this.subagentTracker?.deleteSubagentRun(parentSessionId, runId) ?? false;
   }
 
   /**

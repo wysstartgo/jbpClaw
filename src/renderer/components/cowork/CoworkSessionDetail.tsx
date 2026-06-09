@@ -56,6 +56,7 @@ import { getCompactFolderName } from '../../utils/path';
 import { parseUserMessageForDisplay } from '../../utils/userMessageDisplay';
 import { ArtifactPanel } from '../artifacts';
 import type { BrowserAnnotationPayload } from '../artifacts/ArtifactPanel';
+import QingShuBrandMark from '../branding/QingShuBrandMark';
 import Modal from '../common/Modal';
 import BranchIcon from '../icons/BranchIcon';
 import ComposeIcon from '../icons/ComposeIcon';
@@ -1711,10 +1712,10 @@ export const AssistantTurnBlock: React.FC<{
   return (
     <div className="group relative px-4 py-6 bg-primary/5 dark:bg-primary/[0.02] transition-colors">
       <div className="max-w-5xl mx-auto flex items-start gap-4 position-relative">
-        {/* Assistant Avatar */}
-        <div className="shrink-0 mt-0.5 flex items-center justify-center w-7 h-7 rounded-[8px] bg-primary/10 overflow-hidden shadow-sm border border-primary/20">
-          <span className="text-[14px] leading-none drop-shadow-sm">🦞</span>
-        </div>
+        <QingShuBrandMark
+          className="relative mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-red-600 shadow-[0_0_0_1px_rgba(0,0,0,0.55),0_4px_14px_rgba(220,38,38,0.46)] ring-1 ring-white/45"
+          iconClassName="text-[15px] font-semibold leading-none text-white"
+        />
         
         <div className="flex-1 min-w-0 space-y-4">
           {visibleAssistantItems.map((item, index) => {

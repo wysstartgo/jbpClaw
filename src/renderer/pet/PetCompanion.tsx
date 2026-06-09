@@ -26,6 +26,8 @@ type PetCompanionProps = {
   className?: string;
 };
 
+const FLOATING_INTERACTIVE_TARGET_SELECTOR = '.non-draggable';
+
 const statusLabel = (status: PetStatus): string => {
   switch (status) {
     case PetStatus.Running:
@@ -389,12 +391,19 @@ const PetCompanion: React.FC<PetCompanionProps> = ({
     moved: boolean;
     direction: 'left' | 'right' | null;
   } | null>(null);
+  const [resizeState, setResizeState] = useState<{
+    pointerId: number;
+    lastX: number;
+    lastY: number;
+  } | null>(null);
   const pet = state.activePet;
   const visible = variant === 'floating'
     ? state.config.enabled && !!pet?.manifest
     : canRenderEmbedded(state);
 
-  const spriteSize = variant === 'floating' ? 104 : 72;
+  const spriteSize = variant === 'floating'
+    ? Math.max(104, Math.min(260, Math.round(state.config.floatingWindow.width * 0.58)))
+    : 72;
   const menuPositionClass = variant === 'floating' ? 'right-6 top-5' : 'right-0 bottom-full mb-2';
   const isFloating = variant === 'floating';
   const isDragging = !!dragState;
@@ -421,6 +430,51 @@ const PetCompanion: React.FC<PetCompanionProps> = ({
     if (!isFloating) return;
     void window.electron.pet.setFloatingActivityOpen(hasActiveSessions && activityTrayOpen);
   }, [activityTrayOpen, hasActiveSessions, isFloating]);
+
+  useEffect(() => {
+    if (!isFloating) return;
+    let ignoresMouseEvents = false;
+    let pendingIgnore: boolean | null = null;
+    let scheduled = false;
+
+    const flushMouseEventMode = () => {
+      scheduled = false;
+      if (pendingIgnore === null || pendingIgnore === ignoresMouseEvents) return;
+      ignoresMouseEvents = pendingIgnore;
+      void window.electron.pet.setFloatingWindowIgnoresMouseEvents(ignoresMouseEvents).catch((error) => {
+        console.error('[PetCompanion] failed to update floating mouse event mode:', error);
+      });
+    };
+
+    const setIgnored = (ignored: boolean) => {
+      pendingIgnore = ignored;
+      if (scheduled) return;
+      scheduled = true;
+      window.requestAnimationFrame(flushMouseEventMode);
+    };
+
+    const handleMouseMove = (event: MouseEvent | PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      setIgnored(!target?.closest(FLOATING_INTERACTIVE_TARGET_SELECTOR));
+    };
+
+    const handlePointerLeave = () => {
+      setIgnored(true);
+    };
+
+    setIgnored(true);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('pointermove', handleMouseMove);
+    window.addEventListener('pointerleave', handlePointerLeave);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('pointermove', handleMouseMove);
+      window.removeEventListener('pointerleave', handlePointerLeave);
+      void window.electron.pet.setFloatingWindowIgnoresMouseEvents(false).catch((error) => {
+        console.error('[PetCompanion] failed to restore floating mouse event mode:', error);
+      });
+    };
+  }, [isFloating]);
 
   const closePet = () => {
     setMenuOpen(false);
@@ -485,6 +539,46 @@ const PetCompanion: React.FC<PetCompanionProps> = ({
       moved: false,
       direction: 'right',
     });
+  };
+
+  const handleFloatingResizePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setMenuOpen(false);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setResizeState({
+      pointerId: event.pointerId,
+      lastX: event.screenX,
+      lastY: event.screenY,
+    });
+  };
+
+  const handleFloatingResizePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!resizeState || resizeState.pointerId !== event.pointerId) return;
+    const deltaX = event.screenX - resizeState.lastX;
+    const deltaY = event.screenY - resizeState.lastY;
+    if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setResizeState({
+      pointerId: event.pointerId,
+      lastX: event.screenX,
+      lastY: event.screenY,
+    });
+    void petService.resizeFloatingWindowBy({ deltaX, deltaY });
+  };
+
+  const handleFloatingResizePointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!resizeState || resizeState.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    setResizeState(null);
+  };
+
+  const handleFloatingResizePointerCancel = () => {
+    setResizeState(null);
   };
 
   const handleFloatingPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
@@ -556,6 +650,36 @@ const PetCompanion: React.FC<PetCompanionProps> = ({
               onCollapse={() => setActivityTrayOpen(false)}
             />
           )}
+          <button
+            type="button"
+            className={`non-draggable absolute bottom-1 right-1 z-20 h-7 w-7 cursor-nwse-resize touch-none rounded-full border border-white/75 bg-white/80 p-0 text-neutral-700 opacity-0 shadow-[0_10px_28px_-14px_rgba(15,23,42,0.6),0_2px_8px_-4px_rgba(15,23,42,0.35)] backdrop-blur-md ring-1 ring-black/5 transition duration-150 hover:scale-105 hover:bg-white hover:text-black hover:opacity-100 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 ${resizeState ? 'scale-105 bg-white opacity-100 text-black' : ''}`}
+            onPointerDown={handleFloatingResizePointerDown}
+            onPointerMove={handleFloatingResizePointerMove}
+            onPointerUp={handleFloatingResizePointerUp}
+            onPointerCancel={handleFloatingResizePointerCancel}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            title={i18nService.t('petResizeFloatingWindow')}
+            aria-label={i18nService.t('petResizeFloatingWindow')}
+          >
+            <span className="absolute inset-0 rounded-full bg-gradient-to-br from-white/80 to-neutral-200/70" />
+            <svg
+              className="absolute inset-0 m-auto h-4 w-4"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M4 4h4M4 4v4M12 12H8M12 12V8M4.75 4.75l6.5 6.5"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
         </div>
       ) : (
         <button

@@ -1,0 +1,7 @@
+[
+  "audience_package_bindinfo_get_v3",
+  "audience_package_get_v3",
+  "dmp_custom_audience_read_v2",
+  "dmp_custom_audience_select_v2",
+  "dmp_data_source_read_v2"
+]

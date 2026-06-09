@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import { session } from 'electron';
 import http from 'http';
 
+import { isQingShuServerProvider } from '../../shared/providers';
+import { buildQingShuContextHeaderRecord } from '../qingshuRequestContext';
 import {
   anthropicToOpenAI,
   buildOpenAIChatCompletionsURL,
@@ -10,7 +12,6 @@ import {
   type OpenAIStreamChunk,
   openAIToAnthropic,
 } from './coworkFormatTransform';
-import { isQingShuServerProvider } from '../../shared/providers';
 
 export type OpenAICompatUpstreamConfig = {
   baseURL: string;
@@ -19,7 +20,10 @@ export type OpenAICompatUpstreamConfig = {
   provider?: string;
   clientUserId?: string | null;
   deviceId?: string | null;
+  clientIp?: string | null;
   agentId?: string | null;
+  sessionId?: string | null;
+  skillIds?: string[] | null;
 };
 
 export type OpenAICompatProxyTarget = 'local' | 'sandbox';
@@ -2498,6 +2502,17 @@ async function handleRequest(
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
+  if (isQingShuServerProvider(upstreamConfig.provider)) {
+    Object.assign(headers, buildQingShuContextHeaderRecord({
+      requestId: typeof openAIRequest.request_id === 'string' ? openAIRequest.request_id : undefined,
+      deviceId: upstreamConfig.deviceId,
+      clientIp: upstreamConfig.clientIp,
+      sessionId: upstreamConfig.sessionId || currentCoworkSessionId,
+      agentId: upstreamConfig.agentId || currentCoworkAgentId,
+      skillIds: upstreamConfig.skillIds,
+      clientUserId: upstreamConfig.clientUserId,
+    }));
+  }
   if (upstreamConfig.apiKey) {
     if (isGeminiProvider(upstreamConfig.provider, upstreamConfig.baseURL)) {
       headers['x-goog-api-key'] = upstreamConfig.apiKey;

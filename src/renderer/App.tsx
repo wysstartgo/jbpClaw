@@ -13,7 +13,8 @@ import ConversationHistoryDrawer from './components/cowork/ConversationHistoryDr
 import CoworkPermissionModal from './components/cowork/CoworkPermissionModal';
 import CoworkQuestionWizard from './components/cowork/CoworkQuestionWizard';
 import EngineStartupOverlay from './components/cowork/EngineStartupOverlay';
-import PrimarySidebar, { type WorkbenchMainView } from './components/layout/PrimarySidebar';
+import PrimarySidebar, { WorkbenchMainViewId, type WorkbenchMainView } from './components/layout/PrimarySidebar';
+import { KitsView } from './components/kits';
 import SecondarySidebar from './components/layout/SecondarySidebar';
 import LoginWelcomeOverlay from './components/LoginWelcomeOverlay';
 import PrivacyDialog from './components/PrivacyDialog';
@@ -67,6 +68,7 @@ import { matchesShortcut } from './services/shortcuts';
 import { themeService } from './services/theme';
 import { RootState, store } from './store';
 import { beginLoadSession, setDraftPrompt } from './store/slices/coworkSlice';
+import { setActiveKitIds } from './store/slices/kitSlice';
 import {
   getModelIdentityKey,
   isSameModelIdentity,
@@ -127,7 +129,7 @@ const MainApp: React.FC = () => {
   const platform = electronApi?.platform ?? 'unknown';
   const [showSettings, setShowSettings] = useState(false);
   const [settingsOptions, setSettingsOptions] = useState<SettingsOpenOptions>({});
-  const [mainView, setMainView] = useState<WorkbenchMainView>('cowork');
+  const [mainView, setMainView] = useState<WorkbenchMainView>(WorkbenchMainViewId.Cowork);
   const [coworkWorkspaceView, setCoworkWorkspaceView] = useState<'conversation' | 'agents'>('conversation');
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
@@ -577,7 +579,7 @@ const MainApp: React.FC = () => {
   }, []);
 
   const handleShowSkills = useCallback(() => {
-    setMainView('skills');
+    setMainView(WorkbenchMainViewId.Skills);
   }, []);
 
   const loadAgentSessions = useCallback(async (agentId: string): Promise<CoworkSessionSummary[]> => {
@@ -660,10 +662,10 @@ const MainApp: React.FC = () => {
   const handleNewChat = useCallback(() => {
     disarmWakeFollowUp();
     // 仅在已经位于首页时清空输入，保留从会话返回首页时的首页草稿与附件。
-    const shouldClearInput = mainView === 'cowork' && !currentSessionId;
+    const shouldClearInput = mainView === WorkbenchMainViewId.Cowork && !currentSessionId;
     coworkService.clearSession();
     dispatch(clearSelection());
-    setMainView('cowork');
+    setMainView(WorkbenchMainViewId.Cowork);
     setCoworkWorkspaceView('conversation');
     setHistoryDrawerState(null);
     window.setTimeout(() => {
@@ -681,13 +683,13 @@ const MainApp: React.FC = () => {
     }));
     coworkService.clearSession();
     dispatch(clearSelection());
-    setMainView('cowork');
+    setMainView(WorkbenchMainViewId.Cowork);
     setCoworkWorkspaceView('conversation');
     setHistoryDrawerState(null);
   }, [disarmWakeFollowUp, dispatch]);
 
   const handleFocusCoworkInput = useCallback((clear = false) => {
-    setMainView('cowork');
+    setMainView(WorkbenchMainViewId.Cowork);
     setCoworkWorkspaceView('conversation');
     setHistoryDrawerState(null);
     window.setTimeout(() => {
@@ -699,10 +701,10 @@ const MainApp: React.FC = () => {
 
   const handleSelectMainView = useCallback((view: WorkbenchMainView) => {
     setMainView(view);
-    if (view === 'cowork') {
+    if (view === WorkbenchMainViewId.Cowork) {
       setCoworkWorkspaceView('conversation');
     }
-    if (view !== 'cowork') {
+    if (view !== WorkbenchMainViewId.Cowork) {
       setHistoryDrawerState(null);
     }
   }, []);
@@ -722,10 +724,26 @@ const MainApp: React.FC = () => {
     handleNewChat();
   }, [ensureAgentContext, handleNewChat]);
 
+  const handleTryAskingWithKit = useCallback((text: string, kitId: string) => {
+    dispatch(setDraftPrompt({
+      sessionId: '__home__',
+      draft: text,
+    }));
+    dispatch(setActiveKitIds([kitId]));
+    coworkService.clearSession();
+    dispatch(clearSelection());
+    setMainView(WorkbenchMainViewId.Cowork);
+    setCoworkWorkspaceView('conversation');
+    setHistoryDrawerState(null);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent(AppCustomEvent.FocusCoworkInput));
+    }, 0);
+  }, [dispatch]);
+
   const handleSelectConversation = useCallback(async (agentId: string, sessionId: string) => {
     await ensureAgentContext(agentId);
     dispatch(beginLoadSession(sessionId));
-    setMainView('cowork');
+    setMainView(WorkbenchMainViewId.Cowork);
     setCoworkWorkspaceView('conversation');
     setHistoryDrawerState(null);
     const loadedSession = await coworkService.loadSession(sessionId);
@@ -738,13 +756,13 @@ const MainApp: React.FC = () => {
   }, [dispatch, ensureAgentContext]);
 
   const handleOpenAgentWorkspace = useCallback(() => {
-    setMainView('cowork');
+    setMainView(WorkbenchMainViewId.Cowork);
     setCoworkWorkspaceView((current) => current === 'agents' ? 'conversation' : 'agents');
     setHistoryDrawerState(null);
   }, []);
 
   const handleOpenCoworkSearch = useCallback(() => {
-    setMainView('cowork');
+    setMainView(WorkbenchMainViewId.Cowork);
     void loadGlobalSearchSessions();
     setShowCoworkSearch(true);
   }, [loadGlobalSearchSessions]);
@@ -1285,7 +1303,7 @@ const MainApp: React.FC = () => {
       return;
     }
     const unsubscribe = electronApi.ipcRenderer.on('app:openPetSession', (session?: PetRuntimeState['session']) => {
-      setMainView('cowork');
+      setMainView(WorkbenchMainViewId.Cowork);
       setCoworkWorkspaceView('conversation');
       setHistoryDrawerState(null);
       if (session?.id) {
@@ -1509,7 +1527,7 @@ const MainApp: React.FC = () => {
           onSelectView={handleSelectMainView}
           onOpenSettings={() => handleShowSettings()}
         />
-        {mainView === 'cowork' && (
+        {mainView === WorkbenchMainViewId.Cowork && (
           <SecondarySidebar
             currentSessionId={currentSessionId}
             isAgentWorkspaceActive={coworkWorkspaceView === 'agents'}
@@ -1523,14 +1541,16 @@ const MainApp: React.FC = () => {
         <div className="flex-1 min-w-0 p-1.5">
           <div className="relative h-full min-h-0 overflow-hidden rounded-[28px] bg-background">
             <EngineStartupOverlay suspended={showLoginWelcome} />
-            {mainView === 'skills' ? (
+            {mainView === WorkbenchMainViewId.Skills ? (
               <SkillsView
                 onCreateSkillByChat={handleCreateSkillByChat}
                 readOnly={enterpriseConfig?.ui?.skills === 'readonly'}
               />
-            ) : mainView === 'scheduledTasks' ? (
+            ) : mainView === WorkbenchMainViewId.ScheduledTasks ? (
               <ScheduledTasksView />
-            ) : mainView === 'applications' ? (
+            ) : mainView === WorkbenchMainViewId.Kits ? (
+              <KitsView onTryAsking={handleTryAskingWithKit} />
+            ) : mainView === WorkbenchMainViewId.Applications ? (
               <Suspense fallback={lazyPanelFallback}>
                 <ApplicationsView />
               </Suspense>
@@ -1544,7 +1564,7 @@ const MainApp: React.FC = () => {
                 onShowSkills={handleShowSkills}
               />
             )}
-            {mainView === 'cowork' && historyDrawerState && (
+            {mainView === WorkbenchMainViewId.Cowork && historyDrawerState && (
               <ConversationHistoryDrawer
                 isOpen={true}
                 title={historyDrawerState.title}

@@ -1,0 +1,10 @@
+[
+  "advertiser_delivery_pkg_delete_v3",
+  "advertiser_delivery_pkg_submit_v3",
+  "advertiser_delivery_qualification_delete_v3",
+  "advertiser_delivery_qualification_submit_v3",
+  "advertiser_qualification_submit_v3",
+  "advertiser_update_budget_v2",
+  "shared_wallet_budget_submit_v3",
+  "shared_wallet_watch_rule_submit_v3"
+]

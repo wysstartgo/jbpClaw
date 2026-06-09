@@ -2,7 +2,7 @@ import { app } from 'electron';
 import { join } from 'path';
 
 import type { ProviderConfig as SharedProviderConfig, ProviderModelConfig } from '../../shared/providers';
-import { ProviderName, ProviderRegistry, isQingShuServerProvider, resolveCodingPlanBaseUrl } from '../../shared/providers';
+import { isQingShuServerProvider, ProviderName, ProviderRegistry, resolveCodingPlanBaseUrl } from '../../shared/providers';
 import type { SqliteStore } from '../sqliteStore';
 import type { CoworkApiConfig } from './coworkConfigStore';
 import { type AnthropicApiFormat,normalizeProviderApiFormat } from './coworkFormatTransform';
@@ -73,11 +73,19 @@ export function setServerBaseUrlGetter(getter: () => string): void {
 let qingShuInvocationContextGetter: (() => {
   clientUserId?: string | null;
   deviceId?: string | null;
+  clientIp?: string | null;
+  agentId?: string | null;
+  sessionId?: string | null;
+  skillIds?: string[] | null;
 } | null) | null = null;
 
 export function setQingShuInvocationContextGetter(getter: () => {
   clientUserId?: string | null;
   deviceId?: string | null;
+  clientIp?: string | null;
+  agentId?: string | null;
+  sessionId?: string | null;
+  skillIds?: string[] | null;
 } | null): void {
   qingShuInvocationContextGetter = getter;
 }

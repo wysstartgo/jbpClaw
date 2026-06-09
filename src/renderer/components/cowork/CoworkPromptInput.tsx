@@ -10,6 +10,7 @@ import { agentService } from '../../services/agent';
 import { configService } from '../../services/config';
 import { coworkService } from '../../services/cowork';
 import { i18nService } from '../../services/i18n';
+import { getInstalledKitSkillIds } from '../../services/kitCapability';
 import { mcpService } from '../../services/mcp';
 import { skillService } from '../../services/skill';
 import { voiceTextPostProcessService } from '../../services/voiceTextPostProcess';
@@ -25,6 +26,7 @@ import {
   setDraftPrompt,
   updateCurrentSessionModelOverride,
 } from '../../store/slices/coworkSlice';
+import { toggleActiveKit } from '../../store/slices/kitSlice';
 import { setMcpServers } from '../../store/slices/mcpSlice';
 import type { Model } from '../../store/slices/modelSlice';
 import { setActiveSkillIds, setSkills, toggleActiveSkill } from '../../store/slices/skillSlice';
@@ -39,6 +41,7 @@ import PencilIcon from '../icons/PencilIcon';
 import TrashIcon from '../icons/TrashIcon';
 import XMarkIcon from '../icons/XMarkIcon';
 import ModelSelector from '../ModelSelector';
+import { ActiveKitBadge, KitsButton } from '../kits';
 import { ActiveSkillBadge,SkillsButton } from '../skills';
 import {
   WakeActivationOverlayPhase,
@@ -61,6 +64,8 @@ import {
   PromptSlashCommandKind,
   type PromptSlashCommandMatch,
 } from './promptSlashCommands';
+import { buildSelectedKitContextPrompt } from './selectedKitContextPrompt';
+import { buildSelectedSkillRoutingPrompt } from './selectedSkillRoutingPrompt';
 
 // CoworkAttachment is aliased from the Redux-persisted DraftAttachment type
 // so that attachment state survives view switches (cowork ↔ skills, etc.)
@@ -400,6 +405,9 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
   }), [dispatch, draftKey, maxHeight, minHeight]);
 
   const activeSkillIds = useSelector((state: RootState) => state.skill.activeSkillIds);
+  const activeKitIds = useSelector((state: RootState) => state.kit.activeKitIds);
+  const installedKits = useSelector((state: RootState) => state.kit.installedKits);
+  const marketplaceKits = useSelector((state: RootState) => state.kit.marketplaceKits);
   const skills = useSelector((state: RootState) => state.skill.skills);
   const mcpServers = useSelector((state: RootState) => state.mcp.servers);
   const quickActions = useSelector((state: RootState) => state.quickAction.actions) as LocalizedQuickAction[];
@@ -874,13 +882,21 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     if ((!trimmedValue && attachments.length === 0) || disabled || isSpeechActive || isPatchingModel) return;
     setShowFolderRequiredWarning(false);
 
+    const kitSkillIds = activeKitIds.flatMap((kitId) => getInstalledKitSkillIds(installedKits[kitId]));
+    const effectiveActiveSkillIds = [...new Set([...activeSkillIds, ...kitSkillIds])];
+
     // Get active skills prompts and combine them
     const activeSkills = activeSkillIds
       .map(id => skills.find(s => s.id === id))
       .filter((s): s is Skill => s !== undefined);
-    const skillPrompt = activeSkills.length > 0
-      ? activeSkills.map(buildInlinedSkillPrompt).join('\n\n')
-      : undefined;
+    const kitContextPrompt = buildSelectedKitContextPrompt(activeKitIds, marketplaceKits, installedKits);
+    const skillRoutingPrompt = buildSelectedSkillRoutingPrompt(activeSkills);
+    const skillPromptParts = [
+      activeSkills.length > 0 ? activeSkills.map(buildInlinedSkillPrompt).join('\n\n') : undefined,
+      kitContextPrompt,
+      skillRoutingPrompt,
+    ].filter((part): part is string => Boolean(part && part.trim()));
+    const skillPrompt = skillPromptParts.length > 0 ? skillPromptParts.join('\n\n') : undefined;
 
     // 图片附件只传轻量文件引用；main 进程会在运行时边界读取并转成 base64。
     const imageAtts: CoworkImageAttachment[] = [];
@@ -924,7 +940,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
         sessionId,
         prompt: finalPrompt,
         skillPrompt,
-        activeSkillIds,
+        activeSkillIds: effectiveActiveSkillIds,
         imageAttachments: imageAtts.length > 0 ? imageAtts : undefined,
         createdAt: Date.now(),
       }));
@@ -992,6 +1008,9 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     onSubmit,
     sessionId,
     activeSkillIds,
+    activeKitIds,
+    installedKits,
+    marketplaceKits,
     skills,
     attachments,
     showFolderSelector,
@@ -1071,7 +1090,17 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
     dispatch(toggleActiveSkill(skill.id));
   }, [dispatch]);
 
+  const handleSelectKit = useCallback((kitId: string) => {
+    dispatch(toggleActiveKit(kitId));
+  }, [dispatch]);
+
   const handleManageSkills = useCallback(() => {
+    if (onManageSkills) {
+      onManageSkills();
+    }
+  }, [onManageSkills]);
+
+  const handleManageKits = useCallback(() => {
     if (onManageSkills) {
       onManageSkills();
     }
@@ -1843,6 +1872,11 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                       onManageSkills={handleManageSkills}
                     />
                     <ActiveSkillBadge />
+                    <KitsButton
+                      onSelectKit={handleSelectKit}
+                      onManageKits={handleManageKits}
+                    />
+                    <ActiveKitBadge />
                   </>
                 )}
               </div>
@@ -1918,6 +1952,14 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                 >
                   <PaperClipIcon className="h-4 w-4" />
                 </button>
+                <SkillsButton
+                  onSelectSkill={handleSelectSkill}
+                  onManageSkills={handleManageSkills}
+                />
+                <KitsButton
+                  onSelectKit={handleSelectKit}
+                  onManageKits={handleManageKits}
+                />
               </div>
             )}
 

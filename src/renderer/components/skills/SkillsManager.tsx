@@ -1,6 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { useDispatch, useSelector } from 'react-redux';
+import { ArrowPathIcon, XCircleIcon as XCircleIconSolid } from '@heroicons/react/20/solid';
 import {
   ArrowDownTrayIcon,
   CheckCircleIcon,
@@ -8,38 +6,43 @@ import {
   LockClosedIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
-import { ArrowPathIcon, XCircleIcon as XCircleIconSolid } from '@heroicons/react/20/solid';
-import SearchIcon from '../icons/SearchIcon';
-import PlusCircleIcon from '../icons/PlusCircleIcon';
-import UploadIcon from '../icons/UploadIcon';
-import FolderOpenIcon from '../icons/FolderOpenIcon';
-import LinkIcon from '../icons/LinkIcon';
-import PencilSquareIcon from '../icons/PencilSquareIcon';
-import PuzzleIcon from '../icons/PuzzleIcon';
-import TrashIcon from '../icons/TrashIcon';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useDispatch, useSelector } from 'react-redux';
+
 import { i18nService } from '../../services/i18n';
+import { qingshuGovernanceService } from '../../services/qingshuGovernance';
+import { qingshuManagedService } from '../../services/qingshuManaged';
 import {
   resolveQingShuManagedAccessPresentation,
   resolveQingShuSourceLabelKey,
 } from '../../services/qingshuManagedUi';
-import { skillService, resolveLocalizedText, compareVersions } from '../../services/skill';
-import { setSkills } from '../../store/slices/skillSlice';
+import { compareVersions,resolveLocalizedText, skillService } from '../../services/skill';
 import { RootState } from '../../store';
-import { Skill, MarketplaceSkill, MarketTag, WorkspaceSkillInstall } from '../../types/skill';
-import ErrorMessage from '../ErrorMessage';
-import SkillSecurityReport from './SkillSecurityReport';
-import QingShuGovernancePreview from './QingShuGovernancePreview';
-import { qingshuGovernanceService } from '../../services/qingshuGovernance';
+import { setSkills } from '../../store/slices/skillSlice';
 import type { QingShuSkillGovernanceResult } from '../../types/qingshuGovernance';
+import { MarketplaceSkill, MarketTag, Skill, WorkspaceSkillInstall } from '../../types/skill';
+import ErrorMessage from '../ErrorMessage';
+import FolderOpenIcon from '../icons/FolderOpenIcon';
+import LinkIcon from '../icons/LinkIcon';
+import PencilSquareIcon from '../icons/PencilSquareIcon';
+import PlusCircleIcon from '../icons/PlusCircleIcon';
+import PuzzleIcon from '../icons/PuzzleIcon';
+import SearchIcon from '../icons/SearchIcon';
+import TrashIcon from '../icons/TrashIcon';
+import UploadIcon from '../icons/UploadIcon';
+import QingShuGovernancePreview from './QingShuGovernancePreview';
 import {
-  SkillImportSourceType,
   type SkillImportSourceType as SkillImportSourceTab,
+  SkillImportSourceType,
   validateSkillImportSource,
 } from './skillImportSource';
+import SkillSecurityReport from './SkillSecurityReport';
 
 type SkillTab = 'installed' | 'marketplace';
 type ManagedSkillFilter = 'all' | 'available' | 'locked';
 type DirectImportSource = 'zip' | 'folder' | 'remote';
+const MANAGED_SKILL_MANUAL_REFRESH_COOLDOWN_MS = 60 * 1000;
 
 interface SkillsManagerProps {
   readOnly?: boolean;
@@ -106,6 +109,9 @@ const SkillsManager: React.FC<SkillsManagerProps> = ({ readOnly, onCreateByChat 
   const [governancePreviewSkillId, setGovernancePreviewSkillId] = useState<string | null>(null);
   const [governancePreviewTitle, setGovernancePreviewTitle] = useState<string | null>(null);
   const [governancePreviewResult, setGovernancePreviewResult] = useState<QingShuSkillGovernanceResult | null>(null);
+  const [isRefreshingManagedSkills, setIsRefreshingManagedSkills] = useState(false);
+  const [managedRefreshCooldownUntil, setManagedRefreshCooldownUntil] = useState(0);
+  const [managedRefreshNow, setManagedRefreshNow] = useState(Date.now());
   const [upgradeState, setUpgradeState] = useState<{
     isActive: boolean;
     total: number;
@@ -196,6 +202,18 @@ const SkillsManager: React.FC<SkillsManagerProps> = ({ readOnly, onCreateByChat 
     });
     return () => { isActive = false; };
   }, []);
+
+  useEffect(() => {
+    if (!managedRefreshCooldownUntil) return undefined;
+    const intervalId = window.setInterval(() => {
+      const now = Date.now();
+      setManagedRefreshNow(now);
+      if (now >= managedRefreshCooldownUntil) {
+        setManagedRefreshCooldownUntil(0);
+      }
+    }, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [managedRefreshCooldownUntil]);
 
   useEffect(() => {
     if (!isAddSkillMenuOpen) return;
@@ -330,6 +348,36 @@ const SkillsManager: React.FC<SkillsManagerProps> = ({ readOnly, onCreateByChat 
       setSkillActionError('');
     } catch (error) {
       setSkillActionError(error instanceof Error ? error.message : i18nService.t('skillUpdateFailed'));
+    }
+  };
+
+  const managedRefreshRemainingSeconds = Math.max(
+    0,
+    Math.ceil((managedRefreshCooldownUntil - managedRefreshNow) / 1000),
+  );
+
+  const handleRefreshManagedSkills = async () => {
+    const now = Date.now();
+    const remainingSeconds = Math.max(0, Math.ceil((managedRefreshCooldownUntil - now) / 1000));
+    if (isRefreshingManagedSkills) {
+      return;
+    }
+    if (remainingSeconds > 0) {
+      setSkillActionError(i18nService.t('managedSkillRefreshThrottled').replace('{seconds}', String(remainingSeconds)));
+      return;
+    }
+
+    const refreshStartedAt = Date.now();
+    setIsRefreshingManagedSkills(true);
+    setManagedRefreshNow(refreshStartedAt);
+    setManagedRefreshCooldownUntil(refreshStartedAt + MANAGED_SKILL_MANUAL_REFRESH_COOLDOWN_MS);
+    setSkillActionError('');
+    try {
+      await qingshuManagedService.refreshCatalogManual();
+    } catch (error) {
+      setSkillActionError(error instanceof Error ? error.message : i18nService.t('managedSkillRefreshFailed'));
+    } finally {
+      setIsRefreshingManagedSkills(false);
     }
   };
 
@@ -833,8 +881,28 @@ const SkillsManager: React.FC<SkillsManagerProps> = ({ readOnly, onCreateByChat 
             activeTab === 'marketplace' ? 'bg-primary' : 'bg-transparent'
           }`} />
         </button>
-        {updatableSkills.length > 0 && (
-          <div className="ml-auto pr-1 pb-1">
+        <div className="ml-auto flex items-center gap-2 pr-1 pb-1">
+          <button
+            type="button"
+            onClick={handleRefreshManagedSkills}
+            disabled={!isLoggedIn || isRefreshingManagedSkills || managedRefreshRemainingSeconds > 0}
+            title={
+              !isLoggedIn
+                ? i18nService.t('managedSkillRefreshLoginRequired')
+                : managedRefreshRemainingSeconds > 0
+                  ? i18nService.t('managedSkillRefreshCooldown').replace('{seconds}', String(managedRefreshRemainingSeconds))
+                  : i18nService.t('managedSkillRefreshHint')
+            }
+            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border border-sky-500/30 bg-sky-500/10 text-sky-700 hover:bg-sky-500/20 dark:text-sky-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ArrowPathIcon className={`h-3 w-3 ${isRefreshingManagedSkills ? 'animate-spin' : ''}`} />
+            {isRefreshingManagedSkills
+              ? i18nService.t('managedSkillRefreshing')
+              : managedRefreshRemainingSeconds > 0
+                ? i18nService.t('managedSkillRefreshCooldownShort').replace('{seconds}', String(managedRefreshRemainingSeconds))
+                : i18nService.t('managedSkillRefresh')}
+          </button>
+          {updatableSkills.length > 0 && (
             <button
               type="button"
               onClick={handleUpgradeAll}
@@ -844,8 +912,8 @@ const SkillsManager: React.FC<SkillsManagerProps> = ({ readOnly, onCreateByChat 
               <ArrowPathIcon className="h-3 w-3" />
               {i18nService.t('skillUpgradeAll').replace('{count}', String(updatableSkills.length))}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {activeTab === 'installed' && (

@@ -188,7 +188,7 @@ const QTB_AUTHENTICATION_FAILED_PATTERN = /authentication failed|please login/i;
 const QTB_DESKTOP_FEISHU_SCAN_PATH = '/login/desktop-scan';
 
 const buildUnavailableError = (backend: AuthBackend): string =>
-  `Auth backend ${backend} is not implemented yet in QingShuClaw`;
+  `Auth backend ${backend} is not implemented yet in JBPClaw`;
 
 const createQtbQuotaFallback = () => ({
   planName: 'QTB',
@@ -740,7 +740,7 @@ export const createQtbAuthAdapter = (deps: AuthAdapterDeps): AuthAdapter => {
       return body.data.accessToken;
     };
 
-    const tryQingShuRefresh = async () => {
+    const tryJBPRefresh = async () => {
       const body = await fetchQtbResult<QtbAuthResponse>('/api/datachat/qingshu/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -754,7 +754,7 @@ export const createQtbAuthAdapter = (deps: AuthAdapterDeps): AuthAdapter => {
     };
 
     const refreshedToken = await tryBridgeRefresh().catch((): null => null)
-      || await tryQingShuRefresh().catch((): null => null);
+      || await tryJBPRefresh().catch((): null => null);
 
     if (!refreshedToken) {
       deps.onAuthSessionInvalidated?.('refresh-failed');
@@ -1017,13 +1017,13 @@ export const createQtbAuthAdapter = (deps: AuthAdapterDeps): AuthAdapter => {
 
     async createFeishuScanSession() {
       try {
-        console.log('[QtbAuth] Creating a Feishu scan session for QingShuClaw');
+        console.log('[QtbAuth] Creating a Feishu scan session for JBPClaw');
         const body = await fetchQtbResult<QtbScanSession>('/api/datachat/qingshu/auth/scan/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             channelType: 'qingshu',
-            clientName: 'QingShuClaw',
+            clientName: 'JBPClaw',
             clientVersion: 'dev',
           }),
         });

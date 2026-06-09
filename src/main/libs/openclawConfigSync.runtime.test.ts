@@ -443,7 +443,7 @@ describe('OpenClawConfigSync runtime config output', () => {
     });
   });
 
-  test('writes QingShu managed native MCP server config', async () => {
+  test('writes JBP managed native MCP server config', async () => {
     const sync = await createSync({
       getResolvedMcpServers: () => [
         {
@@ -1163,7 +1163,7 @@ describe('OpenClawConfigSync runtime config output', () => {
     });
   });
 
-  test('writes QingShu managed agents into OpenClaw agent list and workspaces', async () => {
+  test('writes JBP managed agents into OpenClaw agent list and workspaces', async () => {
     const agentId = 'qingshu-managed:qingshu-presales-analysis';
     const sync = await createSync({
       getAgents: () => [{

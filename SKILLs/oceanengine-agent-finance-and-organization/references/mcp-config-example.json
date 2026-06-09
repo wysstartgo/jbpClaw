@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "OceanEngine-代理商、组织与结算": {
+      "url": "https://open.oceanengine.com/ad/mcp",
+      "headers": {
+        "Access-Token": "{ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+        "Tool-Range": "[\"agent_adv_advertiser_update_sale_v2\", \"agent_adv_bidding_list_query_v2\", \"agent_adv_brand_list_query_v2\", \"agent_adv_cost_report_list_query_v2\", \"agent_adv_recharge_recharge_record_v2\", \"agent_advertiser_copy_v2\", \"agent_advertiser_info_query_v2\", \"agent_advertiser_refund_v2\", \"agent_advertiser_select_v2\", \"agent_advertiser_update_v2\", \"agent_charge_verify_v2\", \"agent_child_agent_select_v2\", \"agent_credit_charge_submit_v2\", \"agent_info_v2\", \"agent_prepay_charge_generate_remittance_code_v2\", \"agent_query_risk_promotion_list_v2\", \"agent_transfer_transaction_record_v2\", \"business_platform_company_account_get_v3\", \"business_platform_company_info_get_v3\", \"cg_transfer_can_transfer_balance_get_v3\", \"cg_transfer_can_transfer_target_list_v3\", \"cg_transfer_create_transfer_v3\", \"cg_transfer_query_can_transfer_balance_v3\", \"cg_transfer_query_transfer_balance_v3\", \"cg_transfer_query_transfer_detail_v3\", \"cg_transfer_transfer_balance_get_v3\", \"cg_transfer_transfer_create_v3\", \"cg_transfer_transfer_detail_get_v3\", \"cg_transfer_wallet_transfer_can_transfer_balance_v3\", \"cg_transfer_wallet_transfer_create_v3\", \"cg_transfer_wallet_transfer_detail_v3\", \"cg_transfer_wallet_transfer_list_v3\", \"charge_result_v3\", \"create_statement_invoice_v2\", \"customer_center_advertiser_list_v2\", \"majordomo_advertiser_select_v2\", \"query_booking_business_entity_id_get_v2\", \"query_invoice_electronic_url_v2\", \"query_invoice_v2\", \"query_project_v2\", \"query_rebate_accounting_info_v2\", \"query_rebate_balance_v2\", \"query_statement_v2\", \"remittance_code_list_v3\", \"tools_ies_account_search_v2\"]"
+      }
+    }
+  }
+}

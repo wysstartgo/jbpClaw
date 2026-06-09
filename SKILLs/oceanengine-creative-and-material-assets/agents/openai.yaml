@@ -1,0 +1,3 @@
+display_name: "创意、素材与审核资产"
+short_description: "覆盖图片、视频、音频、图文、创意组件、素材审核与修复。"
+default_prompt: "使用 创意、素材与审核资产 skill 帮我处理当前 OceanEngine 需求，并优先使用域内白名单工具。"

@@ -1,0 +1,73 @@
+[
+  {
+    "top": "dmp",
+    "sub": "custom_audience",
+    "count": 6,
+    "examples": [
+      "dmp_custom_audience_copy_v2",
+      "dmp_custom_audience_delete_v2",
+      "dmp_custom_audience_publish_v2",
+      "dmp_custom_audience_push_v2_v2",
+      "dmp_custom_audience_read_v2"
+    ]
+  },
+  {
+    "top": "dmp",
+    "sub": "data_source",
+    "count": 4,
+    "examples": [
+      "dmp_data_source_create_v2",
+      "dmp_data_source_file_upload_v2",
+      "dmp_data_source_read_v2",
+      "dmp_data_source_update_v2"
+    ]
+  },
+  {
+    "top": "audience_package",
+    "sub": "create",
+    "count": 1,
+    "examples": [
+      "audience_package_create_v2"
+    ]
+  },
+  {
+    "top": "audience_package",
+    "sub": "delete",
+    "count": 1,
+    "examples": [
+      "audience_package_delete_v2"
+    ]
+  },
+  {
+    "top": "audience_package",
+    "sub": "get",
+    "count": 1,
+    "examples": [
+      "audience_package_get_v3"
+    ]
+  },
+  {
+    "top": "audience_package",
+    "sub": "update",
+    "count": 1,
+    "examples": [
+      "audience_package_update_v2"
+    ]
+  },
+  {
+    "top": "audience_package_bindinfo",
+    "sub": "get",
+    "count": 1,
+    "examples": [
+      "audience_package_bindinfo_get_v3"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "estimate_audience",
+    "count": 1,
+    "examples": [
+      "tools_estimate_audience_v2"
+    ]
+  }
+]

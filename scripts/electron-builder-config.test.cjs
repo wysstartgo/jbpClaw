@@ -32,6 +32,11 @@ function hasResource(resources, from, to) {
     && resources.some((resource) => resource && resource.from === from && resource.to === to);
 }
 
+function findResource(resources, from, to) {
+  if (!Array.isArray(resources)) return null;
+  return resources.find((resource) => resource && resource.from === from && resource.to === to) || null;
+}
+
 test('merges shared keyfrom resources into every platform config', () => {
   const config = loadConfig({ KEYFROM: 'partner_a' });
 
@@ -45,9 +50,22 @@ test('merges shared keyfrom resources into every platform config', () => {
   assert.equal(Object.prototype.hasOwnProperty.call(config, 'extraResources'), false);
 });
 
-test('keeps QingShuClaw artifact names while appending normalized keyfrom', () => {
+test('keeps JBPClaw artifact names while appending normalized keyfrom', () => {
   const config = loadConfig({ KEYFROM: 'Partner_A' });
 
-  assert.equal(config.dmg.artifactName, 'QingShuClaw-darwin-${arch}-${version}-partner_a.${ext}');
-  assert.equal(config.nsis.artifactName, 'QingShuClaw-Setup-${arch}-${version}-partner_a.${ext}');
+  assert.equal(config.dmg.artifactName, 'JBPClaw-darwin-${arch}-${version}-partner_a.${ext}');
+  assert.equal(config.nsis.artifactName, 'JBPClaw-Setup-${arch}-${version}-partner_a.${ext}');
+});
+
+test('packages only macOS speech helper binaries without Swift module caches', () => {
+  const config = loadConfig();
+  const resource = findResource(config.mac?.extraResources, 'build/generated/macos-speech', 'macos-speech');
+
+  assert.ok(resource, 'macOS speech helper resource should be configured');
+  assert.deepEqual(resource.filter, [
+    'MacSpeechHelper',
+    'MacTtsHelper',
+    '!module-cache/**',
+    '!module-cache-tts/**',
+  ]);
 });

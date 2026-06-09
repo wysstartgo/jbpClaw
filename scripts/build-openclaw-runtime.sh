@@ -130,7 +130,12 @@ fi
 echo "[1/7] Building OpenClaw from source: $OPENCLAW_SRC"
 pushd "$OPENCLAW_SRC" >/dev/null
 corepack enable >/dev/null 2>&1 || true
-pnpm install --frozen-lockfile
+if [[ "${OPENCLAW_SKIP_PNPM_INSTALL:-}" == "1" ]]; then
+  echo "[openclaw-runtime] Skipping pnpm install (OPENCLAW_SKIP_PNPM_INSTALL=1)."
+else
+  OPENCLAW_PNPM_INSTALL_FLAGS="${OPENCLAW_PNPM_INSTALL_FLAGS:---frozen-lockfile}"
+  pnpm install $OPENCLAW_PNPM_INSTALL_FLAGS
+fi
 pnpm build
 pnpm ui:build
 # Skip release:check — it validates the openclaw npm package for publishing and

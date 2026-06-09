@@ -36,6 +36,12 @@ export const getSkillStoreUrl = (): string => {
     : 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/prod/skill-store';
 };
 
+export const getKitStoreUrl = (): string => {
+  return isTestMode()
+    ? 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/test/kit-store'
+    : 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/prod/kit-store';
+};
+
 export const getUpdateCheckUrl = (): string => {
   return isTestMode()
     ? 'https://api-overmind.youdao.com/openapi/get/luna/hardware/lobsterai/test/update'

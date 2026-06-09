@@ -1,0 +1,14 @@
+{
+             "skillId": "explosive-cover-generator-gzh",
+             "name": "公众号爆款封面生成",
+             "description": "公众号封面策划与生成：根据文章主题查询同赛道爆款封面数据，分析视觉规律，输出 3 套封面方案和生图提示词，并生成公众号封面图。",
+             "version": "1.1.2",
+             "sourceType": "qingshu-managed",
+             "readOnly": true,
+             "toolRefs": [],
+             "backendAgentIds": [
+               "gzh-operations"
+             ],
+             "catalogVersion": "2026-06-08-gzh-operations-v1"
+           }
+           

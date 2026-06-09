@@ -61,16 +61,16 @@ const DEFAULT_FORCE_UPDATE_REASON: LocalizedText = {
 const DEFAULT_BRAND_RUNTIME_CONFIG: BrandRuntimeConfig = {
   agreement: {
     title: {
-      zh: '灵工打卡 QingShuClaw 使用协议',
-      en: 'Linggong Daka QingShuClaw Usage Agreement',
+      zh: '聚宝盆 JBPClaw 使用协议',
+      en: 'JBP JBPClaw Usage Agreement',
     },
     descriptionTemplate: {
-      zh: '在使用 QingShuClaw 前，请阅读{link}并确认。QingShuClaw 搭载于青数中台，仅在用户权限范围内访问灵工打卡数据。',
-      en: 'Before using QingShuClaw, please read {link} and confirm. QingShuClaw runs on the QingShu platform and only accesses Linggong Daka data within the current user permission scope.',
+      zh: '在使用 JBPClaw 前，请阅读{link}并确认。JBPClaw 搭载于聚宝盆中台，仅在用户权限范围内访问聚宝盆数据。',
+      en: 'Before using JBPClaw, please read {link} and confirm. JBPClaw runs on the JBP platform and only accesses JBP data within the current user permission scope.',
     },
     linkText: {
-      zh: '《灵工打卡 QingShuClaw 使用协议》',
-      en: 'the Linggong Daka QingShuClaw Usage Agreement',
+      zh: '《聚宝盆 JBPClaw 使用协议》',
+      en: 'the JBP JBPClaw Usage Agreement',
     },
     linkUrl: `${DEFAULT_QTB_WEB_BASE_URL}/login/agreement`,
     version: 'v1',

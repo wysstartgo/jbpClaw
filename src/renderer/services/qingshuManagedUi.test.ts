@@ -41,7 +41,7 @@ test('无权限时保留策略文案覆盖', () => {
   });
 });
 
-test('非青数来源保持可用', () => {
+test('非聚宝盆来源保持可用', () => {
   expect(resolveQingShuManagedAccessPresentation({
     sourceType: QingShuObjectSourceType.LocalCustom,
     allowed: false,

@@ -11,6 +11,7 @@ export type ResolvedAuthBackendConfig = {
   backend: AuthBackend;
   apiBaseUrl: string | null;
   webBaseUrl: string | null;
+  eladminMpBaseUrl: string | null;
 };
 
 const normalizeBaseUrl = (value: unknown): string => {
@@ -20,6 +21,14 @@ const normalizeBaseUrl = (value: unknown): string => {
   return value.trim().replace(/\/+$/, '');
 };
 
+const normalizeEladminMpBaseUrl = (value: unknown): string => {
+  const normalized = normalizeBaseUrl(value);
+  if (!normalized || normalized === 'http://localhost:8000' || normalized === 'http://localhost:8000/jbpapi') {
+    return DEFAULT_AUTH_CONFIG.eladminMpBaseUrl;
+  }
+  return normalized;
+};
+
 export const resolveAuthConfig = (store: SqliteStore | null | undefined): AuthConfig => {
   const storedConfig = store?.get<StoredAppConfig>('app_config');
   const authConfig = storedConfig?.auth;
@@ -27,6 +36,7 @@ export const resolveAuthConfig = (store: SqliteStore | null | undefined): AuthCo
     normalizeBaseUrl(authConfig?.qtbApiBaseUrl) || DEFAULT_AUTH_CONFIG.qtbApiBaseUrl;
   const normalizedQtbWebBaseUrl =
     normalizeBaseUrl(authConfig?.qtbWebBaseUrl) || DEFAULT_AUTH_CONFIG.qtbWebBaseUrl;
+  const normalizedEladminMpBaseUrl = normalizeEladminMpBaseUrl(authConfig?.eladminMpBaseUrl);
 
   return {
     backend: authConfig?.backend === AuthBackend.Qtb
@@ -34,6 +44,7 @@ export const resolveAuthConfig = (store: SqliteStore | null | undefined): AuthCo
       : DEFAULT_AUTH_CONFIG.backend,
     qtbApiBaseUrl: normalizedQtbApiBaseUrl,
     qtbWebBaseUrl: normalizedQtbWebBaseUrl,
+    eladminMpBaseUrl: normalizedEladminMpBaseUrl,
   };
 };
 
@@ -45,6 +56,7 @@ export const resolveAuthBackendConfig = (store: SqliteStore): ResolvedAuthBacken
       backend: AuthBackend.Qtb,
       apiBaseUrl: authConfig.qtbApiBaseUrl,
       webBaseUrl: authConfig.qtbWebBaseUrl,
+      eladminMpBaseUrl: authConfig.eladminMpBaseUrl,
     };
   }
 
@@ -53,5 +65,6 @@ export const resolveAuthBackendConfig = (store: SqliteStore): ResolvedAuthBacken
     backend: AuthBackend.LegacyLobster,
     apiBaseUrl: legacyBaseUrl,
     webBaseUrl: legacyBaseUrl,
+    eladminMpBaseUrl: authConfig.eladminMpBaseUrl,
   };
 };

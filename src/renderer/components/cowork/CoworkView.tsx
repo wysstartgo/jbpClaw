@@ -11,15 +11,18 @@ import PetCompanion from '../../pet/PetCompanion';
 import { usePetState } from '../../pet/usePetState';
 import { coworkService } from '../../services/cowork';
 import { i18nService } from '../../services/i18n';
+import { getInstalledKitSkillIds } from '../../services/kitCapability';
 import { quickActionService } from '../../services/quickAction';
 import { skillService } from '../../services/skill';
 import { RootState } from '../../store';
 import { addMessage, clearCurrentSession, dequeueCoworkInput, requeueCoworkInputToFront, setCurrentSession, setStreaming, updateSessionStatus } from '../../store/slices/coworkSlice';
+import { clearActiveKits } from '../../store/slices/kitSlice';
 import { selectAgentSelectedModel, setSelectedModel } from '../../store/slices/modelSlice';
 import { clearSelection,selectAction, setActions } from '../../store/slices/quickActionSlice';
 import { clearActiveSkills, setActiveSkillIds } from '../../store/slices/skillSlice';
 import type { CoworkImageAttachment, CoworkImageAttachmentPreview, CoworkMessage, CoworkMessageMetadata, CoworkSession, OpenClawEngineStatus, SubagentSessionSummary } from '../../types/cowork';
 import { toOpenClawModelRef } from '../../utils/openclawModelRef';
+import QingShuBrandMark from '../branding/QingShuBrandMark';
 import ComposeIcon from '../icons/ComposeIcon';
 import SidebarToggleIcon from '../icons/SidebarToggleIcon';
 import ModelSelector from '../ModelSelector';
@@ -76,6 +79,8 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
   const isOpenClawEngine = config.agentEngine !== 'yd_cowork';
 
   const activeSkillIds = useSelector((state: RootState) => state.skill.activeSkillIds);
+  const activeKitIds = useSelector((state: RootState) => state.kit.activeKitIds);
+  const installedKits = useSelector((state: RootState) => state.kit.installedKits);
   const skills = useSelector((state: RootState) => state.skill.skills);
   const quickActions = useSelector((state: RootState) => state.quickAction.actions);
   const selectedActionId = useSelector((state: RootState) => state.quickAction.selectedActionId);
@@ -95,6 +100,18 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
       </div>
     </div>
   ) : null;
+
+  const resolveTurnSkillIds = useCallback((queuedSkillIds?: string[]): string[] => {
+    if (queuedSkillIds) {
+      return [...queuedSkillIds];
+    }
+
+    const kitSkillIds = activeKitIds.flatMap((kitId) => getInstalledKitSkillIds(installedKits[kitId]));
+    const selectedSkillIds = activeSkillIds.length > 0
+      ? activeSkillIds
+      : currentAgent?.skillIds ?? [];
+    return [...new Set([...selectedSkillIds, ...kitSkillIds])];
+  }, [activeKitIds, activeSkillIds, currentAgent?.skillIds, installedKits]);
 
   const buildApiConfigNotice = (error?: string): Pick<SettingsOpenOptions, 'noticeI18nKey' | 'noticeExtra'> => {
     const noticeI18nKey = 'coworkModelSettingsRequired';
@@ -252,9 +269,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
       const now = Date.now();
 
       // Capture active skill IDs before clearing them
-      const sessionSkillIds = activeSkillIds.length > 0
-        ? [...activeSkillIds]
-        : [...(currentAgent?.skillIds ?? [])];
+      const sessionSkillIds = resolveTurnSkillIds();
       const sessionModelOverride = currentAgentSelectedModel ? toOpenClawModelRef(currentAgentSelectedModel) : '';
 
       const tempSession: CoworkSession = {
@@ -294,6 +309,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
       // Clear active skills and quick action selection after starting session
       // so they don't persist to next session
       dispatch(clearActiveSkills());
+      dispatch(clearActiveKits());
       dispatch(clearSelection());
 
       // Combine skill prompt with system prompt.
@@ -376,13 +392,12 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
       // Capture active skill IDs before clearing
       const sessionSkillIds = queuedSkillIds
         ? [...queuedSkillIds]
-        : activeSkillIds.length > 0
-          ? [...activeSkillIds]
-          : [...(currentAgent?.skillIds ?? [])];
+        : resolveTurnSkillIds();
 
       // Clear active skills after capturing so they don't persist to next message
       if (sessionSkillIds.length > 0) {
         dispatch(clearActiveSkills());
+        dispatch(clearActiveKits());
       }
 
       // Combine skill prompt with system prompt for continuation.
@@ -404,7 +419,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     } finally {
       isContinuingRef.current = false;
     }
-  }, [activeSkillIds, config.systemPrompt, currentAgent?.skillIds, dispatch, isOpenClawEngine, openClawStatus]);
+  }, [config.systemPrompt, dispatch, isOpenClawEngine, openClawStatus, resolveTurnSkillIds]);
 
   const handleContinueSession = async (prompt: string, skillPrompt?: string, imageAttachments?: CoworkImageAttachment[]) => {
     if (!currentSession) return;
@@ -427,12 +442,11 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     const normalizedImageAttachments = imageAttachments.length > 0 ? imageAttachments : undefined;
     const sessionSkillIds = skillIds
       ? [...skillIds]
-      : activeSkillIds.length > 0
-        ? [...activeSkillIds]
-        : [...(currentAgent?.skillIds ?? [])];
+      : resolveTurnSkillIds();
 
     if (sessionSkillIds.length > 0) {
       dispatch(clearActiveSkills());
+      dispatch(clearActiveKits());
     }
 
     let effectiveSkillPrompt: string | undefined;
@@ -451,7 +465,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
       imageAttachments: normalizedImageAttachments,
     });
     return !!rerunSession;
-  }, [activeSkillIds, config.systemPrompt, currentAgent?.skillIds, currentSession, dispatch, isOpenClawEngine, isStreaming]);
+  }, [config.systemPrompt, currentSession, dispatch, isOpenClawEngine, isStreaming, resolveTurnSkillIds]);
 
   useEffect(() => {
     if (!currentSession || isStreaming || isContinuingRef.current) return;
@@ -719,7 +733,10 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         <div className="max-w-5xl mx-auto px-4 py-16 space-y-12">
           {/* Welcome Section */}
           <div className="text-center space-y-4">
-            <img src="logo.png" alt="logo" className="w-16 h-16 mx-auto" />
+            <QingShuBrandMark
+              className="relative mx-auto flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-red-600 shadow-[0_0_0_1px_rgba(0,0,0,0.55),0_12px_26px_rgba(220,38,38,0.38)] ring-1 ring-white/45"
+              iconClassName="text-[34px] font-semibold leading-none text-white"
+            />
             <h2 className="text-[32px] tracking-tight text-foreground">
               {i18nService.getLanguage() === 'zh' ? (
                 <span className="font-normal">让数据 <strong className="font-semibold text-primary">ready to use</strong></span>

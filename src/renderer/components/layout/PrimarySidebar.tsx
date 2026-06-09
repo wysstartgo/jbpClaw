@@ -9,9 +9,17 @@ import React from 'react';
 
 import { i18nService } from '../../services/i18n';
 import QingShuBrandMark from '../branding/QingShuBrandMark';
+import SidebarKitsIcon from '../icons/SidebarKitsIcon';
 import LoginButton from '../LoginButton';
 
-export type WorkbenchMainView = 'cowork' | 'scheduledTasks' | 'skills' | 'applications';
+export const WorkbenchMainViewId = {
+  Cowork: 'cowork',
+  ScheduledTasks: 'scheduledTasks',
+  Skills: 'skills',
+  Kits: 'kits',
+  Applications: 'applications',
+} as const;
+export type WorkbenchMainView = typeof WorkbenchMainViewId[keyof typeof WorkbenchMainViewId];
 
 interface PrimarySidebarProps {
   activeView: WorkbenchMainView;
@@ -22,14 +30,15 @@ interface PrimarySidebarProps {
 type NavItem = {
   id: WorkbenchMainView;
   label: string;
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  icon: React.ComponentType<{ className?: string }>;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'cowork', label: 'workbenchConversationNav', icon: ChatBubbleLeftRightIcon },
-  { id: 'scheduledTasks', label: 'workbenchTaskNav', icon: ClockIcon },
-  { id: 'skills', label: 'workbenchSkillNav', icon: PuzzlePieceIcon },
-  { id: 'applications', label: 'workbenchApplicationNav', icon: Squares2X2Icon },
+  { id: WorkbenchMainViewId.Cowork, label: 'workbenchConversationNav', icon: ChatBubbleLeftRightIcon },
+  { id: WorkbenchMainViewId.ScheduledTasks, label: 'workbenchTaskNav', icon: ClockIcon },
+  { id: WorkbenchMainViewId.Skills, label: 'workbenchSkillNav', icon: PuzzlePieceIcon },
+  { id: WorkbenchMainViewId.Kits, label: 'workbenchKitsNav', icon: SidebarKitsIcon },
+  { id: WorkbenchMainViewId.Applications, label: 'workbenchApplicationNav', icon: Squares2X2Icon },
 ];
 
 const PrimarySidebar: React.FC<PrimarySidebarProps> = ({ activeView, onSelectView, onOpenSettings }) => {
@@ -86,11 +95,11 @@ const PrimarySidebar: React.FC<PrimarySidebarProps> = ({ activeView, onSelectVie
         <div className="px-2.5 py-2 text-center opacity-90">
           <div className="flex items-center justify-center">
             <QingShuBrandMark
-              className="relative flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-500 shadow-sm shadow-emerald-500/20 ring-1 ring-emerald-300/25"
-              iconClassName="text-[12px] font-semibold tracking-[0.08em] text-white"
+              className="relative flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-red-600 shadow-[0_0_0_1px_rgba(0,0,0,0.55),0_4px_12px_rgba(220,38,38,0.46)] ring-1 ring-white/45"
+              iconClassName="text-[12px] font-semibold leading-none text-white"
             />
           </div>
-          <div className="mt-2 text-[11px] font-semibold leading-4 tracking-[0.08em] text-emerald-600 dark:text-emerald-300">
+          <div className="mt-2 text-[11px] font-semibold leading-4 tracking-[0.08em] text-red-700 dark:text-red-400">
             {i18nService.t('workbenchBrandLine1')}
           </div>
           <div className="mt-1 text-[11px] font-medium leading-4 text-foreground/72 dark:text-foregroundSecondary/80">

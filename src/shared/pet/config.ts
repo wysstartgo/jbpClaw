@@ -71,8 +71,8 @@ export function normalizePetConfig(value: unknown): PetConfig {
       ...(typeof floatingWindow.y === 'number' && Number.isFinite(floatingWindow.y)
         ? { y: Math.round(floatingWindow.y) }
         : {}),
-      width: normalizeNumber(floatingWindow.width, DEFAULT_PET_CONFIG.floatingWindow.width, 120, 360),
-      height: normalizeNumber(floatingWindow.height, DEFAULT_PET_CONFIG.floatingWindow.height, 120, 360),
+      width: normalizeNumber(floatingWindow.width, DEFAULT_PET_CONFIG.floatingWindow.width, 120, 520),
+      height: normalizeNumber(floatingWindow.height, DEFAULT_PET_CONFIG.floatingWindow.height, 120, 520),
     },
   };
 }

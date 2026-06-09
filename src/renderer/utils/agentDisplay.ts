@@ -8,7 +8,7 @@ interface AgentDisplaySource {
 
 const MainAgentId = 'main';
 const LegacyMainAgentName = 'lobsterai';
-const QingShuMainAgentName = '青数默认助手';
+const QingShuMainAgentName = '聚宝盆默认助手';
 
 export const isDefaultAgentId = (agentId?: string | null): boolean => {
   return agentId?.trim() === MainAgentId;

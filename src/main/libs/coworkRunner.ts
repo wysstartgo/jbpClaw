@@ -2024,7 +2024,7 @@ export class CoworkRunner extends EventEmitter {
       const memoryTools: any[] = [
         tool(
           QingShuFileToolName.Publish,
-          'Upload a local file to QingShu managed storage and return a cross-device shareUrl. Requires QingShu login. Max file size: 50MB.',
+          'Upload a local file to JBP managed storage and return a cross-device shareUrl. Requires JBP login. Max file size: 50MB.',
           {
             filePath: z.string().min(1),
           },
@@ -2035,7 +2035,7 @@ export class CoworkRunner extends EventEmitter {
                   type: 'text',
                   text: JSON.stringify({
                     success: false,
-                    error: 'QingShu file publisher is not initialized',
+                    error: 'JBP file publisher is not initialized',
                   }, null, 2),
                 }],
                 isError: true,

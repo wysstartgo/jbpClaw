@@ -1,0 +1,130 @@
+[
+  {
+    "top": "tools",
+    "sub": "app_management",
+    "count": 17,
+    "examples": [
+      "tools_app_management_android_app_list_v2",
+      "tools_app_management_android_basic_package_get_v2",
+      "tools_app_management_android_basic_package_update_v2",
+      "tools_app_management_app_get_v2",
+      "tools_app_management_booking_get_v2"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "playable",
+    "count": 6,
+    "examples": [
+      "tools_playable_cloud_game_list_v2",
+      "tools_playable_grant_result_v2",
+      "tools_playable_grant_v2",
+      "tools_playable_save_v2",
+      "tools_playable_upload_v2"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "union",
+    "count": 6,
+    "examples": [
+      "tools_union_flow_package_create_v2",
+      "tools_union_flow_package_delete_v2",
+      "tools_union_flow_package_get_v2",
+      "tools_union_flow_package_promotion_report_v3",
+      "tools_union_flow_package_report_v2"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "micro_game",
+    "count": 5,
+    "examples": [
+      "tools_micro_game_convert_window_get_v3",
+      "tools_micro_game_convert_window_update_v3",
+      "tools_micro_game_create_v3",
+      "tools_micro_game_list_v3",
+      "tools_micro_game_update_v3"
+    ]
+  },
+  {
+    "top": "subscribe",
+    "sub": "accounts",
+    "count": 3,
+    "examples": [
+      "subscribe_accounts_add_v3",
+      "subscribe_accounts_list_v3",
+      "subscribe_accounts_remove_v3"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "micro_app",
+    "count": 3,
+    "examples": [
+      "tools_micro_app_create_v3",
+      "tools_micro_app_list_v3",
+      "tools_micro_app_update_v3"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "wechat_applet",
+    "count": 3,
+    "examples": [
+      "tools_wechat_applet_create_v3",
+      "tools_wechat_applet_list_v3",
+      "tools_wechat_applet_update_v3"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "download",
+    "count": 2,
+    "examples": [
+      "tools_download_package_get_v2",
+      "tools_download_package_parse_v2"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "wechat_game",
+    "count": 2,
+    "examples": [
+      "tools_wechat_game_create_v3",
+      "tools_wechat_game_list_v3"
+    ]
+  },
+  {
+    "top": "game_addiction_id",
+    "sub": "get",
+    "count": 1,
+    "examples": [
+      "game_addiction_id_get_v3"
+    ]
+  },
+  {
+    "top": "spi_task",
+    "sub": "get",
+    "count": 1,
+    "examples": [
+      "spi_task_get_v2"
+    ]
+  },
+  {
+    "top": "tool",
+    "sub": "quick_app_management",
+    "count": 1,
+    "examples": [
+      "tool_quick_app_management_quick_app_get_v2"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "playable_list",
+    "count": 1,
+    "examples": [
+      "tools_playable_list_get_v2"
+    ]
+  }
+]

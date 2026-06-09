@@ -104,14 +104,14 @@ describe('parseLocalServiceUrlsFromText', () => {
 
 describe('parseMediaTokensFromText', () => {
   test('parses media token with macOS path containing spaces', () => {
-    const content = 'MEDIA: /Users/test/Library/Application Support/QingShuClaw/output.png';
+    const content = 'MEDIA: /Users/test/Library/Application Support/JBPClaw/output.png';
     const artifacts = parseMediaTokensFromText(content, 'msg1', 'sess1');
 
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0]).toMatchObject({
       type: 'image',
       fileName: 'output.png',
-      filePath: '/Users/test/Library/Application Support/QingShuClaw/output.png',
+      filePath: '/Users/test/Library/Application Support/JBPClaw/output.png',
     });
   });
 

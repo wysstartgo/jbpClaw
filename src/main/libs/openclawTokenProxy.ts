@@ -173,7 +173,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     const body = await collectRequestBody(req);
 
     // Build upstream URL: serverBaseUrl + request path. OpenClaw sends to
-    // /v1/chat/completions; QingShu backend expects
+    // /v1/chat/completions; the JBP compatibility backend expects
     // /api/qingshu-claw/proxy/v1/chat/completions.
     const upstreamPath = buildQingShuProxyPath(req.url);
     const upstreamUrl = `${serverBaseUrl}${upstreamPath}`;

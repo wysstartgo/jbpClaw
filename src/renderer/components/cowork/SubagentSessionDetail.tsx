@@ -1,4 +1,4 @@
-import { ArrowLeftIcon } from '@heroicons/react/20/solid';
+import { ArrowLeftIcon, TrashIcon } from '@heroicons/react/20/solid';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { i18nService } from '../../services/i18n';
@@ -28,6 +28,7 @@ const SubagentSessionDetail: React.FC<SubagentSessionDetailProps> = ({
   const [messages, setMessages] = useState<CoworkMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<'running' | 'done' | 'error'>(subagent.status);
+  const [deleting, setDeleting] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef(0);
 
@@ -91,6 +92,29 @@ const SubagentSessionDetail: React.FC<SubagentSessionDetailProps> = ({
   }, [messages, subagent.createdAt, subagent.task]);
   const displayTitle = subagent.agentId ?? subagent.label ?? i18nService.t('subagentUnnamed');
 
+  const handleDelete = useCallback(async () => {
+    if (deleting) return;
+    const confirmed = window.confirm(i18nService.t('subagentDeleteConfirm'));
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      const result = await window.electron?.cowork?.deleteSubagentSession({
+        parentSessionId: subagent.parentSessionId,
+        runId: subagent.id,
+      });
+      if (result?.success) {
+        onBack();
+      } else {
+        window.alert(result?.error || i18nService.t('subagentDeleteFailed'));
+      }
+    } catch {
+      window.alert(i18nService.t('subagentDeleteFailed'));
+    } finally {
+      setDeleting(false);
+    }
+  }, [deleting, onBack, subagent.id, subagent.parentSessionId]);
+
   return (
     <div className="flex h-full flex-col bg-background">
       <div className="draggable flex h-12 shrink-0 items-center gap-3 border-b border-border bg-background px-4">
@@ -152,6 +176,16 @@ const SubagentSessionDetail: React.FC<SubagentSessionDetailProps> = ({
               ? i18nService.t('subagentError')
               : i18nService.t('subagentWorking')}
         </span>
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={deleting}
+          className="non-draggable inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-foreground/45 transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={i18nService.t('subagentDelete')}
+          title={i18nService.t('subagentDelete')}
+        >
+          <TrashIcon className="h-4 w-4" />
+        </button>
       </div>
 
       <div ref={contentRef} className="flex-1 overflow-y-auto px-3 pb-[120px] pt-3">

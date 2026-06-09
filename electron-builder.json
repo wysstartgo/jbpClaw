@@ -1,7 +1,7 @@
 {
   "appId": "com.lobsterai.app",
-  "productName": "QingShuClaw",
-  "executableName": "QingShuClaw",
+  "productName": "JBPClaw",
+  "executableName": "JBPClaw",
   "directories": {
     "output": "release"
   },
@@ -68,7 +68,7 @@
   ],
   "protocols": [
     {
-      "name": "QingShuClaw",
+      "name": "JBPClaw",
       "schemes": ["lobsterai"]
     }
   ],
@@ -76,7 +76,7 @@
     "target": [
       "dmg"
     ],
-    "icon": "build/icons/mac/icon.icns",
+    "icon": "build/icons/png/1024x1024.png",
     "category": "public.app-category.productivity",
     "hardenedRuntime": true,
     "gatekeeperAssess": false,
@@ -84,18 +84,21 @@
     "entitlementsInherit": "build/entitlements.mac.plist",
     "extendInfo": {
       "CFBundleIconName": "icon",
-      "NSCalendarsUsageDescription": "QingShuClaw 需要访问您的日历来帮助您查看和管理日程安排，例如查找事件、创建会议等。",
-      "NSRemindersUsageDescription": "QingShuClaw 需要访问您的提醒事项来帮助您管理待办事项。",
-      "NSAppleEventsUsageDescription": "QingShuClaw 需要使用 Apple Events 来控制 Calendar 应用执行自动化操作。",
-      "NSMicrophoneUsageDescription": "QingShuClaw 需要访问麦克风以支持聊天输入框中的语音输入。",
-      "NSSpeechRecognitionUsageDescription": "QingShuClaw 需要使用语音识别将您的语音实时转换为聊天输入文本。"
+      "NSCalendarsUsageDescription": "JBPClaw 需要访问您的日历来帮助您查看和管理日程安排，例如查找事件、创建会议等。",
+      "NSRemindersUsageDescription": "JBPClaw 需要访问您的提醒事项来帮助您管理待办事项。",
+      "NSAppleEventsUsageDescription": "JBPClaw 需要使用 Apple Events 来控制 Calendar 应用执行自动化操作。",
+      "NSMicrophoneUsageDescription": "JBPClaw 需要访问麦克风以支持聊天输入框中的语音输入。",
+      "NSSpeechRecognitionUsageDescription": "JBPClaw 需要使用语音识别将您的语音实时转换为聊天输入文本。"
     },
     "extraResources": [
       {
         "from": "build/generated/macos-speech",
         "to": "macos-speech",
         "filter": [
-          "**/*"
+          "MacSpeechHelper",
+          "MacTtsHelper",
+          "!module-cache/**",
+          "!module-cache-tts/**"
         ]
       },
       {
@@ -251,7 +254,7 @@
       }
     ],
     "desktop": {
-      "Name": "QingShuClaw",
+      "Name": "JBPClaw",
       "Comment": "AI-assisted coding and productivity tool",
       "Terminal": "false"
     }

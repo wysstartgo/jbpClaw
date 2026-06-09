@@ -1,8 +1,9 @@
 import { describe, expect, test, vi } from 'vitest';
 
+import { QingShuFileToolName } from '../../shared/qingshuFile/constants';
+import { QingShuObjectSourceType } from '../../shared/qingshuManaged/constants';
 import type { AuthAdapter } from '../auth/adapter';
 import type { SkillManager } from '../skillManager';
-import { QingShuFileToolName } from '../../shared/qingshuFile/constants';
 import { QingShuManagedCatalogService } from './catalogService';
 
 const createAuthAdapter = (): AuthAdapter => ({
@@ -27,7 +28,7 @@ const createAuthAdapter = (): AuthAdapter => ({
 });
 
 describe('QingShuManagedCatalogService auth invalidation', () => {
-  test('does not expose local-only QingShu tools through backend managed runtime manifest', async () => {
+  test('does not expose local-only JBP tools through backend managed runtime manifest', async () => {
     const service = new QingShuManagedCatalogService({
       fetchFn: vi.fn(),
       getAuthAdapter: createAuthAdapter,
@@ -69,12 +70,16 @@ describe('QingShuManagedCatalogService auth invalidation', () => {
       },
     });
 
-    expect(service.getManagedToolRuntimeManifest().map((tool) => tool.name)).toEqual([
+    const manifest = service.getManagedToolRuntimeManifest();
+    expect(manifest.map((tool) => tool.name)).toEqual([
       'claw.dictionary.search',
     ]);
+    expect(manifest[0]?.description).toContain(
+      '[MCP alias: qingshu-managed__claw-dictionary-search]',
+    );
   });
 
-  test('blocks backend invocation for local-only QingShu tools', async () => {
+  test('blocks backend invocation for local-only JBP tools', async () => {
     const fetchFn = vi.fn();
     const service = new QingShuManagedCatalogService({
       fetchFn,
@@ -96,7 +101,7 @@ describe('QingShuManagedCatalogService auth invalidation', () => {
       content: [
         {
           type: 'text',
-          text: expect.stringContaining('QingShuClaw local MCP runtime'),
+          text: expect.stringContaining('JBPClaw local MCP runtime'),
         },
       ],
     });
@@ -196,5 +201,249 @@ describe('QingShuManagedCatalogService auth invalidation', () => {
     expect(headers.get('x-qingshu-device-id')).toBe('device-001');
     expect(headers.get('Authorization')).toBe('Bearer expired-token');
     expect(headers.get('auth')).toBe('Bearer expired-token');
+  });
+
+  test('routes eladmin-mp-api tools to local SSO runtime', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 200,
+        data: {
+          callbackUrl: 'https://eladmin.example/sso/callback?clientId=eladmin-mp&principalType=user&externalTenantCode=qtb&externalUserId=u1&nonce=n1&timestamp=1710000000000&redirect=%2Fqingshu-agent%2Ftool-runtime&signature=sig',
+        },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        token: 'Bearer eladmin-token',
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        summary: 'mapping ok',
+        data: { items: [] },
+        warnings: [],
+        permission: {},
+        traceId: 'trace-1',
+      }), { status: 200 }));
+
+    const service = new QingShuManagedCatalogService({
+      fetchFn,
+      getAuthAdapter: () => ({
+        ...createAuthAdapter(),
+        getAccessToken: vi.fn(async () => 'qtb-token'),
+      }),
+      resolveApiBaseUrl: () => 'https://qtb.example',
+      resolveEladminMpBaseUrl: () => 'https://eladmin.example/jbpapi',
+      isAuthenticated: () => true,
+      skillManager: {
+        listSkills: () => [],
+      } as unknown as SkillManager,
+      store: {
+        get: () => ({
+          catalogVersion: 'test',
+          syncedAt: Date.now(),
+          agents: [],
+          skills: [],
+          tools: [{
+            toolName: 'eladmin_mp_sso_mapping_check',
+            description: 'check mapping',
+            toolType: 'eladmin-mp-api',
+            toolDomain: 'governance',
+            allowed: true,
+            ownerSkillRefs: ['eladmin-mp-access-governance'],
+            inputSchema: {},
+            dangerLevel: 'read',
+            sourceType: QingShuObjectSourceType.QingShuManaged,
+            readOnly: true,
+            catalogVersion: 'test',
+            backendToolName: 'eladmin_mp_sso_mapping_check',
+          }],
+        }),
+        set: vi.fn(),
+      },
+    });
+
+    const result = await service.invokeManagedMcpTool('eladmin_mp_sso_mapping_check', {
+      filters: { externalUserId: 'u1' },
+    });
+
+    expect(result.isError).toBe(false);
+    expect(fetchFn).toHaveBeenCalledTimes(3);
+    expect(String(fetchFn.mock.calls[1][0])).toBe('https://eladmin.example/jbpapi/auth/sso/client/exchange');
+    expect(String(fetchFn.mock.calls[2][0])).toBe('https://eladmin.example/jbpapi/api/qingshu-agent/eladmin-mp/tools/invoke');
+    expect(fetchFn.mock.calls.some(([url]) => String(url).includes('/managed/tools/'))).toBe(false);
+  });
+
+  test('parses eladmin SSO callback params from Vue hash route', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 200,
+        data: {
+          callbackUrl: 'https://eladmin.example/jbpapi/#/sso/callback?clientId=eladmin-mp&principalType=QTB_USER&externalTenantCode=qtb-default&externalUserId=u1&nonce=n1&timestamp=1710000000000&redirect=%2Fqingshu-agent%2Ftool-runtime&signature=sig',
+        },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        token: 'Bearer eladmin-token',
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        summary: 'mapping ok',
+        data: { items: [] },
+        warnings: [],
+        permission: {},
+        traceId: 'trace-1',
+      }), { status: 200 }));
+
+    const service = new QingShuManagedCatalogService({
+      fetchFn,
+      getAuthAdapter: () => ({
+        ...createAuthAdapter(),
+        getAccessToken: vi.fn(async () => 'qtb-token'),
+      }),
+      resolveApiBaseUrl: () => 'https://qtb.example',
+      resolveEladminMpBaseUrl: () => 'https://eladmin.example/jbpapi',
+      isAuthenticated: () => true,
+      skillManager: {
+        listSkills: () => [],
+      } as unknown as SkillManager,
+      store: {
+        get: () => ({
+          catalogVersion: 'test',
+          syncedAt: Date.now(),
+          agents: [],
+          skills: [],
+          tools: [{
+            toolName: 'eladmin_mp_sso_mapping_check',
+            description: 'check mapping',
+            toolType: 'eladmin-mp-api',
+            toolDomain: 'governance',
+            allowed: true,
+            ownerSkillRefs: ['eladmin-mp-access-governance'],
+            inputSchema: {},
+            dangerLevel: 'read',
+            sourceType: QingShuObjectSourceType.QingShuManaged,
+            readOnly: true,
+            catalogVersion: 'test',
+            backendToolName: 'eladmin_mp_sso_mapping_check',
+          }],
+        }),
+        set: vi.fn(),
+      },
+    });
+
+    const result = await service.invokeManagedMcpTool('eladmin_mp_sso_mapping_check', {
+      filters: { externalUserId: 'u1' },
+    });
+
+    expect(result.isError).toBe(false);
+    const exchangeBody = JSON.parse(String(fetchFn.mock.calls[1][1]?.body));
+    expect(exchangeBody).toMatchObject({
+      clientId: 'eladmin-mp',
+      principalType: 'QTB_USER',
+      externalTenantCode: 'qtb-default',
+      externalUserId: 'u1',
+      redirect: '/qingshu-agent/tool-runtime',
+    });
+    expect(exchangeBody.timestamp).toBe(1710000000000);
+  });
+
+  test('explains eladmin context path when SSO exchange endpoint returns 404', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 200,
+        data: {
+          callbackUrl: 'https://eladmin.example/sso/callback?clientId=eladmin-mp&principalType=user&externalTenantCode=qtb&externalUserId=u1&nonce=n1&timestamp=1710000000000&redirect=%2Fqingshu-agent%2Ftool-runtime&signature=sig',
+        },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('', { status: 404 }));
+
+    const service = new QingShuManagedCatalogService({
+      fetchFn,
+      getAuthAdapter: () => ({
+        ...createAuthAdapter(),
+        getAccessToken: vi.fn(async () => 'qtb-token'),
+      }),
+      resolveApiBaseUrl: () => 'https://qtb.example',
+      resolveEladminMpBaseUrl: () => 'https://eladmin.example',
+      isAuthenticated: () => true,
+      skillManager: {
+        listSkills: () => [],
+      } as unknown as SkillManager,
+      store: {
+        get: () => ({
+          catalogVersion: 'test',
+          syncedAt: Date.now(),
+          agents: [],
+          skills: [],
+          tools: [{
+            toolName: 'eladmin_mp_sso_mapping_check',
+            description: 'check mapping',
+            toolType: 'eladmin-mp-api',
+            toolDomain: 'governance',
+            allowed: true,
+            ownerSkillRefs: ['eladmin-mp-access-governance'],
+            inputSchema: {},
+            dangerLevel: 'read',
+            sourceType: QingShuObjectSourceType.QingShuManaged,
+            readOnly: true,
+            catalogVersion: 'test',
+            backendToolName: 'eladmin_mp_sso_mapping_check',
+          }],
+        }),
+        set: vi.fn(),
+      },
+    });
+
+    await expect(service.invokeManagedMcpTool('eladmin_mp_sso_mapping_check', {}))
+      .rejects.toThrow('eladmin-mp API 地址是否包含 eladmin 后端 context-path');
+  });
+
+  test('explains QTB SSO server config gate when local eladmin runtime cannot create ticket', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 500,
+        msg: 'SSO server 未启用',
+      }), { status: 500 }));
+
+    const service = new QingShuManagedCatalogService({
+      fetchFn,
+      getAuthAdapter: () => ({
+        ...createAuthAdapter(),
+        getAccessToken: vi.fn(async () => 'qtb-token'),
+      }),
+      resolveApiBaseUrl: () => 'https://qtb.example',
+      resolveEladminMpBaseUrl: () => 'https://eladmin.example',
+      isAuthenticated: () => true,
+      skillManager: {
+        listSkills: () => [],
+      } as unknown as SkillManager,
+      store: {
+        get: () => ({
+          catalogVersion: 'test',
+          syncedAt: Date.now(),
+          agents: [],
+          skills: [],
+          tools: [{
+            toolName: 'eladmin_mp_sso_mapping_check',
+            description: 'check mapping',
+            toolType: 'eladmin-mp-api',
+            toolDomain: 'governance',
+            allowed: true,
+            ownerSkillRefs: ['eladmin-mp-access-governance'],
+            inputSchema: {},
+            dangerLevel: 'read',
+            sourceType: QingShuObjectSourceType.QingShuManaged,
+            readOnly: true,
+            catalogVersion: 'test',
+            backendToolName: 'eladmin_mp_sso_mapping_check',
+          }],
+        }),
+        set: vi.fn(),
+      },
+    });
+
+    await expect(service.invokeManagedMcpTool('eladmin_mp_sso_mapping_check', {}))
+      .rejects.toThrow('这是 QTB 后端配置开关未启用，不代表 JBPClaw 或 QTB 进程未启动');
   });
 });

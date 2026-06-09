@@ -344,6 +344,23 @@ class PetService {
     }
   }
 
+  async resizeFloatingWindowBy(delta: { deltaX: number; deltaY: number }): Promise<void> {
+    const result = await window.electron.pet.resizeFloatingWindowBy(delta);
+    if (result.success && result.state) {
+      this.state = result.state;
+      this.notify();
+      return;
+    }
+    if (result.success && result.config && this.state) {
+      this.state = { ...this.state, config: result.config };
+      this.notify();
+      return;
+    }
+    if (!result.success && result.error) {
+      throw new Error(result.error);
+    }
+  }
+
   async selectPet(id: string): Promise<void> {
     const result = await window.electron.pet.selectPet(id);
     if (result.success && result.state) {

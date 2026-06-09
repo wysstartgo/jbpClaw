@@ -1,0 +1,13 @@
+[
+  "clue_coupon_employee_delete_v2",
+  "clue_coupon_update_v2",
+  "clue_form_delete_v2",
+  "clue_form_update_v2",
+  "clue_smartphone_delete_v2",
+  "clue_wechat_instance_update_v2",
+  "event_manager_share_cancel_v3",
+  "event_manager_track_url_update_v2",
+  "tools_ad_convert_push_v2",
+  "tools_ad_convert_track_url_update_v2",
+  "tools_task_raise_status_stop_v2"
+]

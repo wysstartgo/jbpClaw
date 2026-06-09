@@ -1,0 +1,3 @@
+display_name: "评论运营与渠道增效"
+short_description: "覆盖评论、屏蔽词、抖音内容互动、DOU+、蓝海、否定词与渠道增效类工具。"
+default_prompt: "使用 评论运营与渠道增效 skill 帮我处理当前 OceanEngine 需求，并优先使用域内白名单工具。"

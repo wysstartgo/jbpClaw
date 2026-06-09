@@ -7,6 +7,7 @@ import { beginLoadSession } from '../store/slices/coworkSlice';
 import { agentService } from '../services/agent';
 import { coworkService } from '../services/cowork';
 import { i18nService } from '../services/i18n';
+import QingShuBrandMark from './branding/QingShuBrandMark';
 import Modal from './common/Modal';
 import CoworkSessionList from './cowork/CoworkSessionList';
 import CoworkSearchModal from './cowork/CoworkSearchModal';
@@ -38,7 +39,7 @@ interface SidebarProps {
 }
 
 const renderBrandHighlight = (text: string) => {
-  const match = /(灵工打卡|Linggong Daka)/.exec(text);
+  const match = /(聚宝盆|JBP)/.exec(text);
   if (!match || match.index < 0) {
     return text;
   }
@@ -50,7 +51,7 @@ const renderBrandHighlight = (text: string) => {
   return (
     <>
       {before}
-      <span className="text-emerald-600 dark:text-emerald-400">{brandText}</span>
+      <span className="text-red-700 dark:text-red-400">{brandText}</span>
       {after}
     </>
   );
@@ -448,9 +449,16 @@ const SidebarAgentList: React.FC<{
             }`}
             onClick={() => handleSwitch(agent.id)}
           >
-            <div className={`flex shrink-0 h-[22px] w-[22px] items-center justify-center rounded-[8px] overflow-hidden ${currentAgentId === agent.id ? 'bg-primary/20 ring-1 ring-primary/30' : 'bg-black/5 dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/5 shadow-sm'}`}>
-              <span className="text-sm leading-none drop-shadow-sm">{agent.icon || (agent.id === 'main' ? '🦞' : '🤖')}</span>
-            </div>
+            {agent.id === 'main' && !agent.icon ? (
+              <QingShuBrandMark
+                className="relative flex h-[22px] w-[22px] shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-red-600 shadow-[0_0_0_1px_rgba(0,0,0,0.55),0_3px_10px_rgba(220,38,38,0.42)] ring-1 ring-white/45"
+                iconClassName="text-[12px] font-semibold leading-none text-white"
+              />
+            ) : (
+              <div className={`flex shrink-0 h-[22px] w-[22px] items-center justify-center rounded-[8px] overflow-hidden ${currentAgentId === agent.id ? 'bg-primary/20 ring-1 ring-primary/30' : 'bg-black/5 dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/5 shadow-sm'}`}>
+                <span className="text-sm leading-none drop-shadow-sm">{agent.icon || '🤖'}</span>
+              </div>
+            )}
             <span className="truncate flex-1 text-xs font-medium">{agent.name}</span>
           </div>
         ))}

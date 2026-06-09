@@ -3,8 +3,8 @@
 const path = require('path');
 const { existsSync, readFileSync, writeFileSync } = require('fs');
 
-const MICROPHONE_USAGE_DESCRIPTION = 'QingShuClaw needs microphone access for voice input in the chat box.';
-const SPEECH_RECOGNITION_USAGE_DESCRIPTION = 'QingShuClaw needs speech recognition access to convert your voice into chat input text.';
+const MICROPHONE_USAGE_DESCRIPTION = 'JBPClaw needs microphone access for voice input in the chat box.';
+const SPEECH_RECOGNITION_USAGE_DESCRIPTION = 'JBPClaw needs speech recognition access to convert your voice into chat input text.';
 
 function upsertPlistString(xml, key, value) {
   const keyPattern = new RegExp(`<key>${key}</key>\\s*<string>[\\s\\S]*?<\\/string>`);

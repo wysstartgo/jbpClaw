@@ -568,7 +568,7 @@ export class OpenClawEngineManager extends EventEmitter {
     // The shims wrap Electron as a Node.js runtime via ELECTRON_RUN_AS_NODE=1.
     const npmBinDir = app.isPackaged
       ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'npm', 'bin')
-      : undefined;
+      : path.join(app.getAppPath(), 'node_modules', 'npm', 'bin');
     const nodeShimDir = ensureElectronNodeShim(electronNodeRuntimePath, npmBinDir);
     if (nodeShimDir) {
       const curPath = env.PATH || env.Path || '';

@@ -35,6 +35,8 @@ const mockElectron = vi.hoisted(() => {
 
     setAlwaysOnTop(): void {}
 
+    setIgnoreMouseEvents(): void {}
+
     setMenu(): void {}
 
     showInactive(): void {}

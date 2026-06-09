@@ -59,6 +59,7 @@ export class SubagentTracker {
   private readonly subagentToolCallIdToAgentId = new Map<string, string>();
   private readonly subagentStatus = new Map<string, 'running' | 'done' | 'error'>();
   private readonly agentIdToToolCallIds = new Map<string, Set<string>>();
+  private readonly deletedSubagentRunIds = new Set<string>();
   private readonly pendingSpawnInfo = new Map<string, {
     agentId: string;
     task: string | null;
@@ -74,6 +75,7 @@ export class SubagentTracker {
   ) {}
 
   onToolStart(toolCallId: string, args: Record<string, unknown>, sessionId: string): void {
+    this.deletedSubagentRunIds.delete(toolCallId);
     const agentId = typeof args.agentId === 'string' && args.agentId
       ? args.agentId
       : typeof args.taskName === 'string' && args.taskName
@@ -106,6 +108,7 @@ export class SubagentTracker {
 
   onSpawnResult(toolCallId: string, resultText: string): void {
     if (!resultText || !this.subagentToolCallIdToAgentId.has(toolCallId)) return;
+    if (this.deletedSubagentRunIds.has(toolCallId)) return;
     try {
       const parsed = JSON.parse(resultText);
       this.commitSpawnResult(toolCallId, parsed);
@@ -114,6 +117,7 @@ export class SubagentTracker {
 
   onBackfillResult(toolCallId: string, text: string): void {
     if (!this.subagentToolCallIdToAgentId.has(toolCallId)) return;
+    if (this.deletedSubagentRunIds.has(toolCallId)) return;
     try {
       const parsed = JSON.parse(text);
       this.commitSpawnResult(toolCallId, parsed);
@@ -153,8 +157,16 @@ export class SubagentTracker {
   }
 
   onSessionDeleted(parentSessionId?: string): void {
+    if (parentSessionId) {
+      for (const run of this.store.listSubagentRuns(parentSessionId)) {
+        this.deletedSubagentRunIds.add(run.id);
+      }
+    }
     if (parentSessionId && this.messageStore) {
       this.messageStore.deleteByParentSession(parentSessionId);
+    }
+    if (parentSessionId) {
+      this.store.deleteSubagentRunsByParent(parentSessionId);
     }
     this.subagentSessionKeys.clear();
     this.subagentMessages.clear();
@@ -162,6 +174,28 @@ export class SubagentTracker {
     this.subagentToolCallIdToAgentId.clear();
     this.agentIdToToolCallIds.clear();
     this.pendingSpawnInfo.clear();
+  }
+
+  async deleteSubagentRun(parentSessionId: string, runId: string): Promise<boolean> {
+    const run = this.store.getSubagentRun(runId);
+    if (!run || run.parentSessionId !== parentSessionId) {
+      return false;
+    }
+
+    this.deletedSubagentRunIds.add(runId);
+    const sessionKey = this.subagentSessionKeys.get(runId) || run.sessionKey;
+    this.clearSubagentMemory(runId);
+
+    if (this.messageStore) {
+      this.messageStore.deleteByRunIds([runId]);
+    }
+    this.store.deleteSubagentRun(runId);
+
+    if (sessionKey) {
+      await this.deleteGatewaySession(sessionKey);
+    }
+
+    return true;
   }
 
   listSubagentRuns(parentSessionId: string): Array<{
@@ -232,6 +266,7 @@ export class SubagentTracker {
 
   private commitSpawnResult(toolCallId: string, parsed: unknown): void {
     if (!isRecord(parsed)) return;
+    if (this.deletedSubagentRunIds.has(toolCallId)) return;
     const childSessionKey = typeof parsed.childSessionKey === 'string' ? parsed.childSessionKey
       : typeof parsed.sessionKey === 'string' ? parsed.sessionKey
         : typeof parsed.key === 'string' ? parsed.key
@@ -271,6 +306,37 @@ export class SubagentTracker {
     }
     this.pendingSpawnInfo.delete(toolCallId);
     console.log(`[SubagentTracker] committed subagent spawn ${toolCallId} with ${status} status`);
+  }
+
+  private clearSubagentMemory(runId: string): void {
+    const agentId = this.subagentToolCallIdToAgentId.get(runId);
+    this.subagentSessionKeys.delete(runId);
+    this.subagentMessages.delete(runId);
+    this.subagentStatus.delete(runId);
+    this.subagentToolCallIdToAgentId.delete(runId);
+    this.pendingSpawnInfo.delete(runId);
+
+    if (agentId) {
+      const toolCallIds = this.agentIdToToolCallIds.get(agentId);
+      toolCallIds?.delete(runId);
+      if (toolCallIds?.size === 0) {
+        this.agentIdToToolCallIds.delete(agentId);
+      }
+    }
+  }
+
+  private async deleteGatewaySession(sessionKey: string): Promise<void> {
+    const client = this.getGatewayClient();
+    if (!client) return;
+
+    try {
+      await client.request('sessions.delete', {
+        key: sessionKey,
+        deleteTranscript: true,
+      }, { timeoutMs: 5_000 });
+    } catch (error) {
+      console.warn(`[SubagentTracker] failed to delete gateway session for ${sessionKey}:`, error);
+    }
   }
 
   private async discoverSubagentSessionKey(runId: string): Promise<string | null> {

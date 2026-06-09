@@ -1,0 +1,124 @@
+[
+  {
+    "top": "dpa",
+    "sub": "product",
+    "count": 5,
+    "examples": [
+      "dpa_product_availables_v2",
+      "dpa_product_create_v2",
+      "dpa_product_delete_v2",
+      "dpa_product_detail_get_v2",
+      "dpa_product_update_v2"
+    ]
+  },
+  {
+    "top": "dpa",
+    "sub": "clue_product",
+    "count": 4,
+    "examples": [
+      "dpa_clue_product_delete_v2",
+      "dpa_clue_product_detail_v2",
+      "dpa_clue_product_list_v2",
+      "dpa_clue_product_save_v2"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "bp_asset_management",
+    "count": 3,
+    "examples": [
+      "tools_bp_asset_management_share_cancel_v3",
+      "tools_bp_asset_management_share_get_v3",
+      "tools_bp_asset_management_share_v3"
+    ]
+  },
+  {
+    "top": "dpa",
+    "sub": "assets",
+    "count": 2,
+    "examples": [
+      "dpa_assets_detail_read_v2",
+      "dpa_assets_list_v2"
+    ]
+  },
+  {
+    "top": "dpa",
+    "sub": "album",
+    "count": 1,
+    "examples": [
+      "dpa_album_create_v3"
+    ]
+  },
+  {
+    "top": "dpa",
+    "sub": "album_status",
+    "count": 1,
+    "examples": [
+      "dpa_album_status_get_v3"
+    ]
+  },
+  {
+    "top": "dpa",
+    "sub": "asset_v2",
+    "count": 1,
+    "examples": [
+      "dpa_asset_v2_list_v2"
+    ]
+  },
+  {
+    "top": "dpa",
+    "sub": "category",
+    "count": 1,
+    "examples": [
+      "dpa_category_get_v2"
+    ]
+  },
+  {
+    "top": "dpa",
+    "sub": "detail",
+    "count": 1,
+    "examples": [
+      "dpa_detail_get_v2"
+    ]
+  },
+  {
+    "top": "dpa",
+    "sub": "dict",
+    "count": 1,
+    "examples": [
+      "dpa_dict_get_v2"
+    ]
+  },
+  {
+    "top": "dpa",
+    "sub": "meta",
+    "count": 1,
+    "examples": [
+      "dpa_meta_get_v2"
+    ]
+  },
+  {
+    "top": "dpa",
+    "sub": "playlet",
+    "count": 1,
+    "examples": [
+      "dpa_playlet_auth_get_v2"
+    ]
+  },
+  {
+    "top": "dpa",
+    "sub": "product_status",
+    "count": 1,
+    "examples": [
+      "dpa_product_status_batch_update_v2"
+    ]
+  },
+  {
+    "top": "dpa",
+    "sub": "video",
+    "count": 1,
+    "examples": [
+      "dpa_video_get_v2"
+    ]
+  }
+]

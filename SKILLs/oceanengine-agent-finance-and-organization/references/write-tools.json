@@ -1,0 +1,8 @@
+[
+  "agent_advertiser_copy_v2",
+  "agent_advertiser_update_v2",
+  "agent_credit_charge_submit_v2",
+  "cg_transfer_transfer_create_v3",
+  "cg_transfer_wallet_transfer_create_v3",
+  "create_statement_invoice_v2"
+]

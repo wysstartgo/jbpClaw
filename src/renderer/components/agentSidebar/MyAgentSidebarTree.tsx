@@ -155,7 +155,7 @@ const MyAgentSidebarTree: React.FC<MyAgentSidebarTreeProps> = ({
   };
 
   const handleToggleAgentPin = async (agent: AgentSidebarAgentNode, pinned: boolean) => {
-    // 当前青数分支的 agent 状态模型尚未持久化 agent pin。
+    // 当前聚宝盆分支的 agent 状态模型尚未持久化 agent pin。
     // 先保留 UI seam，避免把 per-agent modelSlice/agentSlice 迁移混进本批次。
     void agent;
     window.dispatchEvent(new CustomEvent('app:showToast', {

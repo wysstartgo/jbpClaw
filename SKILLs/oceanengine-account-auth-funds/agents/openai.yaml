@@ -1,0 +1,3 @@
+display_name: "账户、鉴权与资金"
+short_description: "覆盖 OAuth、用户身份、广告主基础信息、预算、账户余额、钱包与资质。"
+default_prompt: "使用 账户、鉴权与资金 skill 帮我处理当前 OceanEngine 需求，并优先使用域内白名单工具。"

@@ -1,0 +1,11 @@
+[
+  "audience_package_create_v2",
+  "audience_package_delete_v2",
+  "audience_package_update_v2",
+  "dmp_custom_audience_copy_v2",
+  "dmp_custom_audience_delete_v2",
+  "dmp_custom_audience_publish_v2",
+  "dmp_data_source_create_v2",
+  "dmp_data_source_file_upload_v2",
+  "dmp_data_source_update_v2"
+]

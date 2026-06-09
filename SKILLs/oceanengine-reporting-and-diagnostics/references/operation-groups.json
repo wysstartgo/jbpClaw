@@ -1,0 +1,147 @@
+[
+  {
+    "top": "file",
+    "sub": "rebate",
+    "count": 7,
+    "examples": [
+      "file_rebate_common_download_create_task_v2",
+      "file_rebate_common_download_download_file_v2",
+      "file_rebate_common_download_get_download_task_list_v2",
+      "file_rebate_material_download_create_task_v2",
+      "file_rebate_material_download_download_file_v2"
+    ]
+  },
+  {
+    "top": "report",
+    "sub": "custom",
+    "count": 5,
+    "examples": [
+      "report_custom_async_task_create_v3",
+      "report_custom_async_task_download_v3",
+      "report_custom_async_task_get_v3",
+      "report_custom_config_get_v3",
+      "report_custom_get_v3"
+    ]
+  },
+  {
+    "top": "report",
+    "sub": "live_room",
+    "count": 5,
+    "examples": [
+      "report_live_room_analysis_get_v2",
+      "report_live_room_analysis_get_v3",
+      "report_live_room_attribute_get_v2",
+      "report_live_room_audience_portrait_get_v2",
+      "report_live_room_flow_category_get_v2"
+    ]
+  },
+  {
+    "top": "diagnosis_task",
+    "sub": "adv",
+    "count": 3,
+    "examples": [
+      "diagnosis_task_adv_create_v2",
+      "diagnosis_task_adv_get_v2",
+      "diagnosis_task_adv_list_v2"
+    ]
+  },
+  {
+    "top": "diagnosis_task",
+    "sub": "agent",
+    "count": 3,
+    "examples": [
+      "diagnosis_task_agent_create_v2",
+      "diagnosis_task_agent_get_v2",
+      "diagnosis_task_agent_list_v2"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "promotion_diagnosis",
+    "count": 2,
+    "examples": [
+      "tools_promotion_diagnosis_suggestion_accept_v3",
+      "tools_promotion_diagnosis_suggestion_get_v3"
+    ]
+  },
+  {
+    "top": "report",
+    "sub": "agent",
+    "count": 1,
+    "examples": [
+      "report_agent_get_v2_v2"
+    ]
+  },
+  {
+    "top": "report",
+    "sub": "report",
+    "count": 1,
+    "examples": [
+      "report_report_live_room_audience_portrait_get_v3"
+    ]
+  },
+  {
+    "top": "report",
+    "sub": "rta_cus_exp",
+    "count": 1,
+    "examples": [
+      "report_rta_cus_exp_get_v2"
+    ]
+  },
+  {
+    "top": "report",
+    "sub": "rta_exp",
+    "count": 1,
+    "examples": [
+      "report_rta_exp_get_v2"
+    ]
+  },
+  {
+    "top": "report",
+    "sub": "rta_exp_local_daily",
+    "count": 1,
+    "examples": [
+      "report_rta_exp_local_daily_get_v3"
+    ]
+  },
+  {
+    "top": "report",
+    "sub": "rta_exp_local_hourly",
+    "count": 1,
+    "examples": [
+      "report_rta_exp_local_hourly_get_v3"
+    ]
+  },
+  {
+    "top": "report",
+    "sub": "site",
+    "count": 1,
+    "examples": [
+      "report_site_page_v2"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "bids",
+    "count": 1,
+    "examples": [
+      "tools_bids_suggest_v3"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "log_search",
+    "count": 1,
+    "examples": [
+      "tools_log_search_v2"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "suggest_budget",
+    "count": 1,
+    "examples": [
+      "tools_suggest_budget_get_v3"
+    ]
+  }
+]

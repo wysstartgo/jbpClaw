@@ -2374,7 +2374,10 @@ export class SkillManager {
         this.writeSkillMeta(targetSkillDir, this.buildManagedSkillMeta(descriptor));
       }
 
-      this.setSkillEnabledState(descriptor.skillId, descriptor.enabled);
+      this.setSkillEnabledState(
+        descriptor.skillId,
+        descriptor.allowed === true && descriptor.enabled === true,
+      );
       cleanupPathSafely(cleanupPath);
       cleanupPath = null;
       this.startWatching();
@@ -2539,9 +2542,12 @@ export class SkillManager {
       const id = path.basename(dir);
       const prompt = content.trim();
       const defaultEnabled = defaults[id]?.enabled ?? true;
-      const enabled = state[id]?.enabled ?? defaultEnabled;
       const sourceType = skillMeta.sourceType
         || (isBuiltIn ? QingShuObjectSourceType.Preset : QingShuObjectSourceType.LocalCustom);
+      const enabled = sourceType === QingShuObjectSourceType.QingShuManaged
+        && skillMeta.allowed === true
+        ? true
+        : state[id]?.enabled ?? defaultEnabled;
       return {
         id,
         name,
@@ -2682,7 +2688,7 @@ export class SkillManager {
         installedBy,
         toolRefs: normalizeStringArray(raw.toolRefs),
         policyNote: typeof raw.policyNote === 'string' ? raw.policyNote : undefined,
-        allowed: raw.allowed === false ? false : undefined,
+        allowed: typeof raw.allowed === 'boolean' ? raw.allowed : undefined,
       };
     } catch (error) {
       console.warn('[skills] Failed to read skill meta:', metaPath, error);

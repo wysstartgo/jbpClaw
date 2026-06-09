@@ -1,0 +1,3 @@
+display_name: "代理商、组织与结算"
+short_description: "覆盖代理商账户、组织结构、转账、退款、开票、商务结算与组织内账户关系。"
+default_prompt: "使用 代理商、组织与结算 skill 帮我处理当前 OceanEngine 需求，并优先使用域内白名单工具。"

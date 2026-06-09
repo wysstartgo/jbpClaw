@@ -1,0 +1,292 @@
+[
+  {
+    "top": "agent",
+    "sub": "adv",
+    "count": 5,
+    "examples": [
+      "agent_adv_advertiser_update_sale_v2",
+      "agent_adv_bidding_list_query_v2",
+      "agent_adv_brand_list_query_v2",
+      "agent_adv_cost_report_list_query_v2",
+      "agent_adv_recharge_recharge_record_v2"
+    ]
+  },
+  {
+    "top": "agent",
+    "sub": "advertiser",
+    "count": 4,
+    "examples": [
+      "agent_advertiser_copy_v2",
+      "agent_advertiser_refund_v2",
+      "agent_advertiser_select_v2",
+      "agent_advertiser_update_v2"
+    ]
+  },
+  {
+    "top": "cg_transfer",
+    "sub": "wallet",
+    "count": 4,
+    "examples": [
+      "cg_transfer_wallet_transfer_can_transfer_balance_v3",
+      "cg_transfer_wallet_transfer_create_v3",
+      "cg_transfer_wallet_transfer_detail_v3",
+      "cg_transfer_wallet_transfer_list_v3"
+    ]
+  },
+  {
+    "top": "agent",
+    "sub": "advertiser_info",
+    "count": 1,
+    "examples": [
+      "agent_advertiser_info_query_v2"
+    ]
+  },
+  {
+    "top": "agent",
+    "sub": "charge",
+    "count": 1,
+    "examples": [
+      "agent_charge_verify_v2"
+    ]
+  },
+  {
+    "top": "agent",
+    "sub": "child_agent",
+    "count": 1,
+    "examples": [
+      "agent_child_agent_select_v2"
+    ]
+  },
+  {
+    "top": "agent",
+    "sub": "credit_charge",
+    "count": 1,
+    "examples": [
+      "agent_credit_charge_submit_v2"
+    ]
+  },
+  {
+    "top": "agent",
+    "sub": "info",
+    "count": 1,
+    "examples": [
+      "agent_info_v2"
+    ]
+  },
+  {
+    "top": "agent",
+    "sub": "prepay_charge",
+    "count": 1,
+    "examples": [
+      "agent_prepay_charge_generate_remittance_code_v2"
+    ]
+  },
+  {
+    "top": "agent",
+    "sub": "query",
+    "count": 1,
+    "examples": [
+      "agent_query_risk_promotion_list_v2"
+    ]
+  },
+  {
+    "top": "agent",
+    "sub": "transfer",
+    "count": 1,
+    "examples": [
+      "agent_transfer_transaction_record_v2"
+    ]
+  },
+  {
+    "top": "business_platform",
+    "sub": "company_account",
+    "count": 1,
+    "examples": [
+      "business_platform_company_account_get_v3"
+    ]
+  },
+  {
+    "top": "business_platform",
+    "sub": "company_info",
+    "count": 1,
+    "examples": [
+      "business_platform_company_info_get_v3"
+    ]
+  },
+  {
+    "top": "cg_transfer",
+    "sub": "can_transfer_balance",
+    "count": 1,
+    "examples": [
+      "cg_transfer_can_transfer_balance_get_v3"
+    ]
+  },
+  {
+    "top": "cg_transfer",
+    "sub": "can_transfer_target",
+    "count": 1,
+    "examples": [
+      "cg_transfer_can_transfer_target_list_v3"
+    ]
+  },
+  {
+    "top": "cg_transfer",
+    "sub": "create_transfer",
+    "count": 1,
+    "examples": [
+      "cg_transfer_create_transfer_v3"
+    ]
+  },
+  {
+    "top": "cg_transfer",
+    "sub": "query_can_transfer_balance",
+    "count": 1,
+    "examples": [
+      "cg_transfer_query_can_transfer_balance_v3"
+    ]
+  },
+  {
+    "top": "cg_transfer",
+    "sub": "query_transfer_balance",
+    "count": 1,
+    "examples": [
+      "cg_transfer_query_transfer_balance_v3"
+    ]
+  },
+  {
+    "top": "cg_transfer",
+    "sub": "query_transfer_detail",
+    "count": 1,
+    "examples": [
+      "cg_transfer_query_transfer_detail_v3"
+    ]
+  },
+  {
+    "top": "cg_transfer",
+    "sub": "transfer",
+    "count": 1,
+    "examples": [
+      "cg_transfer_transfer_create_v3"
+    ]
+  },
+  {
+    "top": "cg_transfer",
+    "sub": "transfer_balance",
+    "count": 1,
+    "examples": [
+      "cg_transfer_transfer_balance_get_v3"
+    ]
+  },
+  {
+    "top": "cg_transfer",
+    "sub": "transfer_detail",
+    "count": 1,
+    "examples": [
+      "cg_transfer_transfer_detail_get_v3"
+    ]
+  },
+  {
+    "top": "charge",
+    "sub": "result",
+    "count": 1,
+    "examples": [
+      "charge_result_v3"
+    ]
+  },
+  {
+    "top": "create",
+    "sub": "statement_invoice",
+    "count": 1,
+    "examples": [
+      "create_statement_invoice_v2"
+    ]
+  },
+  {
+    "top": "customer_center",
+    "sub": "advertiser",
+    "count": 1,
+    "examples": [
+      "customer_center_advertiser_list_v2"
+    ]
+  },
+  {
+    "top": "majordomo",
+    "sub": "advertiser",
+    "count": 1,
+    "examples": [
+      "majordomo_advertiser_select_v2"
+    ]
+  },
+  {
+    "top": "query",
+    "sub": "booking",
+    "count": 1,
+    "examples": [
+      "query_booking_business_entity_id_get_v2"
+    ]
+  },
+  {
+    "top": "query",
+    "sub": "invoice",
+    "count": 1,
+    "examples": [
+      "query_invoice_v2"
+    ]
+  },
+  {
+    "top": "query",
+    "sub": "invoice_electronic_url",
+    "count": 1,
+    "examples": [
+      "query_invoice_electronic_url_v2"
+    ]
+  },
+  {
+    "top": "query",
+    "sub": "project",
+    "count": 1,
+    "examples": [
+      "query_project_v2"
+    ]
+  },
+  {
+    "top": "query",
+    "sub": "rebate_accounting_info",
+    "count": 1,
+    "examples": [
+      "query_rebate_accounting_info_v2"
+    ]
+  },
+  {
+    "top": "query",
+    "sub": "rebate_balance",
+    "count": 1,
+    "examples": [
+      "query_rebate_balance_v2"
+    ]
+  },
+  {
+    "top": "query",
+    "sub": "statement",
+    "count": 1,
+    "examples": [
+      "query_statement_v2"
+    ]
+  },
+  {
+    "top": "remittance_code",
+    "sub": "list",
+    "count": 1,
+    "examples": [
+      "remittance_code_list_v3"
+    ]
+  },
+  {
+    "top": "tools",
+    "sub": "ies_account_search",
+    "count": 1,
+    "examples": [
+      "tools_ies_account_search_v2"
+    ]
+  }
+]

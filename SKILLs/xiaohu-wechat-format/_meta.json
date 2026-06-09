@@ -1,0 +1,15 @@
+{
+  "sourceType": "qingshu-managed",
+  "readOnly": true,
+  "backendSkillId": "xiaohu-wechat-format",
+  "backendAgentIds": [
+    "gzh-operations"
+  ],
+  "installedBy": "qingshu-sync",
+  "toolRefs": [],
+  "policyNote": "超级管理员拥有全部青数托管对象权限。",
+  "allowed": true,
+  "packageUrl": "http://localhost:9080/api/qingshu-claw/managed/skills/xiaohu-wechat-format/package",
+  "version": "1.0.0",
+  "catalogVersion": "2026-06-08-gzh-operations-v1"
+}

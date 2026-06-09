@@ -22,9 +22,9 @@ export default defineConfig({
         entry: 'src/main/main.ts',
         vite: {
           build: {
-            sourcemap: true,
+            sourcemap: false,
             outDir: 'dist-electron',
-            minify: false,
+            minify: 'esbuild',
             rollupOptions: {
               external: (id) => {
                 const staticExternals = [
@@ -59,9 +59,9 @@ export default defineConfig({
         entry: 'src/main/preload.ts',
         vite: {
           build: {
-            sourcemap: true,
+            sourcemap: false,
             outDir: 'dist-electron',
-            minify: false,
+            minify: 'esbuild',
           },
         },
         onstart() {},
@@ -79,8 +79,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    sourcemap: true,
-    minify: false,
+    sourcemap: false,
+    minify: 'esbuild',
   },
   server: {
     port: devPort,

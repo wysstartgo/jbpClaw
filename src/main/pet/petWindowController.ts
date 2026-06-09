@@ -11,10 +11,18 @@ type CreateWindowOptions = {
   isDev: boolean;
 };
 
+const FLOATING_WINDOW_SIZE_LIMITS = {
+  minWidth: 120,
+  minHeight: 120,
+  maxWidth: 520,
+  maxHeight: 520,
+} as const;
+
 export class PetWindowController {
   private window: BrowserWindow | null = null;
   private latestState: PetRuntimeState | null = null;
   private activityOpen = true;
+  private ignoresMouseEvents = false;
 
   constructor(
     private readonly configStore: PetConfigStore,
@@ -60,6 +68,12 @@ export class PetWindowController {
     this.window.setBounds(this.anchorNextBoundsToPreviousRight(previousBounds, nextBounds));
   }
 
+  setIgnoresMouseEvents(ignores: boolean): void {
+    this.ignoresMouseEvents = ignores;
+    if (!this.window || this.window.isDestroyed()) return;
+    this.window.setIgnoreMouseEvents(ignores, { forward: true });
+  }
+
   setVisible(visible: boolean): PetConfig {
     const current = this.configStore.getConfig();
     const next = this.configStore.setConfig({
@@ -97,6 +111,40 @@ export class PetWindowController {
     this.window.setBounds(nextBounds);
   }
 
+  resizeBy(deltaX: number, deltaY: number): PetConfig {
+    const current = this.configStore.getConfig();
+    if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY)) return current;
+    const previousBounds = this.window && !this.window.isDestroyed()
+      ? this.window.getBounds()
+      : null;
+    const baseWidth = previousBounds?.width ?? current.floatingWindow.width;
+    const baseHeight = previousBounds?.height ?? current.floatingWindow.height;
+    const nextWidth = this.clampSize(baseWidth + Math.round(deltaX), FLOATING_WINDOW_SIZE_LIMITS.minWidth, FLOATING_WINDOW_SIZE_LIMITS.maxWidth);
+    const nextHeight = this.clampSize(baseHeight + Math.round(deltaY), FLOATING_WINDOW_SIZE_LIMITS.minHeight, FLOATING_WINDOW_SIZE_LIMITS.maxHeight);
+    const next = this.configStore.setConfig({
+      floatingWindow: {
+        ...current.floatingWindow,
+        width: nextWidth,
+        height: nextHeight,
+      },
+    });
+    if (this.latestState) {
+      this.latestState = { ...this.latestState, config: next };
+    }
+    this.syncConfig(next);
+    if (this.window && !this.window.isDestroyed() && previousBounds) {
+      const resolvedBounds = this.resolveBounds(next);
+      this.window.setBounds(this.clampBounds({
+        ...previousBounds,
+        width: resolvedBounds.width,
+        height: resolvedBounds.height,
+      }));
+      this.persistBounds();
+    }
+    this.sendState();
+    return next;
+  }
+
   persistPosition(): void {
     this.persistBounds();
   }
@@ -129,6 +177,7 @@ export class PetWindowController {
     });
 
     this.window.setAlwaysOnTop(true, 'floating');
+    this.window.setIgnoreMouseEvents(this.ignoresMouseEvents, { forward: true });
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     this.window.setMenu(null);
     this.window.once('ready-to-show', () => {
@@ -178,6 +227,10 @@ export class PetWindowController {
     const x = Math.min(Math.max(bounds.x, workArea.x), workArea.x + workArea.width - bounds.width);
     const y = Math.min(Math.max(bounds.y, workArea.y), workArea.y + workArea.height - bounds.height);
     return { ...bounds, x, y };
+  }
+
+  private clampSize(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
   }
 
   private anchorNextBoundsToPreviousRight(

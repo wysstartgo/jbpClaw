@@ -66,4 +66,7 @@ export interface CoworkRuntime {
   isSessionActive(sessionId: string): boolean;
   getSessionConfirmationMode(sessionId: string): 'modal' | 'text' | null;
   onSessionDeleted?(sessionId: string): void;
+  listSubagentRuns?(parentSessionId: string): unknown[];
+  getSubTaskHistory?(parentSessionId: string, agentId: string, sessionKey?: string): Promise<CoworkMessage[]>;
+  deleteSubagentSession?(parentSessionId: string, runId: string): Promise<boolean>;
 }

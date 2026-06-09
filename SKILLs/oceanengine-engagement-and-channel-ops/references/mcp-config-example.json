@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "OceanEngine-评论运营与渠道增效": {
+      "url": "https://open.oceanengine.com/ad/mcp",
+      "headers": {
+        "Access-Token": "{ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+        "Tool-Range": "[\"douplus_optional_items_list_v3\", \"douplus_optional_targets_list_v3\", \"douplus_order_close_v3\", \"douplus_order_create_v3\", \"douplus_order_list_v3\", \"douplus_order_renew_v3\", \"douplus_order_report_v3\", \"tools_aweme_auth_list_v2\", \"tools_aweme_author_info_get_v2\", \"tools_aweme_banned_create_v3\", \"tools_aweme_banned_delete_v3\", \"tools_aweme_banned_list_v3\", \"tools_aweme_category_top_author_get_v2\", \"tools_aweme_info_search_v2\", \"tools_aweme_multi_level_category_get_v2\", \"tools_aweme_similar_author_search_v2\", \"tools_blue_flow_keyword_list_v3\", \"tools_blue_flow_package_list_v3\", \"tools_comment_get_v3\", \"tools_comment_hide_v3\", \"tools_comment_metrics_get_v3\", \"tools_comment_mid2item_id_v3\", \"tools_comment_reply_get_v3\", \"tools_comment_reply_v3\", \"tools_comment_terms_banned_add_v3\", \"tools_comment_terms_banned_delete_v3\", \"tools_comment_terms_banned_get_v3\", \"tools_comment_terms_banned_update_v3\", \"tools_gray_get_v3\", \"tools_inactive_advertiser_list_v3\", \"tools_interest_action_action_category_v2\", \"tools_interest_action_action_keyword_v2\", \"tools_interest_action_id2word_v2\", \"tools_interest_action_interest_category_v2\", \"tools_interest_action_interest_keyword_v2\", \"tools_interest_action_keyword_suggest_v2\", \"tools_keywords_bid_ratio_create_v3\", \"tools_keywords_bid_ratio_delete_v3\", \"tools_keywords_bid_ratio_get_v3\", \"tools_keywords_bid_ratio_update_v3\", \"tools_keywords_project_info_get_v3\", \"tools_live_authorize_list_v2\", \"tools_privative_word_batch_get_v3\", \"tools_privative_word_project_add_v3\", \"tools_privative_word_project_update_v3\", \"tools_privative_word_promotion_add_v3\", \"tools_privative_word_promotion_update_v3\", \"tools_promotion_raise_set_v3\", \"tools_promotion_raise_status_current_ids_get_v3\", \"tools_promotion_raise_status_get_v3\", \"tools_promotion_raise_stop_v3\", \"tools_promotion_raise_version_get_v3\", \"tools_search_bid_ratio_get_v2\"]"
+      }
+    }
+  }
+}

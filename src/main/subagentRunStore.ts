@@ -87,6 +87,13 @@ export class SubagentRunStore {
     return rows.map(mapSubagentRunRow);
   }
 
+  getSubagentRun(id: string): SubagentRun | null {
+    const row = this.db
+      .prepare('SELECT * FROM subagent_runs WHERE id = ?')
+      .get(id) as SubagentRunRow | undefined;
+    return row ? mapSubagentRunRow(row) : null;
+  }
+
   markMessagesPersisted(id: string): void {
     this.db.prepare('UPDATE subagent_runs SET messages_persisted = 1 WHERE id = ?').run(id);
   }
@@ -107,5 +114,9 @@ export class SubagentRunStore {
 
   deleteSubagentRunsByParent(parentSessionId: string): void {
     this.db.prepare('DELETE FROM subagent_runs WHERE parent_session_id = ?').run(parentSessionId);
+  }
+
+  deleteSubagentRun(id: string): void {
+    this.db.prepare('DELETE FROM subagent_runs WHERE id = ?').run(id);
   }
 }

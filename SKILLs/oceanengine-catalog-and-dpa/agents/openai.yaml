@@ -1,0 +1,3 @@
+display_name: "商品库、资产共享与 DPA"
+short_description: "覆盖商品库、DPA 商品、产品中心升级版商品与商品资产共享。"
+default_prompt: "使用 商品库、资产共享与 DPA skill 帮我处理当前 OceanEngine 需求，并优先使用域内白名单工具。"

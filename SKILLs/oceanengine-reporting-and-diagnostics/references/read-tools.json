@@ -1,0 +1,23 @@
+[
+  "diagnosis_task_adv_get_v2",
+  "diagnosis_task_adv_list_v2",
+  "diagnosis_task_agent_get_v2",
+  "diagnosis_task_agent_list_v2",
+  "report_custom_async_task_download_v3",
+  "report_custom_async_task_get_v3",
+  "report_custom_config_get_v3",
+  "report_custom_get_v3",
+  "report_live_room_analysis_get_v2",
+  "report_live_room_analysis_get_v3",
+  "report_live_room_attribute_get_v2",
+  "report_live_room_audience_portrait_get_v2",
+  "report_live_room_flow_category_get_v2",
+  "report_report_live_room_audience_portrait_get_v3",
+  "report_rta_cus_exp_get_v2",
+  "report_rta_exp_get_v2",
+  "report_rta_exp_local_daily_get_v3",
+  "report_rta_exp_local_hourly_get_v3",
+  "tools_bids_suggest_v3",
+  "tools_promotion_diagnosis_suggestion_get_v3",
+  "tools_suggest_budget_get_v3"
+]

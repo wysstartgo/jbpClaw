@@ -1,0 +1,3 @@
+display_name: "报表、洞察与诊断"
+short_description: "覆盖自定义报表、直播分析、返点导出、前测与投放诊断建议。"
+default_prompt: "使用 报表、洞察与诊断 skill 帮我处理当前 OceanEngine 需求，并优先使用域内白名单工具。"

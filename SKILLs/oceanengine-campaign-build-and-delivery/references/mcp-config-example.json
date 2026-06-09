@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "OceanEngine-项目、广告与投放搭建": {
+      "url": "https://open.oceanengine.com/ad/mcp",
+      "headers": {
+        "Access-Token": "{ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+        "Tool-Range": "[\"budget_group_create_v3\", \"budget_group_delete_v3\", \"budget_group_list_v3\", \"budget_group_update_v3\", \"cdp_brand_get_v3\", \"decoration_coupon_get_v3\", \"keyword_create_v3\", \"keyword_delete_v3\", \"keyword_list_v3\", \"keyword_update_v3\", \"native_anchor_create_v3\", \"native_anchor_delete_v3\", \"native_anchor_get_detail_v3\", \"native_anchor_get_v3\", \"native_anchor_qrcode_preview_get_v3\", \"native_anchor_update_v3\", \"project_budget_update_v3\", \"project_cost_protect_status_get_v3\", \"project_create_v3\", \"project_delete_v3\", \"project_list_v3\", \"project_roigoal_update_v3\", \"project_schedule_time_update_v3\", \"project_status_update_v3\", \"project_update_v3\", \"project_week_schedule_update_v3\", \"promotion_bid_update_v3\", \"promotion_budget_update_v3\", \"promotion_cost_protect_status_get_v3\", \"promotion_create_v3\", \"promotion_deepbid_update_v3\", \"promotion_delete_v3\", \"promotion_list_v3\", \"promotion_material_delete_v3\", \"promotion_reject_reason_get_v3\", \"promotion_schedule_time_update_v3\", \"promotion_status_update_v3\", \"promotion_update_v3\", \"tools_action_text_get_v2\", \"tools_ad_preview_qrcode_get_v3\", \"tools_country_info_v2\", \"tools_estimated_price_get_v2\", \"tools_industry_get_v2\", \"tools_promotion_card_recommend_get_v2\", \"tools_promotion_card_recommend_title_get_v2\", \"tools_region_get_v2\"]"
+      }
+    }
+  }
+}

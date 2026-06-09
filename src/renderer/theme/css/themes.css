@@ -2,11 +2,11 @@
 
 :root, [data-theme="classic-light"] {
   color-scheme: light;
-  --lobster-primary: #10b981;
+  --lobster-primary: #b91c1c;
   --lobster-primary-foreground: #ffffff;
-  --lobster-primary-hover: #059669;
-  --lobster-primary-muted: rgba(16,185,129,0.12);
-  --lobster-accent: #10b981;
+  --lobster-primary-hover: #991b1b;
+  --lobster-primary-muted: rgba(185,28,28,0.10);
+  --lobster-accent: #111827;
   --lobster-accent-foreground: #ffffff;
   --lobster-background: #F8F9FB;
   --lobster-foreground: #1A1D23;
@@ -14,8 +14,8 @@
   --lobster-surface-foreground: #1A1D23;
   --lobster-surface-raised: #F0F1F4;
   --lobster-surface-overlay: rgba(240,241,244,0.92);
-  --lobster-chat-user: #DBEAFE;
-  --lobster-chat-user-foreground: #1e3a8a;
+  --lobster-chat-user: #fee2e2;
+  --lobster-chat-user-foreground: #7f1d1d;
   --lobster-chat-bot: #F0F1F4;
   --lobster-chat-bot-foreground: #1A1D23;
   --lobster-text-primary: #1A1D23;
@@ -26,8 +26,8 @@
   --lobster-input-border: rgba(224,226,231,0.6);
   --lobster-scroll-thumb: #9CA3AF;
   --lobster-scroll-thumb-hover: #6B7280;
-  --lobster-gradient-1: rgba(16,185,129,0.06);
-  --lobster-gradient-2: rgba(16,185,129,0.02);
+  --lobster-gradient-1: rgba(185,28,28,0.06);
+  --lobster-gradient-2: rgba(17,24,39,0.02);
   --lobster-destructive: #ef4444;
   --lobster-destructive-foreground: #ffffff;
   --lobster-success: #22c55e;
@@ -48,11 +48,11 @@
 
 [data-theme="classic-dark"] {
   color-scheme: dark;
-  --lobster-primary: #10b981;
+  --lobster-primary: #ef4444;
   --lobster-primary-foreground: #ffffff;
-  --lobster-primary-hover: #34d399;
-  --lobster-primary-muted: rgba(16,185,129,0.12);
-  --lobster-accent: #10b981;
+  --lobster-primary-hover: #f87171;
+  --lobster-primary-muted: rgba(239,68,68,0.14);
+  --lobster-accent: #991b1b;
   --lobster-accent-foreground: #ffffff;
   --lobster-background: #0F1117;
   --lobster-foreground: #E4E5E9;
@@ -60,8 +60,8 @@
   --lobster-surface-foreground: #E4E5E9;
   --lobster-surface-raised: #242830;
   --lobster-surface-overlay: rgba(26,29,39,0.95);
-  --lobster-chat-user: rgba(59,130,246,0.15);
-  --lobster-chat-user-foreground: #BFDBFE;
+  --lobster-chat-user: rgba(239,68,68,0.16);
+  --lobster-chat-user-foreground: #fecaca;
   --lobster-chat-bot: #1A1D27;
   --lobster-chat-bot-foreground: #E4E5E9;
   --lobster-text-primary: #E4E5E9;
@@ -72,8 +72,8 @@
   --lobster-input-border: rgba(42,46,56,0.6);
   --lobster-scroll-thumb: #374151;
   --lobster-scroll-thumb-hover: #4B5563;
-  --lobster-gradient-1: rgba(16,185,129,0.08);
-  --lobster-gradient-2: rgba(16,185,129,0.04);
+  --lobster-gradient-1: rgba(239,68,68,0.10);
+  --lobster-gradient-2: rgba(127,29,29,0.05);
   --lobster-destructive: #ef4444;
   --lobster-destructive-foreground: #ffffff;
   --lobster-success: #22c55e;

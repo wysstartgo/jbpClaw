@@ -1,0 +1,16 @@
+{
+  "skillId": "xiaohu-wechat-format",
+  "name": "公众号发稿流水线",
+  "description": "整篇文章发稿流水线：将 Markdown 排成微信公众号兼容 HTML，处理正文图片上传、封面上传，并推送到公众号草稿箱；也可串联链接抓取、整理、打分优化、排版与发布。",
+  "version": "1.0.0",
+  "sourceType": "qingshu-managed",
+  "readOnly": true,
+  "toolRefs": [],
+  "backendAgentIds": [
+    "gzh-operations"
+  ],
+  "catalogVersion": "2026-06-08-gzh-operations-v1",
+  "dependencySkillIds": [
+    "cheat-on-content"
+  ]
+}

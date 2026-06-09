@@ -25,7 +25,7 @@ const createCatalogService = (options: {
   getManagedToolRuntimeManifest: () => (options.tools ?? [
     {
       name: 'qingshu_report_query',
-      description: 'Query QingShu report',
+      description: 'Query JBP report',
       inputSchema: {
         type: 'object',
         properties: {
@@ -90,7 +90,7 @@ describe('QingShuManagedMcpServer', () => {
       expect(tools.tools).toEqual([
         expect.objectContaining({
           name: 'qingshu_report_query',
-          description: 'Query QingShu report',
+          description: 'Query JBP report',
           inputSchema: {
             type: 'object',
             properties: {
@@ -121,7 +121,7 @@ describe('QingShuManagedMcpServer', () => {
     }
   });
 
-  test('exposes and invokes the local QingShu file publish tool', async () => {
+  test('exposes and invokes the local JBP file publish tool', async () => {
     const publish = vi.fn(async (args: Record<string, unknown>) => ({
       content: [{ type: 'text', text: JSON.stringify({ success: true, shareUrl: 'https://qingshu.test/s/file' }) }],
       isError: false,

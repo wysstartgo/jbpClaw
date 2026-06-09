@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "OceanEngine-商品库、资产共享与 DPA": {
+      "url": "https://open.oceanengine.com/ad/mcp",
+      "headers": {
+        "Access-Token": "{ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+        "Tool-Range": "[\"dpa_album_create_v3\", \"dpa_album_status_get_v3\", \"dpa_asset_v2_list_v2\", \"dpa_assets_detail_read_v2\", \"dpa_assets_list_v2\", \"dpa_category_get_v2\", \"dpa_clue_product_delete_v2\", \"dpa_clue_product_detail_v2\", \"dpa_clue_product_list_v2\", \"dpa_clue_product_save_v2\", \"dpa_detail_get_v2\", \"dpa_dict_get_v2\", \"dpa_meta_get_v2\", \"dpa_playlet_auth_get_v2\", \"dpa_product_availables_v2\", \"dpa_product_create_v2\", \"dpa_product_delete_v2\", \"dpa_product_detail_get_v2\", \"dpa_product_status_batch_update_v2\", \"dpa_product_update_v2\", \"dpa_video_get_v2\", \"tools_bp_asset_management_share_cancel_v3\", \"tools_bp_asset_management_share_get_v3\", \"tools_bp_asset_management_share_v3\"]"
+      }
+    }
+  }
+}

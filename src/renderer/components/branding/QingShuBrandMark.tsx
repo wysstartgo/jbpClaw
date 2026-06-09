@@ -6,12 +6,12 @@ interface QingShuBrandMarkProps {
 }
 
 const QingShuBrandMark: React.FC<QingShuBrandMarkProps> = ({
-  className = 'relative flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-500 shadow-sm shadow-emerald-500/30 ring-1 ring-emerald-300/35',
-  iconClassName = 'text-[10px] font-semibold tracking-[0.08em] text-white',
+  className = 'relative flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-red-600 shadow-[0_0_0_1px_rgba(0,0,0,0.55),0_3px_10px_rgba(220,38,38,0.42)] ring-1 ring-white/45',
+  iconClassName = 'text-[10px] font-semibold leading-none text-white',
 }) => {
   return (
     <span className={className} aria-hidden="true">
-      <span className={iconClassName}>青</span>
+      <span className={iconClassName}>聚</span>
       <span className="absolute inset-[2px] rounded-full border border-white/18" />
     </span>
   );

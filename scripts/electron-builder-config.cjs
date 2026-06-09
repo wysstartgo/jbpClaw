@@ -75,12 +75,12 @@ delete config.extraResources;
 
 config.dmg = {
   ...(config.dmg || {}),
-  artifactName: `QingShuClaw-darwin-\${arch}-\${version}-${keyfrom}.\${ext}`,
+  artifactName: `JBPClaw-darwin-\${arch}-\${version}-${keyfrom}.\${ext}`,
 };
 
 config.nsis = {
   ...(config.nsis || {}),
-  artifactName: `QingShuClaw-Setup-\${arch}-\${version}-${keyfrom}.\${ext}`,
+  artifactName: `JBPClaw-Setup-\${arch}-\${version}-${keyfrom}.\${ext}`,
 };
 
 console.log(`[Keyfrom] configured artifact keyfrom as ${keyfrom}`);

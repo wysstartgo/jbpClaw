@@ -1,0 +1,3 @@
+display_name: "线索、转化与承接链路"
+short_description: "覆盖线索、表单、券码、智能电话、微信号包、转化目标与事件管理。"
+default_prompt: "使用 线索、转化与承接链路 skill 帮我处理当前 OceanEngine 需求，并优先使用域内白名单工具。"

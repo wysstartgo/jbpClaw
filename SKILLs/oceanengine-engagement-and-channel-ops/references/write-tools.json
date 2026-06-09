@@ -1,0 +1,21 @@
+[
+  "douplus_order_close_v3",
+  "douplus_order_create_v3",
+  "douplus_order_renew_v3",
+  "tools_aweme_banned_create_v3",
+  "tools_aweme_banned_delete_v3",
+  "tools_comment_hide_v3",
+  "tools_comment_reply_v3",
+  "tools_comment_terms_banned_add_v3",
+  "tools_comment_terms_banned_delete_v3",
+  "tools_comment_terms_banned_update_v3",
+  "tools_keywords_bid_ratio_create_v3",
+  "tools_keywords_bid_ratio_delete_v3",
+  "tools_keywords_bid_ratio_update_v3",
+  "tools_privative_word_project_add_v3",
+  "tools_privative_word_project_update_v3",
+  "tools_privative_word_promotion_add_v3",
+  "tools_privative_word_promotion_update_v3",
+  "tools_promotion_raise_set_v3",
+  "tools_promotion_raise_stop_v3"
+]

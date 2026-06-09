@@ -12,6 +12,7 @@ import {
   type AuthCallbackPayload,
   type AuthConfig,
   type AuthPasswordLoginInput,
+  DEFAULT_AUTH_CONFIG,
 } from '../common/auth';
 import {
   type CoworkImageAttachmentInput,
@@ -36,7 +37,7 @@ import { DialogIpc } from '../shared/dialog/constants';
 import { type ListLocalWebServicesOptions, type LocalWebService, LocalWebServicesIpc } from '../shared/localWebServices/constants';
 import { PetStatus } from '../shared/pet/constants';
 import { type Platform as SharedPlatform,PlatformRegistry } from '../shared/platform';
-import { OpenClawProviderId, ProviderName, isQingShuServerProvider } from '../shared/providers';
+import { isQingShuServerProvider,OpenClawProviderId, ProviderName } from '../shared/providers';
 import { QingShuFileIpcChannel, QingShuFileToolName } from '../shared/qingshuFile/constants';
 import { QINGSHU_FILE_PUBLISH_PROMPT } from '../shared/qingshuFile/prompt';
 import type { QingShuFilePublishResult } from '../shared/qingshuFile/types';
@@ -92,6 +93,7 @@ import {
 import { resolveIMScheduledTaskAgentId } from './im/imScheduledTaskAgent';
 import { pollNimQrLogin, startNimQrLogin } from './im/nimQrLoginService';
 import type { DiscordInstanceConfig, Platform, TelegramInstanceConfig } from './im/types';
+import { registerKitHandlers } from './ipcHandlers/kits';
 import { registerNimQrLoginHandlers } from './ipcHandlers/nimQrLogin';
 import {
   getCronJobService,
@@ -123,7 +125,7 @@ import { registerProxyTokenRefresher,setProxyTokenRefresher,startCoworkOpenAICom
 import { CoworkRunner } from './libs/coworkRunner';
 import { generateSessionTitle, getElectronNodeRuntimePath, probeCoworkModelReadiness } from './libs/coworkUtil';
 import { EdgeTtsService } from './libs/edgeTtsService';
-import { getServerApiBaseUrl, getSkillStoreUrl, refreshEndpointsTestMode } from './libs/endpoints';
+import { getKitStoreUrl, getServerApiBaseUrl, getSkillStoreUrl, refreshEndpointsTestMode } from './libs/endpoints';
 import { mergeEnterpriseOpenclawConfig,resolveEnterpriseConfigPath, syncEnterpriseConfig } from './libs/enterpriseConfigSync';
 import { createOfficePreviewSession, createPreviewSession, destroyPreviewSession, isPreviewServerUrl, stopHtmlPreviewServer } from './libs/htmlPreviewServer';
 import { exportLogsZip } from './libs/logExport';
@@ -147,7 +149,6 @@ import {
 import type { ResolvedMcpServer } from './libs/openclawConfigSync';
 import { OpenClawConfigSync } from './libs/openclawConfigSync';
 import { OpenClawEngineManager, type OpenClawEngineStatus } from './libs/openclawEngineManager';
-import { collectReferencedEnvVarNames, pickReferencedSecretEnvVars } from './libs/openclawSecretEnv';
 import {
   addMemoryEntry,
   deleteMemoryEntry,
@@ -161,6 +162,7 @@ import {
   updateMemoryEntry,
   writeBootstrapFile,
 } from './libs/openclawMemoryFile';
+import { collectReferencedEnvVarNames, pickReferencedSecretEnvVars } from './libs/openclawSecretEnv';
 import { startOpenClawTokenProxy, stopOpenClawTokenProxy } from './libs/openclawTokenProxy';
 import { migrateMainAgentWorkspace } from './libs/openclawWorkspaceMigration';
 import { type PluginInstallParams,PluginManager } from './libs/pluginManager';
@@ -190,6 +192,7 @@ import { PetStore } from './pet/petStore';
 import { PetWindowController } from './pet/petWindowController';
 import { QingShuManagedCatalogService } from './qingshuManaged/catalogService';
 import { QingShuManagedMcpServer } from './qingshuManaged/managedMcpServer';
+import { getQingShuManagedToolRuntimeContext } from './qingshuManaged/toolRuntimeContext';
 import {
   createQingShuAuthFetchProvider,
   createQingShuExtensionHost,
@@ -1027,6 +1030,9 @@ let qingShuExtensionHost: QingShuExtensionHost | null = null;
 let qingShuGovernanceService: QingShuGovernanceService | null = null;
 let qingShuManagedCatalogService: QingShuManagedCatalogService | null = null;
 let qingShuManagedMcpServer: QingShuManagedMcpServer | null = null;
+const JBP_MANAGED_MANUAL_REFRESH_INTERVAL_MS = 60 * 1000;
+let jbpManagedLastManualRefreshAt = 0;
+let jbpManagedManualRefreshInFlight: Promise<{ success: boolean; snapshot?: unknown; error?: string }> | null = null;
 let publishQingShuFileHandler: ((filePath?: string) => Promise<QingShuFilePublishResult>) | null = null;
 let appUpdateCoordinator: AppUpdateCoordinator | null = null;
 let openClawBootstrapPromise: Promise<OpenClawEngineStatus> | null = null;
@@ -1451,14 +1457,14 @@ const buildManagedCapabilityDeniedResult = (options: {
     return {
       success: false,
       code: errorCode,
-      error: options.policyNote?.trim() || 'Your account cannot use this QingShu managed capability.',
+      error: options.policyNote?.trim() || 'Your account cannot use this JBP managed capability.',
     };
   }
 
   return {
     success: false,
     code: errorCode,
-    error: 'QingShu login is required to use this managed capability.',
+    error: 'JBP login is required to use this managed capability.',
   };
 };
 
@@ -1728,7 +1734,7 @@ const ensureQingShuManagedMcpServer = async (): Promise<void> => {
         const filePath = typeof args.filePath === 'string' ? args.filePath : '';
         const result = publishQingShuFileHandler
           ? await publishQingShuFileHandler(filePath)
-          : { success: false, error: 'QingShu file publisher is not initialized' };
+          : { success: false, error: 'JBP file publisher is not initialized' };
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
           isError: result.success !== true,
@@ -1920,7 +1926,7 @@ const getCoworkRunner = () => {
     });
     coworkRunner.setQingShuFilePublisher(async (filePath?: string) => {
       if (!publishQingShuFileHandler) {
-        return { success: false, error: 'QingShu file publisher is not initialized' };
+        return { success: false, error: 'JBP file publisher is not initialized' };
       }
       return publishQingShuFileHandler(filePath);
     });
@@ -3483,6 +3489,22 @@ if (!gotTheLock) {
     }
   };
 
+  const getPreferredClientIp = (): string | null => {
+    const interfaces = os.networkInterfaces();
+    for (const entries of Object.values(interfaces)) {
+      for (const entry of entries ?? []) {
+        if (entry.internal || entry.family !== 'IPv4') {
+          continue;
+        }
+        const address = entry.address?.trim();
+        if (address) {
+          return address;
+        }
+      }
+    }
+    return null;
+  };
+
   const clearAuthTokens = () => {
     getStore().delete('auth_tokens');
   };
@@ -3545,6 +3567,12 @@ if (!gotTheLock) {
     return getCurrentAuthBackendConfig().apiBaseUrl;
   };
 
+  const getCurrentEladminMpBaseUrl = (): string | null => {
+    return getCurrentAuthBackendConfig().eladminMpBaseUrl
+      || process.env.ELADMIN_MP_BASE_URL?.trim().replace(/\/+$/, '')
+      || DEFAULT_AUTH_CONFIG.eladminMpBaseUrl;
+  };
+
   const publishQingShuFile = async (filePath?: string): Promise<QingShuFilePublishResult> => {
     try {
       if (typeof filePath !== 'string' || !filePath.trim()) {
@@ -3553,12 +3581,12 @@ if (!gotTheLock) {
 
       const tokens = getAuthTokens();
       if (!tokens?.accessToken) {
-        return { success: false, error: 'QingShu login is required before uploading files' };
+        return { success: false, error: 'JBP login is required before uploading files' };
       }
 
       const apiBaseUrl = getCurrentAuthApiBaseUrl();
       if (!apiBaseUrl) {
-        return { success: false, error: 'QingShu API base URL is not configured' };
+        return { success: false, error: 'JBP API base URL is not configured' };
       }
 
       const resolvedPath = resolveShellFilePath(filePath);
@@ -3609,7 +3637,7 @@ if (!gotTheLock) {
       if (!response.ok || !body || body.code !== 200 || !body.data?.fileId || !body.data?.shareUrl) {
         return {
           success: false,
-          error: body?.msg || `QingShu file upload failed: ${response.status}`,
+          error: body?.msg || `JBP file upload failed: ${response.status}`,
         };
       }
 
@@ -3753,8 +3781,11 @@ if (!gotTheLock) {
           session.defaultSession.fetch(url, options),
         getAuthAdapter: getCurrentAuthAdapter,
         resolveApiBaseUrl: getCurrentAuthApiBaseUrl,
+        resolveEladminMpBaseUrl: getCurrentEladminMpBaseUrl,
         isAuthenticated: hasQingShuAuthSession,
         getDeviceId: getOrCreateInstallationUuid,
+        getClientIp: getPreferredClientIp,
+        getRuntimeContext: getQingShuManagedToolRuntimeContext,
         skillManager: getSkillManager(),
         store: getStore(),
         onAuthSessionInvalidated: clearLocalAuthSession,
@@ -3790,6 +3821,36 @@ if (!gotTheLock) {
 
   ipcMain.handle('qingshuManaged:syncCatalog', async () => {
     return syncQingShuManagedCatalogAndOpenClaw('qingshu-managed-catalog-sync');
+  });
+
+  ipcMain.handle('qingshuManaged:refreshCatalogManual', async () => {
+    const now = Date.now();
+    if (jbpManagedManualRefreshInFlight) {
+      return {
+        success: false,
+        throttled: true,
+        retryAfterMs: JBP_MANAGED_MANUAL_REFRESH_INTERVAL_MS,
+        error: 'JBP managed catalog refresh is already running',
+      };
+    }
+
+    const elapsedMs = now - jbpManagedLastManualRefreshAt;
+    if (elapsedMs < JBP_MANAGED_MANUAL_REFRESH_INTERVAL_MS) {
+      return {
+        success: false,
+        throttled: true,
+        retryAfterMs: JBP_MANAGED_MANUAL_REFRESH_INTERVAL_MS - elapsedMs,
+        error: 'JBP managed catalog refresh is cooling down',
+      };
+    }
+
+    jbpManagedLastManualRefreshAt = now;
+    jbpManagedManualRefreshInFlight = syncQingShuManagedCatalogAndOpenClaw('jbp-managed-catalog-manual-refresh');
+    try {
+      return await jbpManagedManualRefreshInFlight;
+    } finally {
+      jbpManagedManualRefreshInFlight = null;
+    }
   });
 
   ipcMain.handle('qingshuManaged:getCatalog', async () => {
@@ -4081,6 +4142,12 @@ if (!gotTheLock) {
         error: error instanceof Error ? error.message : 'Failed to get skill governance catalog summary',
       };
     }
+  });
+
+  registerKitHandlers({
+    getStore,
+    getKitStoreUrl,
+    getSkillManager,
   });
 
   ipcMain.handle('openclaw:engine:getStatus', async () => {
@@ -4761,7 +4828,7 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('cowork:subTask:history', async (_event, options: {
+  ipcMain.handle(CoworkIpcChannel.SubTaskHistory, async (_event, options: {
     parentSessionId: string;
     agentId: string;
     sessionKey?: string;
@@ -4807,7 +4874,7 @@ if (!gotTheLock) {
     }
   });
 
-  ipcMain.handle('cowork:subagent:list', async (_event, options: { parentSessionId: string }) => {
+  ipcMain.handle(CoworkIpcChannel.SubagentList, async (_event, options: { parentSessionId: string }) => {
     try {
       return {
         success: true,
@@ -4819,6 +4886,30 @@ if (!gotTheLock) {
         success: false,
         runs: [],
         error: error instanceof Error ? error.message : 'Failed to list subagent sessions',
+      };
+    }
+  });
+
+  ipcMain.handle(CoworkIpcChannel.SubagentDelete, async (_event, options: {
+    parentSessionId: string;
+    runId: string;
+  }) => {
+    try {
+      const deleted = await getCoworkEngineRouter().deleteSubagentSession(options.parentSessionId, options.runId);
+      if (!deleted) {
+        const run = getSubagentRunStore().getSubagentRun(options.runId);
+        if (!run || run.parentSessionId !== options.parentSessionId) {
+          return { success: true, deleted: false };
+        }
+        getSubagentMessageStore().deleteByRunIds([options.runId]);
+        getSubagentRunStore().deleteSubagentRun(options.runId);
+      }
+      return { success: true, deleted: true };
+    } catch (error) {
+      return {
+        success: false,
+        deleted: false,
+        error: error instanceof Error ? error.message : 'Failed to delete subagent session',
       };
     }
   });
@@ -8079,6 +8170,8 @@ end tell'`, { timeout: 5000 });
     setQingShuInvocationContextGetter(() => ({
       clientUserId: resolveAuthUserIdForInvocation(),
       deviceId: getOrCreateInstallationUuid(),
+      clientIp: getPreferredClientIp(),
+      ...(getQingShuManagedToolRuntimeContext() ?? {}),
     }));
     getQingShuExtensionHost();
     getQingShuGovernanceService();

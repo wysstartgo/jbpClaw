@@ -171,7 +171,7 @@ describe('AppUpdateCoordinator manual check', () => {
             ch: { title: '更新', content: ['修复问题'] },
             en: { title: 'Update', content: ['Bug fixes'] },
           },
-          macArm: { url: 'https://example.com/QingShuClaw.dmg' },
+          macArm: { url: 'https://example.com/JBPClaw.dmg' },
         },
       },
     }), { status: 200 }));
@@ -205,7 +205,7 @@ describe('AppUpdateCoordinator manual check', () => {
       data: {
         value: {
           version: '2026.5.2',
-          macArm: { url: 'https://example.com/QingShuClaw.dmg' },
+          macArm: { url: 'https://example.com/JBPClaw.dmg' },
         },
       },
     }), { status: 200 }));
@@ -241,7 +241,7 @@ describe('AppUpdateCoordinator manual check', () => {
       data: {
         value: {
           version: '2026.5.2',
-          macArm: { url: 'https://example.com/QingShuClaw.dmg' },
+          macArm: { url: 'https://example.com/JBPClaw.dmg' },
         },
       },
     }), { status: 200 }));
@@ -293,7 +293,7 @@ describe('AppUpdateCoordinator manual check', () => {
         data: {
           value: {
             version: '2026.5.2',
-            macArm: { url: 'https://example.com/QingShuClaw.dmg' },
+            macArm: { url: 'https://example.com/JBPClaw.dmg' },
           },
         },
       }), { status: 200 }))
@@ -347,7 +347,7 @@ describe('AppUpdateCoordinator manual check', () => {
         data: {
           value: {
             version: '2026.5.2',
-            macArm: { url: 'https://example.com/QingShuClaw.dmg' },
+            macArm: { url: 'https://example.com/JBPClaw.dmg' },
           },
         },
       }), { status: 200 }))
@@ -380,7 +380,7 @@ describe('AppUpdateCoordinator manual check', () => {
         data: {
           value: {
             version: '2026.5.2',
-            macArm: { url: 'https://example.com/QingShuClaw.dmg' },
+            macArm: { url: 'https://example.com/JBPClaw.dmg' },
           },
         },
       }), { status: 200 }))
@@ -440,7 +440,7 @@ describe('AppUpdateCoordinator manual check', () => {
         data: {
           value: {
             version: '2026.5.2',
-            macArm: { url: 'https://example.com/QingShuClaw.dmg' },
+            macArm: { url: 'https://example.com/JBPClaw.dmg' },
           },
         },
       }), { status: 200 }))
@@ -455,7 +455,7 @@ describe('AppUpdateCoordinator manual check', () => {
         data: {
           value: {
             version: '2026.5.2',
-            macArm: { url: 'https://example.com/QingShuClaw.dmg' },
+            macArm: { url: 'https://example.com/JBPClaw.dmg' },
           },
         },
       }), { status: 200 }));
@@ -481,7 +481,7 @@ describe('AppUpdateCoordinator manual check', () => {
         data: {
           value: {
             version: '2026.5.2',
-            macArm: { url: 'https://example.com/QingShuClaw.dmg' },
+            macArm: { url: 'https://example.com/JBPClaw.dmg' },
           },
         },
       }), { status: 200 }))

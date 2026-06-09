@@ -9,6 +9,7 @@ export interface AuthConfig {
   backend: AuthBackend;
   qtbApiBaseUrl: string;
   qtbWebBaseUrl: string;
+  eladminMpBaseUrl: string;
 }
 
 export interface AuthCallbackPayload {
@@ -97,9 +98,11 @@ export interface FeishuScanSessionPollResult extends FeishuScanSession {
 
 export const DEFAULT_QTB_API_BASE_URL = 'http://localhost:9080';
 export const DEFAULT_QTB_WEB_BASE_URL = 'http://localhost:9080/webapp';
+export const DEFAULT_ELADMIN_MP_BASE_URL = 'http://localhost:8008/cqjbpapi';
 
 export const DEFAULT_AUTH_CONFIG: AuthConfig = {
   backend: AuthBackend.Qtb,
   qtbApiBaseUrl: DEFAULT_QTB_API_BASE_URL,
   qtbWebBaseUrl: DEFAULT_QTB_WEB_BASE_URL,
+  eladminMpBaseUrl: DEFAULT_ELADMIN_MP_BASE_URL,
 };

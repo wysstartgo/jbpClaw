@@ -42,7 +42,7 @@ const SECRET_HEADER = 'x-qingshu-managed-mcp-secret';
 
 const QINGSHU_FILE_PUBLISH_TOOL = {
   name: QingShuFileToolName.Publish,
-  description: 'Upload a local file to QingShu managed storage and return a cross-device shareUrl. Requires QingShu login. Max file size: 50MB.',
+  description: 'Upload a local file to JBP managed storage and return a cross-device shareUrl. Requires JBP login. Max file size: 50MB.',
   inputSchema: {
     type: 'object',
     properties: {

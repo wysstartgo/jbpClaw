@@ -1,5 +1,9 @@
 import type { AppUpdateCheckResult, AppUpdateInfo as RuntimeAppUpdateInfo, AppUpdateRuntimeState, AppUpdateSource } from '../../shared/appUpdate/constants';
 import type { NimQrLoginPollResult, NimQrLoginStartResult } from '../../shared/im/nimQrLogin';
+import type {
+  InstalledKitRecord,
+  KitSkillMetadata,
+} from '../../shared/kit/constants';
 import type { ListLocalWebServicesOptions, LocalWebService } from '../../shared/localWebServices/constants';
 import type { PetCatalogEntry, PetConfig, PetImportRequest, PetImportResult, PetRuntimeState } from '../../shared/pet/types';
 import type { QingShuFilePublishResult } from '../../shared/qingshuFile/types';
@@ -516,6 +520,13 @@ interface IElectronAPI {
   };
   qingshuManaged: {
     syncCatalog: () => Promise<{ success: boolean; snapshot?: QingShuManagedCatalogSnapshot; error?: string }>;
+    refreshCatalogManual: () => Promise<{
+      success: boolean;
+      snapshot?: QingShuManagedCatalogSnapshot;
+      error?: string;
+      throttled?: boolean;
+      retryAfterMs?: number;
+    }>;
     getCatalog: () => Promise<{ success: boolean; snapshot?: QingShuManagedCatalogSnapshot; error?: string }>;
   };
   qingshuFile: {
@@ -528,6 +539,24 @@ interface IElectronAPI {
     delete: (id: string) => Promise<{ success: boolean; servers?: McpServerConfigIPC[]; error?: string }>;
     setEnabled: (options: { id: string; enabled: boolean }) => Promise<{ success: boolean; servers?: McpServerConfigIPC[]; error?: string }>;
     fetchMarketplace: () => Promise<{ success: boolean; data?: McpMarketplaceData; error?: string }>;
+  };
+  kits: {
+    fetchStore: () => Promise<{ success: boolean; data?: string; error?: string }>;
+    install: (params: {
+      kitId: string;
+      bundleUrl: string;
+      version: string;
+      skillListIds: string[];
+      skillList?: KitSkillMetadata[];
+      mcpServers?: unknown[] | null;
+      connectors?: unknown[] | null;
+    }) => Promise<{ success: boolean; skillIds?: string[]; error?: string }>;
+    uninstall: (kitId: string) => Promise<{ success: boolean; error?: string }>;
+    listInstalled: () => Promise<{
+      success: boolean;
+      installed?: Record<string, InstalledKitRecord>;
+      error?: string;
+    }>;
   };
   plugins: {
     list: () => Promise<{
@@ -652,8 +681,10 @@ interface IElectronAPI {
     activateMainWindow: () => Promise<{ success: boolean; error?: string }>;
     activateSession: (sessionId: string) => Promise<{ success: boolean; error?: string }>;
     moveFloatingWindowBy: (delta: { deltaX: number; deltaY: number }) => Promise<{ success: boolean; error?: string }>;
+    resizeFloatingWindowBy: (delta: { deltaX: number; deltaY: number }) => Promise<{ success: boolean; config?: PetConfig; state?: PetRuntimeState; error?: string }>;
     persistFloatingWindowPosition: () => Promise<{ success: boolean; error?: string }>;
     setFloatingActivityOpen: (open: boolean) => Promise<{ success: boolean; error?: string }>;
+    setFloatingWindowIgnoresMouseEvents: (ignores: boolean) => Promise<{ success: boolean; error?: string }>;
     openSettings: () => Promise<{ success: boolean; error?: string }>;
     onStateChanged: (callback: (state: PetRuntimeState) => void) => () => void;
   };
@@ -694,6 +725,10 @@ interface IElectronAPI {
       }>;
       error?: string;
     }>;
+    deleteSubagentSession: (options: {
+      parentSessionId: string;
+      runId: string;
+    }) => Promise<{ success: boolean; deleted?: boolean; error?: string }>;
     listSessions: (agentId?: string) => Promise<{ success: boolean; sessions?: CoworkSessionSummary[]; error?: string }>;
     exportResultImage: (options: {
       rect: { x: number; y: number; width: number; height: number };

@@ -2,34 +2,313 @@
   "version": 1,
   "description": "Default skill configuration for LobsterAI",
   "defaults": {
-    "docx": { "order": 10, "enabled": true },
-    "web-search": { "order": 15, "enabled": true },
-    "xlsx": { "order": 20, "enabled": true },
-    "pptx": { "order": 30, "enabled": true },
-    "pdf": { "order": 40, "enabled": true },
-    "remotion": { "order": 50, "enabled": true },
-    "develop-web-game": { "order": 60, "enabled": true },
-    "playwright": { "order": 70, "enabled": true },
-    "create-plan": { "order": 80, "enabled": true },
-    "canvas-design": { "order": 90, "enabled": true },
-    "frontend-design": { "order": 100, "enabled": true },
-    "stock-analyzer": { "order": 110, "enabled": true },
-    "stock-announcements": { "order": 111, "enabled": true },
-    "stock-explorer": { "order": 112, "enabled": true },
-    "content-planner": { "order": 120, "enabled": true },
-    "article-writer": { "order": 121, "enabled": true },
-    "daily-trending": { "order": 122, "enabled": true },
-    "local-tools": { "order": 200, "enabled": true },
-    "weather": { "order": 210, "enabled": true },
-    "imap-smtp-email": { "order": 211, "enabled": true },
-    "seedance": { "order": 212, "enabled": true },
-    "seedream": { "order": 213, "enabled": true },
-    "qingshu-image": { "order": 214, "enabled": true },
-    "films-search": { "order": 222, "enabled": true },
-    "music-search": { "order": 223, "enabled": true },
-    "technology-news-search": { "order": 224, "enabled": false },
-    "youdaonote": { "order": 298, "enabled": true },
-    "skill-vetter": { "order": 299, "enabled": true },
-    "skill-creator": { "order": 300, "enabled": true }
+    "docx": {
+      "order": 10,
+      "enabled": true
+    },
+    "web-search": {
+      "order": 15,
+      "enabled": true
+    },
+    "xlsx": {
+      "order": 20,
+      "enabled": true
+    },
+    "pptx": {
+      "order": 30,
+      "enabled": true
+    },
+    "pdf": {
+      "order": 40,
+      "enabled": true
+    },
+    "remotion": {
+      "order": 50,
+      "enabled": true
+    },
+    "develop-web-game": {
+      "order": 60,
+      "enabled": true
+    },
+    "playwright": {
+      "order": 70,
+      "enabled": true
+    },
+    "create-plan": {
+      "order": 80,
+      "enabled": true
+    },
+    "canvas-design": {
+      "order": 90,
+      "enabled": true
+    },
+    "frontend-design": {
+      "order": 100,
+      "enabled": true
+    },
+    "stock-analyzer": {
+      "order": 110,
+      "enabled": true
+    },
+    "stock-announcements": {
+      "order": 111,
+      "enabled": true
+    },
+    "stock-explorer": {
+      "order": 112,
+      "enabled": true
+    },
+    "content-planner": {
+      "order": 120,
+      "enabled": true
+    },
+    "article-writer": {
+      "order": 121,
+      "enabled": true
+    },
+    "daily-trending": {
+      "order": 122,
+      "enabled": true
+    },
+    "local-tools": {
+      "order": 200,
+      "enabled": true
+    },
+    "weather": {
+      "order": 210,
+      "enabled": true
+    },
+    "imap-smtp-email": {
+      "order": 211,
+      "enabled": true
+    },
+    "seedance": {
+      "order": 212,
+      "enabled": true
+    },
+    "seedream": {
+      "order": 213,
+      "enabled": true
+    },
+    "qingshu-image": {
+      "order": 214,
+      "enabled": true
+    },
+    "films-search": {
+      "order": 222,
+      "enabled": true
+    },
+    "music-search": {
+      "order": 223,
+      "enabled": true
+    },
+    "technology-news-search": {
+      "order": 224,
+      "enabled": false
+    },
+    "youdaonote": {
+      "order": 298,
+      "enabled": true
+    },
+    "skill-vetter": {
+      "order": 299,
+      "enabled": true
+    },
+    "skill-creator": {
+      "order": 300,
+      "enabled": true
+    },
+    "arming-thought": {
+      "order": 400,
+      "enabled": true
+    },
+    "contradiction-analysis": {
+      "order": 401,
+      "enabled": true
+    },
+    "practice-cognition": {
+      "order": 402,
+      "enabled": true
+    },
+    "investigation-first": {
+      "order": 403,
+      "enabled": true
+    },
+    "mass-line": {
+      "order": 404,
+      "enabled": true
+    },
+    "criticism-self-criticism": {
+      "order": 405,
+      "enabled": true
+    },
+    "protracted-strategy": {
+      "order": 406,
+      "enabled": true
+    },
+    "concentrate-forces": {
+      "order": 407,
+      "enabled": true
+    },
+    "spark-prairie-fire": {
+      "order": 408,
+      "enabled": true
+    },
+    "overall-planning": {
+      "order": 409,
+      "enabled": true
+    },
+    "workflows": {
+      "order": 410,
+      "enabled": true
+    },
+    "cheat-on-content": {
+      "order": 420,
+      "enabled": true
+    },
+    "cangjie-skill": {
+      "order": 430,
+      "enabled": true
+    },
+    "dbs": {
+      "order": 500,
+      "enabled": true
+    },
+    "dbs-action": {
+      "order": 501,
+      "enabled": true
+    },
+    "dbs-agent-migration": {
+      "order": 502,
+      "enabled": true
+    },
+    "dbs-ai-check": {
+      "order": 503,
+      "enabled": true
+    },
+    "dbs-benchmark": {
+      "order": 504,
+      "enabled": true
+    },
+    "dbs-chatroom": {
+      "order": 505,
+      "enabled": true
+    },
+    "dbs-chatroom-austrian": {
+      "order": 506,
+      "enabled": true
+    },
+    "dbs-content": {
+      "order": 507,
+      "enabled": true
+    },
+    "dbs-content-system": {
+      "order": 508,
+      "enabled": true
+    },
+    "dbs-decision": {
+      "order": 509,
+      "enabled": true
+    },
+    "dbs-deconstruct": {
+      "order": 510,
+      "enabled": true
+    },
+    "dbs-diagnosis": {
+      "order": 511,
+      "enabled": true
+    },
+    "dbs-goal": {
+      "order": 512,
+      "enabled": true
+    },
+    "dbs-good-question": {
+      "order": 513,
+      "enabled": true
+    },
+    "dbs-hook": {
+      "order": 514,
+      "enabled": true
+    },
+    "dbs-learning": {
+      "order": 515,
+      "enabled": true
+    },
+    "dbs-report": {
+      "order": 516,
+      "enabled": true
+    },
+    "dbs-restore": {
+      "order": 517,
+      "enabled": true
+    },
+    "dbs-save": {
+      "order": 518,
+      "enabled": true
+    },
+    "dbs-slowisfast": {
+      "order": 519,
+      "enabled": true
+    },
+    "dbs-xhs-title": {
+      "order": 520,
+      "enabled": true
+    },
+    "oceanengine-account-auth-funds": {
+      "order": 600,
+      "enabled": true
+    },
+    "oceanengine-agent-finance-and-organization": {
+      "order": 601,
+      "enabled": true
+    },
+    "oceanengine-audience-and-dmp": {
+      "order": 602,
+      "enabled": true
+    },
+    "oceanengine-campaign-build-and-delivery": {
+      "order": 603,
+      "enabled": true
+    },
+    "oceanengine-catalog-and-dpa": {
+      "order": 604,
+      "enabled": true
+    },
+    "oceanengine-creative-and-material-assets": {
+      "order": 605,
+      "enabled": true
+    },
+    "oceanengine-ecosystem-and-app-assets": {
+      "order": 606,
+      "enabled": true
+    },
+    "oceanengine-engagement-and-channel-ops": {
+      "order": 607,
+      "enabled": true
+    },
+    "oceanengine-lead-and-conversion-ops": {
+      "order": 608,
+      "enabled": true
+    },
+    "oceanengine-reporting-and-diagnostics": {
+      "order": 609,
+      "enabled": true
+    },
+    "oceanengine-site-and-landing-assets": {
+      "order": 610,
+      "enabled": true
+    },
+    "novel-comic-wechat-post": {
+      "order": 700,
+      "enabled": true
+    },
+    "explosive-cover-generator-gzh": {
+      "order": 701,
+      "enabled": true
+    },
+    "xiaohu-wechat-format": {
+      "order": 702,
+      "enabled": true
+    }
   }
 }

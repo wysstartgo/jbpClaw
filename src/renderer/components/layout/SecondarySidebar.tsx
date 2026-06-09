@@ -135,8 +135,8 @@ const AgentAvatar: React.FC<{ agent: SidebarAgent; title: string }> = ({ agent, 
   if (agent.id === 'main') {
     return (
       <QingShuBrandMark
-        className="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-500 shadow-sm shadow-emerald-500/20 ring-1 ring-emerald-300/24"
-        iconClassName="text-[11px] font-semibold tracking-[0.08em] text-white"
+        className="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-red-600 shadow-[0_0_0_1px_rgba(0,0,0,0.55),0_3px_10px_rgba(220,38,38,0.42)] ring-1 ring-white/45"
+        iconClassName="text-[11px] font-semibold leading-none text-white"
       />
     );
   }
@@ -174,8 +174,8 @@ const ManagedAgentMark: React.FC = () => (
     aria-label={i18nService.t('sourceTypeQingShuManaged')}
   >
     <QingShuBrandMark
-      className="relative flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-500 shadow-sm shadow-emerald-500/20 ring-1 ring-emerald-300/28"
-      iconClassName="text-[10px] font-semibold tracking-[0.08em] text-white"
+      className="relative flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-red-600 shadow-[0_0_0_1px_rgba(0,0,0,0.55),0_3px_10px_rgba(220,38,38,0.42)] ring-1 ring-white/45"
+      iconClassName="text-[10px] font-semibold leading-none text-white"
     />
   </span>
 );

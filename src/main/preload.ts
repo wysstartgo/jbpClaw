@@ -47,6 +47,7 @@ import { ArtifactPreviewIpc } from '../shared/artifactPreview/constants';
 import { ClipboardIpc } from '../shared/clipboard/constants';
 import { CoworkIpcChannel } from '../shared/cowork/constants';
 import { DialogIpc } from '../shared/dialog/constants';
+import type { KitSkillMetadata } from '../shared/kit/constants';
 import type { ListLocalWebServicesOptions, LocalWebService } from '../shared/localWebServices/constants';
 import { LocalWebServicesIpc } from '../shared/localWebServices/constants';
 import { PetIpcChannel } from '../shared/pet/constants';
@@ -99,6 +100,7 @@ contextBridge.exposeInMainWorld('electron', {
   },
   qingshuManaged: {
     syncCatalog: () => ipcRenderer.invoke('qingshuManaged:syncCatalog'),
+    refreshCatalogManual: () => ipcRenderer.invoke('qingshuManaged:refreshCatalogManual'),
     getCatalog: () => ipcRenderer.invoke('qingshuManaged:getCatalog'),
   },
   qingshuFile: {
@@ -112,6 +114,20 @@ contextBridge.exposeInMainWorld('electron', {
     delete: (id: string) => ipcRenderer.invoke('mcp:delete', id),
     setEnabled: (options: { id: string; enabled: boolean }) => ipcRenderer.invoke('mcp:setEnabled', options),
     fetchMarketplace: () => ipcRenderer.invoke('mcp:fetchMarketplace'),
+  },
+  kits: {
+    fetchStore: () => ipcRenderer.invoke('kits:fetchStore'),
+    install: (params: {
+      kitId: string;
+      bundleUrl: string;
+      version: string;
+      skillListIds: string[];
+      skillList?: KitSkillMetadata[];
+      mcpServers?: unknown[] | null;
+      connectors?: unknown[] | null;
+    }) => ipcRenderer.invoke('kits:install', params),
+    uninstall: (kitId: string) => ipcRenderer.invoke('kits:uninstall', kitId),
+    listInstalled: () => ipcRenderer.invoke('kits:listInstalled'),
   },
   plugins: {
     list: () => ipcRenderer.invoke('plugins:list'),
@@ -303,9 +319,11 @@ contextBridge.exposeInMainWorld('electron', {
     remoteManaged: (sessionId: string) =>
       ipcRenderer.invoke('cowork:session:remoteManaged', sessionId),
     getSubTaskHistory: (options: { parentSessionId: string; agentId: string; sessionKey?: string }) =>
-      ipcRenderer.invoke('cowork:subTask:history', options),
+      ipcRenderer.invoke(CoworkIpcChannel.SubTaskHistory, options),
     listSubagentSessions: (parentSessionId: string) =>
-      ipcRenderer.invoke('cowork:subagent:list', { parentSessionId }),
+      ipcRenderer.invoke(CoworkIpcChannel.SubagentList, { parentSessionId }),
+    deleteSubagentSession: (options: { parentSessionId: string; runId: string }) =>
+      ipcRenderer.invoke(CoworkIpcChannel.SubagentDelete, options),
     listSessions: (agentId?: string) =>
       ipcRenderer.invoke('cowork:session:list', agentId),
     exportResultImage: (options: { rect: { x: number; y: number; width: number; height: number }; defaultFileName?: string }) =>
@@ -541,8 +559,10 @@ contextBridge.exposeInMainWorld('electron', {
     activateMainWindow: () => ipcRenderer.invoke(PetIpcChannel.ActivateMainWindow),
     activateSession: (sessionId: string) => ipcRenderer.invoke(PetIpcChannel.ActivateSession, sessionId),
     moveFloatingWindowBy: (delta: { deltaX: number; deltaY: number }) => ipcRenderer.invoke(PetIpcChannel.MoveFloatingWindowBy, delta),
+    resizeFloatingWindowBy: (delta: { deltaX: number; deltaY: number }) => ipcRenderer.invoke(PetIpcChannel.ResizeFloatingWindowBy, delta),
     persistFloatingWindowPosition: () => ipcRenderer.invoke(PetIpcChannel.PersistFloatingWindowPosition),
     setFloatingActivityOpen: (open: boolean) => ipcRenderer.invoke(PetIpcChannel.SetFloatingActivityOpen, open),
+    setFloatingWindowIgnoresMouseEvents: (ignores: boolean) => ipcRenderer.invoke(PetIpcChannel.SetFloatingWindowIgnoresMouseEvents, ignores),
     openSettings: () => ipcRenderer.invoke(PetIpcChannel.OpenSettings),
     onStateChanged: (callback: (state: PetRuntimeState) => void) => {
       const handler = (_event: IpcRendererEvent, state: PetRuntimeState) => callback(state);

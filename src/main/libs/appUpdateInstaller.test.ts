@@ -50,7 +50,7 @@ describe('appUpdateInstaller download paths', () => {
   });
 
   test('stores legacy manual downloads in the app update cache', async () => {
-    const filePath = await downloadUpdate('https://example.com/QingShuClaw.dmg', () => {});
+    const filePath = await downloadUpdate('https://example.com/JBPClaw.dmg', () => {});
 
     expect(filePath).toContain(path.join(mockElectronState.userDataDir, 'updates'));
     expect(path.basename(filePath)).toMatch(/^lobsterai-update-manual-\d+\.dmg$/);
@@ -58,7 +58,7 @@ describe('appUpdateInstaller download paths', () => {
   });
 
   test('stores source-scoped auto downloads in the app update cache', async () => {
-    const filePath = await downloadUpdate('https://example.com/QingShuClaw.exe', AppUpdateSource.Auto, () => {});
+    const filePath = await downloadUpdate('https://example.com/JBPClaw.exe', AppUpdateSource.Auto, () => {});
 
     expect(filePath).toContain(path.join(mockElectronState.userDataDir, 'updates'));
     expect(path.basename(filePath)).toMatch(/^lobsterai-update-auto-\d+\.exe$/);

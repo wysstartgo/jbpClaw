@@ -1,0 +1,21 @@
+[
+  "budget_group_list_v3",
+  "cdp_brand_get_v3",
+  "decoration_coupon_get_v3",
+  "keyword_list_v3",
+  "native_anchor_get_detail_v3",
+  "native_anchor_get_v3",
+  "native_anchor_qrcode_preview_get_v3",
+  "project_cost_protect_status_get_v3",
+  "project_list_v3",
+  "promotion_cost_protect_status_get_v3",
+  "promotion_list_v3",
+  "promotion_reject_reason_get_v3",
+  "tools_action_text_get_v2",
+  "tools_country_info_v2",
+  "tools_estimated_price_get_v2",
+  "tools_industry_get_v2",
+  "tools_promotion_card_recommend_get_v2",
+  "tools_promotion_card_recommend_title_get_v2",
+  "tools_region_get_v2"
+]

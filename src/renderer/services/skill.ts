@@ -64,6 +64,14 @@ class SkillService {
     });
   }
 
+  private resolveManagedCatalogEnabled(
+    descriptor: QingShuManagedSkillDescriptor,
+    accessState: QingShuManagedAccessState,
+  ): boolean {
+    return accessState === QingShuManagedAccessState.Available
+      && descriptor.enabled === true;
+  }
+
   private async loadManagedCatalog(): Promise<QingShuManagedCatalogSnapshot | null> {
     try {
       const result = await window.electron.qingshuManaged.getCatalog();
@@ -147,7 +155,7 @@ class SkillService {
         toolRefs: descriptor.toolRefs ?? skill.toolRefs,
         policyNote: descriptor.policyNote,
         allowed: isAllowed,
-        enabled: accessState === QingShuManagedAccessState.Available ? skill.enabled : false,
+        enabled: this.resolveManagedCatalogEnabled(descriptor, accessState),
       };
     });
 

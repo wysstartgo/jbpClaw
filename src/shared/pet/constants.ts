@@ -15,8 +15,10 @@ export const PetIpcChannel = {
   ActivateMainWindow: 'pet:activateMainWindow',
   ActivateSession: 'pet:activateSession',
   MoveFloatingWindowBy: 'pet:moveFloatingWindowBy',
+  ResizeFloatingWindowBy: 'pet:resizeFloatingWindowBy',
   PersistFloatingWindowPosition: 'pet:persistFloatingWindowPosition',
   SetFloatingActivityOpen: 'pet:setFloatingActivityOpen',
+  SetFloatingWindowIgnoresMouseEvents: 'pet:setFloatingWindowIgnoresMouseEvents',
   OpenSettings: 'pet:openSettings',
   StateChanged: 'pet:stateChanged',
 } as const;

@@ -60,7 +60,7 @@ describe('normalizePetConfig', () => {
     expect(config.mode).toBe(PetMode.Embedded);
     expect(config.anchor).toBe(PetAnchor.Composer);
     expect(config.assetPolicy).toBe(PetAssetPolicy.Mixed);
-    expect(config.floatingWindow.width).toBe(360);
+    expect(config.floatingWindow.width).toBe(520);
     expect(config.floatingWindow.height).toBe(120);
   });
 });

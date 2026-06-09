@@ -1,4 +1,4 @@
-import { ArrowPathIcon, BoltIcon } from '@heroicons/react/24/outline';
+import { ArrowPathIcon, BoltIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import React, { useMemo, useState } from 'react';
 
 import { PET_BUILTIN_CATALOG_ORDER, PetAnchor, PetAssetPolicy, PetMode, PetSource } from '../../shared/pet/constants';
@@ -70,6 +70,7 @@ const PetSettingsSection: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [waking, setWaking] = useState(false);
   const [previewPetId, setPreviewPetId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const sortedPets = useMemo(
     () => [...(state?.pets ?? [])].sort((left, right) => {
       const orderDelta = petSortOrder(left) - petSortOrder(right);
@@ -234,200 +235,216 @@ const PetSettingsSection: React.FC = () => {
   return (
     <div id="pet-settings-section" className="space-y-5 rounded-lg border border-border bg-surface-subtle p-4">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h4 className="text-sm font-medium text-foreground">{i18nService.t('petSettingsTitle')}</h4>
-          <p className="mt-1 text-xs leading-5 text-secondary">
-            {i18nService.t('petSettingsDescription')}
-          </p>
-        </div>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((prev) => !prev)}
+          className="flex min-w-0 flex-1 items-start gap-2 rounded-md text-left"
+        >
+          <ChevronDownIcon
+            className={`mt-0.5 h-4 w-4 shrink-0 text-secondary transition-transform ${
+              expanded ? 'rotate-180' : ''
+            }`}
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-foreground">{i18nService.t('petSettingsTitle')}</span>
+            <span className="mt-1 block text-xs leading-5 text-secondary">
+              {i18nService.t('petSettingsDescription')}
+            </span>
+          </span>
+        </button>
         <Toggle
           checked={state.config.enabled}
           onChange={(enabled) => void updateConfig({ enabled })}
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_180px]">
-        <div className="space-y-4">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-secondary">{i18nService.t('petDisplayMode')}</span>
-            <select
-              value={state.config.mode}
-              onChange={(event) => void updateConfig({ mode: event.target.value as PetMode })}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none"
-            >
-              <option value={PetMode.Embedded}>{i18nService.t('petModeEmbedded')}</option>
-              <option value={PetMode.Floating}>{i18nService.t('petModeFloating')}</option>
-              <option value={PetMode.Both}>{i18nService.t('petModeBoth')}</option>
-            </select>
-          </label>
+      {expanded && (
+        <>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_180px]">
+            <div className="space-y-4">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-secondary">{i18nService.t('petDisplayMode')}</span>
+                <select
+                  value={state.config.mode}
+                  onChange={(event) => void updateConfig({ mode: event.target.value as PetMode })}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none"
+                >
+                  <option value={PetMode.Embedded}>{i18nService.t('petModeEmbedded')}</option>
+                  <option value={PetMode.Floating}>{i18nService.t('petModeFloating')}</option>
+                  <option value={PetMode.Both}>{i18nService.t('petModeBoth')}</option>
+                </select>
+              </label>
 
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-secondary">{i18nService.t('petAnchor')}</span>
-            <select
-              value={state.config.anchor}
-              onChange={(event) => void updateConfig({ anchor: event.target.value as PetAnchor })}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none"
-            >
-              <option value={PetAnchor.Composer}>{i18nService.t('petAnchorComposer')}</option>
-              <option value={PetAnchor.AppBottom}>{i18nService.t('petAnchorAppBottom')}</option>
-              <option value={PetAnchor.ScreenBottom}>{i18nService.t('petAnchorScreenBottom')}</option>
-            </select>
-          </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-secondary">{i18nService.t('petAnchor')}</span>
+                <select
+                  value={state.config.anchor}
+                  onChange={(event) => void updateConfig({ anchor: event.target.value as PetAnchor })}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none"
+                >
+                  <option value={PetAnchor.Composer}>{i18nService.t('petAnchorComposer')}</option>
+                  <option value={PetAnchor.AppBottom}>{i18nService.t('petAnchorAppBottom')}</option>
+                  <option value={PetAnchor.ScreenBottom}>{i18nService.t('petAnchorScreenBottom')}</option>
+                </select>
+              </label>
 
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-secondary">{i18nService.t('petAssetPolicy')}</span>
-            <select
-              value={state.config.assetPolicy}
-              onChange={(event) => void updateConfig({ assetPolicy: event.target.value as PetAssetPolicy })}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none"
-            >
-              <option value={PetAssetPolicy.Mixed}>{i18nService.t('petAssetPolicyMixed')}</option>
-              <option value={PetAssetPolicy.BundledOnly}>{i18nService.t('petAssetPolicyBundledOnly')}</option>
-              <option value={PetAssetPolicy.DownloadOnDemand}>{i18nService.t('petAssetPolicyDownloadOnDemand')}</option>
-            </select>
-            <span className="mt-1 block text-xs text-secondary">{i18nService.t('petAssetPolicyHint')}</span>
-          </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-secondary">{i18nService.t('petAssetPolicy')}</span>
+                <select
+                  value={state.config.assetPolicy}
+                  onChange={(event) => void updateConfig({ assetPolicy: event.target.value as PetAssetPolicy })}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none"
+                >
+                  <option value={PetAssetPolicy.Mixed}>{i18nService.t('petAssetPolicyMixed')}</option>
+                  <option value={PetAssetPolicy.BundledOnly}>{i18nService.t('petAssetPolicyBundledOnly')}</option>
+                  <option value={PetAssetPolicy.DownloadOnDemand}>{i18nService.t('petAssetPolicyDownloadOnDemand')}</option>
+                </select>
+                <span className="mt-1 block text-xs text-secondary">{i18nService.t('petAssetPolicyHint')}</span>
+              </label>
 
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-sm font-medium text-foreground">{i18nService.t('petAnimations')}</div>
-              <div className="text-xs text-secondary">{i18nService.t('petAnimationsHint')}</div>
-            </div>
-            <Toggle
-              checked={state.config.animationsEnabled}
-              onChange={(animationsEnabled) => void updateConfig({ animationsEnabled })}
-            />
-          </div>
-
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-sm font-medium text-foreground">{i18nService.t('petFloatingWindow')}</div>
-              <div className="text-xs text-secondary">{i18nService.t('petFloatingWindowHint')}</div>
-            </div>
-            <Toggle
-              checked={state.config.floatingWindow.visible}
-              disabled={state.config.mode === PetMode.Embedded}
-              onChange={(visible) => {
-                setError(null);
-                void petService.setFloatingVisible(visible).catch((err) => {
-                  setError(err instanceof Error ? err.message : i18nService.t('petSaveConfigFailed'));
-                });
-              }}
-            />
-          </div>
-
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-sm font-medium text-foreground">{i18nService.t('petCustomPets')}</div>
-              <div className="text-xs text-secondary">{i18nService.t('petCustomPetsHint')}</div>
-            </div>
-            <Toggle
-              checked={state.config.customPetsEnabled}
-              onChange={(customPetsEnabled) => void updateConfig({ customPetsEnabled })}
-            />
-          </div>
-        </div>
-
-        <div className="flex min-h-[170px] flex-col items-center justify-center rounded-lg border border-border bg-surface px-3 py-4 text-center">
-          {previewPet?.manifest ? (
-            <>
-              <PetSprite
-                pet={previewPet}
-                status={state.status}
-                animationsEnabled={state.config.animationsEnabled}
-                size={96}
-              />
-              <div className="mt-2 max-w-full truncate text-sm font-medium text-foreground">
-                {previewPet.displayName}
-              </div>
-              <div className="mt-1 text-xs text-secondary">{sourceText(previewPet)}</div>
-              {previewPet.id === state.config.selectedPetId && (
-                <div className="mt-2 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
-                  {i18nService.t('petSelected')}
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm font-medium text-foreground">{i18nService.t('petAnimations')}</div>
+                  <div className="text-xs text-secondary">{i18nService.t('petAnimationsHint')}</div>
                 </div>
+                <Toggle
+                  checked={state.config.animationsEnabled}
+                  onChange={(animationsEnabled) => void updateConfig({ animationsEnabled })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm font-medium text-foreground">{i18nService.t('petFloatingWindow')}</div>
+                  <div className="text-xs text-secondary">{i18nService.t('petFloatingWindowHint')}</div>
+                </div>
+                <Toggle
+                  checked={state.config.floatingWindow.visible}
+                  disabled={state.config.mode === PetMode.Embedded}
+                  onChange={(visible) => {
+                    setError(null);
+                    void petService.setFloatingVisible(visible).catch((err) => {
+                      setError(err instanceof Error ? err.message : i18nService.t('petSaveConfigFailed'));
+                    });
+                  }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm font-medium text-foreground">{i18nService.t('petCustomPets')}</div>
+                  <div className="text-xs text-secondary">{i18nService.t('petCustomPetsHint')}</div>
+                </div>
+                <Toggle
+                  checked={state.config.customPetsEnabled}
+                  onChange={(customPetsEnabled) => void updateConfig({ customPetsEnabled })}
+                />
+              </div>
+            </div>
+
+            <div className="flex min-h-[170px] flex-col items-center justify-center rounded-lg border border-border bg-surface px-3 py-4 text-center">
+              {previewPet?.manifest ? (
+                <>
+                  <PetSprite
+                    pet={previewPet}
+                    status={state.status}
+                    animationsEnabled={state.config.animationsEnabled}
+                    size={96}
+                  />
+                  <div className="mt-2 max-w-full truncate text-sm font-medium text-foreground">
+                    {previewPet.displayName}
+                  </div>
+                  <div className="mt-1 text-xs text-secondary">{sourceText(previewPet)}</div>
+                  {previewPet.id === state.config.selectedPetId && (
+                    <div className="mt-2 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                      {i18nService.t('petSelected')}
+                    </div>
+                  )}
+                </>
+              ) : previewPet ? (
+                <>
+                  <div className="flex h-24 w-24 items-center justify-center rounded-lg border border-border bg-surface-subtle px-3 text-xs text-secondary">
+                    {i18nService.t('petPendingDownload')}
+                  </div>
+                  <div className="mt-2 max-w-full truncate text-sm font-medium text-foreground">
+                    {previewPet.displayName}
+                  </div>
+                  <div className="mt-1 text-xs text-secondary">{sourceText(previewPet)}</div>
+                </>
+              ) : (
+                <span className="text-xs text-secondary">{i18nService.t('petPreviewEmpty')}</span>
               )}
-            </>
-          ) : previewPet ? (
-            <>
-              <div className="flex h-24 w-24 items-center justify-center rounded-lg border border-border bg-surface-subtle px-3 text-xs text-secondary">
-                {i18nService.t('petPendingDownload')}
-              </div>
-              <div className="mt-2 max-w-full truncate text-sm font-medium text-foreground">
-                {previewPet.displayName}
-              </div>
-              <div className="mt-1 text-xs text-secondary">{sourceText(previewPet)}</div>
-            </>
-          ) : (
-            <span className="text-xs text-secondary">{i18nService.t('petPreviewEmpty')}</span>
-          )}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h5 className="text-xs font-medium uppercase tracking-wide text-secondary">{i18nService.t('petSelectTitle')}</h5>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            disabled={waking}
-            onClick={() => void wakePet()}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <BoltIcon className="h-3.5 w-3.5" />
-            {waking ? i18nService.t('petWaking') : i18nService.t('petWake')}
-          </button>
-          <button
-            type="button"
-            disabled={refreshing}
-            onClick={() => void refreshPets()}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <ArrowPathIcon className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? i18nService.t('petRefreshing') : i18nService.t('petRefresh')}
-          </button>
-          <button
-            type="button"
-            disabled={!state.config.customPetsEnabled || importing}
-            onClick={async () => {
-              setError(null);
-              setImporting(true);
-              try {
-                await petService.importPet();
-              } catch (err) {
-                setError(err instanceof Error ? err.message : i18nService.t('petImportFailed'));
-              } finally {
-                setImporting(false);
-              }
-            }}
-            className="rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {importing ? i18nService.t('petImporting') : i18nService.t('petImport')}
-          </button>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <div>
-          <div className="mb-2 flex items-end justify-between gap-3">
-            <div>
-              <h6 className="text-sm font-medium text-foreground">{i18nService.t('petBuiltInPets')}</h6>
-              <p className="mt-0.5 text-xs text-secondary">{i18nService.t('petBuiltInPetsHint')}</p>
             </div>
-            <span className="text-xs text-secondary">{builtInPets.length}</span>
           </div>
-          {renderPetList(builtInPets, i18nService.t('petNoBuiltInPets'))}
-        </div>
 
-        <div>
-          <div className="mb-2 flex items-end justify-between gap-3">
-            <div>
-              <h6 className="text-sm font-medium text-foreground">{i18nService.t('petCustomPetListTitle')}</h6>
-              <p className="mt-0.5 text-xs text-secondary">{i18nService.t('petCustomPetListHint')}</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h5 className="text-xs font-medium uppercase tracking-wide text-secondary">{i18nService.t('petSelectTitle')}</h5>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={waking}
+                onClick={() => void wakePet()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <BoltIcon className="h-3.5 w-3.5" />
+                {waking ? i18nService.t('petWaking') : i18nService.t('petWake')}
+              </button>
+              <button
+                type="button"
+                disabled={refreshing}
+                onClick={() => void refreshPets()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ArrowPathIcon className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                {refreshing ? i18nService.t('petRefreshing') : i18nService.t('petRefresh')}
+              </button>
+              <button
+                type="button"
+                disabled={!state.config.customPetsEnabled || importing}
+                onClick={async () => {
+                  setError(null);
+                  setImporting(true);
+                  try {
+                    await petService.importPet();
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : i18nService.t('petImportFailed'));
+                  } finally {
+                    setImporting(false);
+                  }
+                }}
+                className="rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {importing ? i18nService.t('petImporting') : i18nService.t('petImport')}
+              </button>
             </div>
-            <span className="text-xs text-secondary">{customPets.length}</span>
           </div>
-          {renderPetList(customPets, i18nService.t('petNoCustomPets'))}
-        </div>
-      </div>
+
+          <div className="space-y-3">
+            <div>
+              <div className="mb-2 flex items-end justify-between gap-3">
+                <div>
+                  <h6 className="text-sm font-medium text-foreground">{i18nService.t('petBuiltInPets')}</h6>
+                  <p className="mt-0.5 text-xs text-secondary">{i18nService.t('petBuiltInPetsHint')}</p>
+                </div>
+                <span className="text-xs text-secondary">{builtInPets.length}</span>
+              </div>
+              {renderPetList(builtInPets, i18nService.t('petNoBuiltInPets'))}
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-end justify-between gap-3">
+                <div>
+                  <h6 className="text-sm font-medium text-foreground">{i18nService.t('petCustomPetListTitle')}</h6>
+                  <p className="mt-0.5 text-xs text-secondary">{i18nService.t('petCustomPetListHint')}</p>
+                </div>
+                <span className="text-xs text-secondary">{customPets.length}</span>
+              </div>
+              {renderPetList(customPets, i18nService.t('petNoCustomPets'))}
+            </div>
+          </div>
+        </>
+      )}
 
       {error && (
         <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300">

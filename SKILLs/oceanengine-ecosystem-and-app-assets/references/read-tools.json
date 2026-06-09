@@ -1,0 +1,23 @@
+[
+  "game_addiction_id_get_v3",
+  "spi_task_get_v2",
+  "subscribe_accounts_list_v3",
+  "tool_quick_app_management_quick_app_get_v2",
+  "tools_app_management_android_app_list_v2",
+  "tools_app_management_android_basic_package_get_v2",
+  "tools_app_management_app_get_v2",
+  "tools_app_management_booking_get_v2",
+  "tools_app_management_booking_records_get_v2",
+  "tools_app_management_share_account_list_v2",
+  "tools_app_management_upload_task_list_v2",
+  "tools_download_package_get_v2",
+  "tools_download_package_parse_v2",
+  "tools_micro_app_list_v3",
+  "tools_micro_game_convert_window_get_v3",
+  "tools_micro_game_list_v3",
+  "tools_playable_cloud_game_list_v2",
+  "tools_playable_list_get_v2",
+  "tools_union_flow_package_get_v2",
+  "tools_wechat_applet_list_v3",
+  "tools_wechat_game_list_v3"
+]

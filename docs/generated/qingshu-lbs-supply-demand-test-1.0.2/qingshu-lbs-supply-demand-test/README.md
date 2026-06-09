@@ -1,6 +1,6 @@
 # qingshu-lbs-supply-demand-test
 
-该安装包由青数后台生成，供 QingShuClaw 同步为“青数内置 Skill”。
+该安装包由聚宝盆后台生成，供 JBPClaw 同步为“聚宝盆内置 Skill”。
 
 主要验证：
 - managed skill 下载与升级

@@ -11,12 +11,18 @@ import fs from 'fs';
 import path from 'path';
 
 import type { McpServerRecord } from '../mcpStore';
-import { getElectronNodeRuntimePath, getEnhancedEnv } from './coworkUtil';
+import { getElectronNodeRuntimePath } from './coworkUtil';
 
 export interface ResolvedStdioCommand {
   command: string;
   args: string[];
   env: Record<string, string> | undefined;
+}
+
+function getPackagedNpmBinDir(): string | undefined {
+  if (!app.isPackaged) return undefined;
+  const npmBinDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'npm', 'bin');
+  return fs.existsSync(npmBinDir) ? npmBinDir : undefined;
 }
 
 const log = (level: string, msg: string) => {
@@ -145,8 +151,7 @@ export async function resolveStdioCommand(server: McpServerRecord): Promise<Reso
           effectiveCommand = systemNode;
           log('INFO', `"${server.name}": using system Node.js "${systemNode}" (preferred over Electron runtime)`);
         } else {
-          const enhancedEnv = await getEnhancedEnv();
-          let npmBinDir = enhancedEnv.LOBSTERAI_NPM_BIN_DIR;
+          let npmBinDir = getPackagedNpmBinDir();
           if (!npmBinDir || !fs.existsSync(npmBinDir)) {
             const systemNpmBin = path.join(path.dirname(systemNode), 'node_modules', 'npm', 'bin');
             if (fs.existsSync(systemNpmBin)) {
@@ -172,8 +177,7 @@ export async function resolveStdioCommand(server: McpServerRecord): Promise<Reso
           }
         }
       } else if (app.isPackaged) {
-        const enhancedEnv = await getEnhancedEnv();
-        const npmBinDir = enhancedEnv.LOBSTERAI_NPM_BIN_DIR;
+        const npmBinDir = getPackagedNpmBinDir();
         const npxCliJs = npmBinDir ? path.join(npmBinDir, 'npx-cli.js') : '';
         const npmCliJs = npmBinDir ? path.join(npmBinDir, 'npm-cli.js') : '';
 
