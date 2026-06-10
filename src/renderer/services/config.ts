@@ -220,6 +220,7 @@ const ADDED_PROVIDER_MODELS: Record<string, { models: Array<{ id: string; name: 
   },
   minimax: {
     models: [
+      { id: 'MiniMax-M3', name: 'MiniMax M3', supportsImage: true, contextWindow: 1_000_000 },
       { id: 'MiniMax-M2.7', name: 'MiniMax M2.7', supportsImage: false },
     ],
     position: 'start',
