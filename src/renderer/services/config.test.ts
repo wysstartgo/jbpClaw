@@ -26,7 +26,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-const makeLegacyConfigWithoutMiniMaxM3 = (): AppConfig => ({
+const makeLegacyConfigWithoutMiniMaxAddedModels = (): AppConfig => ({
   ...defaultConfig,
   providers: {
     ...defaultConfig.providers,
@@ -35,7 +35,7 @@ const makeLegacyConfigWithoutMiniMaxM3 = (): AppConfig => ({
       enabled: true,
       apiKey: 'sk-minimax',
       models: defaultConfig.providers![ProviderName.Minimax].models?.filter(
-        model => model.id !== 'MiniMax-M3'
+        model => model.id !== 'MiniMax-M3' && model.id !== 'MiniMax-M2.7'
       ),
     },
   },
@@ -102,6 +102,27 @@ const makeConfigWithCustomContextWindows = (): AppConfig => ({
         { id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', supportsImage: false, contextWindow: 640_000 },
         { id: 'mimo-v2.5', name: 'MiMo V2.5', supportsImage: true, contextWindow: 768_000 },
       ],
+    },
+  },
+});
+
+const makeConfigWithDeletedProviderModel = (
+  providerName: ProviderName,
+  deletedModelId: string,
+): AppConfig => ({
+  ...defaultConfig,
+  providerModelMigrationVersions: {
+    [providerName]: 1,
+  },
+  providers: {
+    ...defaultConfig.providers,
+    [providerName]: {
+      ...defaultConfig.providers![providerName],
+      enabled: true,
+      apiKey: `sk-${providerName}`,
+      models: defaultConfig.providers![providerName].models?.filter(
+        model => model.id !== deletedModelId
+      ),
     },
   },
 });
@@ -241,7 +262,7 @@ test('configService normalizes fixed provider api formats from provider registry
 });
 
 test('configService persists injected provider models during init', async () => {
-  mockStoredConfig.value = makeLegacyConfigWithoutMiniMaxM3();
+  mockStoredConfig.value = makeLegacyConfigWithoutMiniMaxAddedModels();
 
   const { configService } = await import('./config');
   await configService.init();
@@ -254,7 +275,7 @@ test('configService persists injected provider models during init', async () => 
 });
 
 test('configService preserves injected provider models when saving partial config updates', async () => {
-  const legacyConfig = makeLegacyConfigWithoutMiniMaxM3();
+  const legacyConfig = makeLegacyConfigWithoutMiniMaxAddedModels();
   mockStoredConfig.value = legacyConfig;
 
   const { configService } = await import('./config');
@@ -328,4 +349,45 @@ test('configService preserves user-configured context windows for known models',
   expect(savedConfig.providers?.[ProviderName.DeepSeek].models?.find(model => model.id === 'deepseek-v4-pro')?.contextWindow).toBe(384_000);
   expect(savedConfig.providers?.[ProviderName.Xiaomi].models?.find(model => model.id === 'mimo-v2.5-pro')?.contextWindow).toBe(640_000);
   expect(savedConfig.providers?.[ProviderName.Xiaomi].models?.find(model => model.id === 'mimo-v2.5')?.contextWindow).toBe(768_000);
+});
+
+test('configService does not re-inject a deleted model after migration is applied', async () => {
+  const deletedModelId = 'mimo-v2.5-pro';
+  const legacyConfig = makeConfigWithDeletedProviderModel(ProviderName.Xiaomi, deletedModelId);
+  mockStoredConfig.value = legacyConfig;
+
+  const { configService } = await import('./config');
+  await configService.updateConfig({
+    model: {
+      ...legacyConfig.model,
+      defaultModel: 'mimo-v2.5',
+      defaultModelProvider: ProviderName.Xiaomi,
+    },
+  });
+
+  const savedConfig = mockStoredConfig.saved as AppConfig;
+  expect(savedConfig.providers?.[ProviderName.Xiaomi].models?.map(model => model.id)).not.toContain(deletedModelId);
+  expect(savedConfig.model.defaultModel).toBe('mimo-v2.5');
+  expect(savedConfig.model.defaultModelProvider).toBe(ProviderName.Xiaomi);
+});
+
+test('configService marks provider model migrations when saving provider edits from default config', async () => {
+  const deletedModelId = 'MiniMax-M3';
+
+  const { configService } = await import('./config');
+  await configService.updateConfig({
+    providers: {
+      ...defaultConfig.providers,
+      [ProviderName.Minimax]: {
+        ...defaultConfig.providers![ProviderName.Minimax],
+        models: defaultConfig.providers![ProviderName.Minimax].models?.filter(
+          model => model.id !== deletedModelId
+        ),
+      },
+    },
+  });
+
+  const savedConfig = mockStoredConfig.saved as AppConfig;
+  expect(savedConfig.providerModelMigrationVersions?.[ProviderName.Minimax]).toBe(1);
+  expect(savedConfig.providers?.[ProviderName.Minimax].models?.map(model => model.id)).not.toContain(deletedModelId);
 });

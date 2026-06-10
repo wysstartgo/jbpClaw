@@ -42,6 +42,7 @@ export interface AppConfig {
   };
   // 多模型提供商配置
   providers?: Record<string, AppProviderConfig>;
+  providerModelMigrationVersions?: Record<string, number>;
   // 主题配置
   theme: 'light' | 'dark' | 'system';
   // 语言配置
