@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
 import { OpenClawProviderId, ProviderName } from '../../shared/providers';
-import { CONFIG_KEYS, defaultConfig } from '../config';
+import { type AppConfig, CONFIG_KEYS, defaultConfig } from '../config';
 
 const mockStoredConfig = vi.hoisted(() => ({
   value: null as unknown,
@@ -24,6 +24,86 @@ afterEach(() => {
   mockStoredConfig.value = null;
   mockStoredConfig.saved = null;
   vi.resetModules();
+});
+
+const makeLegacyConfigWithoutMiniMaxM3 = (): AppConfig => ({
+  ...defaultConfig,
+  providers: {
+    ...defaultConfig.providers,
+    [ProviderName.Minimax]: {
+      ...defaultConfig.providers![ProviderName.Minimax],
+      enabled: true,
+      apiKey: 'sk-minimax',
+      models: defaultConfig.providers![ProviderName.Minimax].models?.filter(
+        model => model.id !== 'MiniMax-M3'
+      ),
+    },
+  },
+});
+
+const makeLegacyConfigWithDeepSeekV4WithoutContextWindow = (): AppConfig => ({
+  ...defaultConfig,
+  providers: {
+    ...defaultConfig.providers,
+    [ProviderName.DeepSeek]: {
+      ...defaultConfig.providers![ProviderName.DeepSeek],
+      enabled: true,
+      apiKey: 'sk-deepseek',
+      models: [
+        { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', supportsImage: false },
+        { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', supportsImage: false },
+      ],
+    },
+  },
+});
+
+const makeLegacyConfigWithOldMimoModels = (): AppConfig => ({
+  ...defaultConfig,
+  providers: {
+    ...defaultConfig.providers,
+    [ProviderName.Xiaomi]: {
+      ...defaultConfig.providers![ProviderName.Xiaomi],
+      enabled: true,
+      apiKey: 'sk-xiaomi',
+      models: [
+        { id: 'mimo-v2-pro', name: 'MiMo V2 Pro', supportsImage: false, contextWindow: 128_000 },
+        { id: 'mimo-v2-flash', name: 'MiMo V2 Flash', supportsImage: false, contextWindow: 64_000 },
+      ],
+    },
+  },
+});
+
+const makeConfigWithCustomContextWindows = (): AppConfig => ({
+  ...defaultConfig,
+  providers: {
+    ...defaultConfig.providers,
+    [ProviderName.Minimax]: {
+      ...defaultConfig.providers![ProviderName.Minimax],
+      enabled: true,
+      apiKey: 'sk-minimax',
+      models: [
+        { id: 'MiniMax-M3', name: 'MiniMax M3', supportsImage: false, contextWindow: 512_000 },
+      ],
+    },
+    [ProviderName.DeepSeek]: {
+      ...defaultConfig.providers![ProviderName.DeepSeek],
+      enabled: true,
+      apiKey: 'sk-deepseek',
+      models: [
+        { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', supportsImage: false, contextWindow: 256_000 },
+        { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', supportsImage: false, contextWindow: 384_000 },
+      ],
+    },
+    [ProviderName.Xiaomi]: {
+      ...defaultConfig.providers![ProviderName.Xiaomi],
+      enabled: true,
+      apiKey: 'sk-xiaomi',
+      models: [
+        { id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', supportsImage: false, contextWindow: 640_000 },
+        { id: 'mimo-v2.5', name: 'MiMo V2.5', supportsImage: true, contextWindow: 768_000 },
+      ],
+    },
+  },
 });
 
 test('configService fills missing provider model names from model ids', async () => {
@@ -158,4 +238,94 @@ test('configService normalizes fixed provider api formats from provider registry
   expect(configService.getConfig().providers![ProviderName.Qianfan].apiFormat).toBe('openai');
   expect(configService.getConfig().providers![ProviderName.Copilot].apiFormat).toBe('openai');
   expect(configService.getConfig().providers![ProviderName.Moonshot].apiFormat).toBe('openai');
+});
+
+test('configService persists injected provider models during init', async () => {
+  mockStoredConfig.value = makeLegacyConfigWithoutMiniMaxM3();
+
+  const { configService } = await import('./config');
+  await configService.init();
+
+  const savedConfig = mockStoredConfig.saved as AppConfig;
+  expect(savedConfig.providers?.[ProviderName.Minimax].models?.[0]).toMatchObject({
+    id: 'MiniMax-M3',
+    contextWindow: 1_000_000,
+  });
+});
+
+test('configService preserves injected provider models when saving partial config updates', async () => {
+  const legacyConfig = makeLegacyConfigWithoutMiniMaxM3();
+  mockStoredConfig.value = legacyConfig;
+
+  const { configService } = await import('./config');
+  await configService.updateConfig({
+    model: {
+      ...legacyConfig.model,
+      defaultModel: 'MiniMax-M3',
+      defaultModelProvider: ProviderName.Minimax,
+    },
+  });
+
+  const savedConfig = mockStoredConfig.saved as AppConfig;
+  expect(savedConfig.providers?.[ProviderName.Minimax].models?.map(model => model.id)).toContain('MiniMax-M3');
+  expect(savedConfig.model.defaultModel).toBe('MiniMax-M3');
+  expect(savedConfig.model.defaultModelProvider).toBe(ProviderName.Minimax);
+});
+
+test('configService fills DeepSeek V4 context windows when saving partial config updates', async () => {
+  const legacyConfig = makeLegacyConfigWithDeepSeekV4WithoutContextWindow();
+  mockStoredConfig.value = legacyConfig;
+
+  const { configService } = await import('./config');
+  await configService.updateConfig({
+    model: {
+      ...legacyConfig.model,
+      defaultModel: 'deepseek-v4-flash',
+      defaultModelProvider: ProviderName.DeepSeek,
+    },
+  });
+
+  const savedConfig = mockStoredConfig.saved as AppConfig;
+  expect(savedConfig.providers?.[ProviderName.DeepSeek].models).toEqual([
+    { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', supportsImage: false, contextWindow: 1_000_000 },
+    { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', supportsImage: false, contextWindow: 1_000_000 },
+  ]);
+});
+
+test('configService preserves old MiMo models while injecting V2.5 models and 1M contexts', async () => {
+  mockStoredConfig.value = {
+    ...makeLegacyConfigWithOldMimoModels(),
+    model: {
+      ...defaultConfig.model,
+      defaultModel: 'mimo-v2-pro',
+      defaultModelProvider: ProviderName.Xiaomi,
+    },
+  };
+
+  const { configService } = await import('./config');
+  await configService.init();
+
+  const savedConfig = mockStoredConfig.saved as AppConfig;
+  expect(savedConfig.providers?.[ProviderName.Xiaomi].models).toEqual([
+    { id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', supportsImage: false, contextWindow: 1_000_000 },
+    { id: 'mimo-v2.5', name: 'MiMo V2.5', supportsImage: true, contextWindow: 1_000_000 },
+    { id: 'mimo-v2-pro', name: 'MiMo V2 Pro', supportsImage: false, contextWindow: 128_000 },
+    { id: 'mimo-v2-flash', name: 'MiMo V2 Flash', supportsImage: false, contextWindow: 64_000 },
+  ]);
+  expect(savedConfig.model.defaultModel).toBe('mimo-v2-pro');
+  expect(savedConfig.model.defaultModelProvider).toBe(ProviderName.Xiaomi);
+});
+
+test('configService preserves user-configured context windows for known models', async () => {
+  mockStoredConfig.value = makeConfigWithCustomContextWindows();
+
+  const { configService } = await import('./config');
+  await configService.init();
+
+  const savedConfig = mockStoredConfig.saved as AppConfig;
+  expect(savedConfig.providers?.[ProviderName.Minimax].models?.find(model => model.id === 'MiniMax-M3')?.contextWindow).toBe(512_000);
+  expect(savedConfig.providers?.[ProviderName.DeepSeek].models?.find(model => model.id === 'deepseek-v4-flash')?.contextWindow).toBe(256_000);
+  expect(savedConfig.providers?.[ProviderName.DeepSeek].models?.find(model => model.id === 'deepseek-v4-pro')?.contextWindow).toBe(384_000);
+  expect(savedConfig.providers?.[ProviderName.Xiaomi].models?.find(model => model.id === 'mimo-v2.5-pro')?.contextWindow).toBe(640_000);
+  expect(savedConfig.providers?.[ProviderName.Xiaomi].models?.find(model => model.id === 'mimo-v2.5')?.contextWindow).toBe(768_000);
 });

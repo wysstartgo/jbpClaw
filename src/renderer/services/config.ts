@@ -192,7 +192,7 @@ const REMOVED_PROVIDER_MODELS: Record<string, string[]> = {
 // on next launch. Once all users have upgraded, entries here should be removed
 // so the models follow normal user-editable behavior (same as other models).
 // position: 'start' inserts at the beginning, 'end' appends at the end.
-const ADDED_PROVIDER_MODELS: Record<string, { models: Array<{ id: string; name: string; supportsImage?: boolean }>; position: 'start' | 'end' }> = {
+const ADDED_PROVIDER_MODELS: Record<string, { models: ProviderConfig['models']; position: 'start' | 'end' }> = {
   deepseek: {
     models: [
       { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', supportsImage: false },
@@ -225,6 +225,13 @@ const ADDED_PROVIDER_MODELS: Record<string, { models: Array<{ id: string; name: 
     ],
     position: 'start',
   },
+  [ProviderName.Xiaomi]: {
+    models: [
+      { id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', supportsImage: false, contextWindow: 1_000_000 },
+      { id: 'mimo-v2.5', name: 'MiMo V2.5', supportsImage: true, contextWindow: 1_000_000 },
+    ],
+    position: 'start',
+  },
   openai: {
     models: [
       { id: 'gpt-5.4', name: 'GPT-5.4', supportsImage: true },
@@ -233,6 +240,131 @@ const ADDED_PROVIDER_MODELS: Record<string, { models: Array<{ id: string; name: 
     ],
     position: 'start',
   },
+};
+
+const PROVIDER_MODEL_CONTEXT_WINDOW_OVERRIDES: Record<string, Record<string, number>> = {
+  [ProviderName.DeepSeek]: {
+    'deepseek-v4-flash': 1_000_000,
+    'deepseek-v4-pro': 1_000_000,
+  },
+  [ProviderName.Minimax]: {
+    'MiniMax-M3': 1_000_000,
+  },
+  [ProviderName.Xiaomi]: {
+    'mimo-v2.5-pro': 1_000_000,
+    'mimo-v2.5': 1_000_000,
+  },
+};
+
+const applyProviderModelContextWindowOverrides = (
+  providerKey: string,
+  models: ProviderConfig['models'],
+): ProviderConfig['models'] => {
+  const overrides = PROVIDER_MODEL_CONTEXT_WINDOW_OVERRIDES[providerKey];
+  if (!models || !overrides) {
+    return models;
+  }
+
+  return models.map(model => {
+    const contextWindow = overrides[model.id];
+    if (
+      contextWindow === undefined
+      || (typeof model.contextWindow === 'number' && Number.isFinite(model.contextWindow) && model.contextWindow > 0)
+    ) {
+      return model;
+    }
+    return { ...model, contextWindow };
+  });
+};
+
+const hydrateStoredConfig = (storedConfig: AppConfig): AppConfig => {
+  const mergedProviders = storedConfig.providers
+    ? Object.fromEntries(
+        Object.entries({
+          ...(defaultConfig.providers ?? {}),
+          ...storedConfig.providers,
+        }).map(([providerKey, providerConfig]) => [
+          providerKey,
+          (() => {
+            const defaultProvidersByKey = defaultConfig.providers as Record<string, ProviderConfig | undefined>;
+            const mergedProvider = {
+              ...defaultProvidersByKey[providerKey],
+              ...providerConfig,
+            };
+            // Filter out removed models
+            const removedIds = REMOVED_PROVIDER_MODELS[providerKey];
+            if (removedIds && mergedProvider.models) {
+              mergedProvider.models = mergedProvider.models.filter(
+                (m: { id: string }) => !removedIds.includes(m.id)
+              );
+            }
+            // Inject added models (for existing users who already have saved config)
+            const addedConfig = ADDED_PROVIDER_MODELS[providerKey];
+            if (addedConfig && mergedProvider.models) {
+              const existingIds = new Set(mergedProvider.models.map((m: { id: string }) => m.id));
+              const newModels = addedConfig.models?.filter(m => !existingIds.has(m.id)) ?? [];
+              if (newModels.length > 0) {
+                mergedProvider.models = addedConfig.position === 'start'
+                  ? [...newModels, ...mergedProvider.models]
+                  : [...mergedProvider.models, ...newModels];
+              }
+            }
+            if (mergedProvider.models) {
+              mergedProvider.models = applyProviderModelContextWindowOverrides(
+                providerKey,
+                mergedProvider.models as ProviderConfig['models'],
+              );
+            }
+            return {
+              ...mergedProvider,
+              baseUrl: normalizeProviderBaseUrl(providerKey, mergedProvider.baseUrl),
+              apiFormat: normalizeProviderApiFormat(providerKey, mergedProvider.apiFormat),
+              models: normalizeProviderModels(
+                providerKey,
+                mergedProvider.models as ProviderConfig['models'],
+              ),
+            };
+          })(),
+        ])
+      )
+    : defaultConfig.providers;
+
+  // Migrate model.defaultModel if it was removed
+  const allRemovedIds = Object.values(REMOVED_PROVIDER_MODELS).flat();
+  const migratedModel = { ...defaultConfig.model, ...storedConfig.model };
+  if (allRemovedIds.includes(migratedModel.defaultModel)) {
+    migratedModel.defaultModel = defaultConfig.model.defaultModel;
+  }
+  if (migratedModel.availableModels) {
+    migratedModel.availableModels = migratedModel.availableModels.filter(
+      (m: { id: string }) => !allRemovedIds.includes(m.id)
+    );
+  }
+
+  return migrateCustomProviders({
+    ...defaultConfig,
+    ...storedConfig,
+    api: {
+      ...defaultConfig.api,
+      ...storedConfig.api,
+    },
+    model: migratedModel,
+    app: {
+      ...defaultConfig.app,
+      ...storedConfig.app,
+    },
+    shortcuts: {
+      ...defaultConfig.shortcuts!,
+      ...(storedConfig.shortcuts ?? {}),
+    } as AppConfig['shortcuts'],
+    speechInput: mergeSpeechInputConfig(storedConfig.speechInput),
+    wakeInput: mergeWakeInputConfig(storedConfig.wakeInput),
+    tts: mergeTtsConfig(storedConfig.tts),
+    voice: {
+      postProcess: mergeVoicePostProcessConfig(storedConfig.voice?.postProcess),
+    },
+    providers: mergedProviders as AppConfig['providers'],
+  });
 };
 
 class ConfigService {
@@ -245,87 +377,14 @@ class ConfigService {
         console.warn('[ConfigService] init: no stored config found, using defaults');
       }
       if (storedConfig) {
-        const mergedProviders = storedConfig.providers
-          ? Object.fromEntries(
-              Object.entries({
-                ...(defaultConfig.providers ?? {}),
-                ...storedConfig.providers,
-              }).map(([providerKey, providerConfig]) => [
-                providerKey,
-                (() => {
-                  const defaultProvidersByKey = defaultConfig.providers as Record<string, ProviderConfig | undefined>;
-                  const mergedProvider = {
-                    ...defaultProvidersByKey[providerKey],
-                    ...providerConfig,
-                  };
-                  // Filter out removed models
-                  const removedIds = REMOVED_PROVIDER_MODELS[providerKey];
-                  if (removedIds && mergedProvider.models) {
-                    mergedProvider.models = mergedProvider.models.filter(
-                      (m: { id: string }) => !removedIds.includes(m.id)
-                    );
-                  }
-                  // Inject added models (for existing users who already have saved config)
-                  const addedConfig = ADDED_PROVIDER_MODELS[providerKey];
-                  if (addedConfig && mergedProvider.models) {
-                    const existingIds = new Set(mergedProvider.models.map((m: { id: string }) => m.id));
-                    const newModels = addedConfig.models.filter(m => !existingIds.has(m.id));
-                    if (newModels.length > 0) {
-                      mergedProvider.models = addedConfig.position === 'start'
-                        ? [...newModels, ...mergedProvider.models]
-                        : [...mergedProvider.models, ...newModels];
-                    }
-                  }
-                  return {
-                    ...mergedProvider,
-                    baseUrl: normalizeProviderBaseUrl(providerKey, mergedProvider.baseUrl),
-                    apiFormat: normalizeProviderApiFormat(providerKey, mergedProvider.apiFormat),
-                    models: normalizeProviderModels(
-                      providerKey,
-                      mergedProvider.models as ProviderConfig['models'],
-                    ),
-                  };
-                })(),
-              ])
-            )
-          : defaultConfig.providers;
-
-        // Migrate model.defaultModel if it was removed
-        const allRemovedIds = Object.values(REMOVED_PROVIDER_MODELS).flat();
-        const migratedModel = { ...defaultConfig.model, ...storedConfig.model };
-        if (allRemovedIds.includes(migratedModel.defaultModel)) {
-          migratedModel.defaultModel = defaultConfig.model.defaultModel;
+        this.config = hydrateStoredConfig(storedConfig);
+        if (JSON.stringify(this.config) !== JSON.stringify(storedConfig)) {
+          try {
+            await localStore.setItem(CONFIG_KEYS.APP_CONFIG, this.config);
+          } catch (persistError) {
+            console.warn('[ConfigService] init: failed to persist migrated config:', persistError);
+          }
         }
-        if (migratedModel.availableModels) {
-          migratedModel.availableModels = migratedModel.availableModels.filter(
-            (m: { id: string }) => !allRemovedIds.includes(m.id)
-          );
-        }
-
-        this.config = migrateCustomProviders({
-          ...defaultConfig,
-          ...storedConfig,
-          api: {
-            ...defaultConfig.api,
-            ...storedConfig.api,
-          },
-          model: migratedModel,
-          app: {
-            ...defaultConfig.app,
-            ...storedConfig.app,
-          },
-          shortcuts: {
-            ...defaultConfig.shortcuts!,
-            ...(storedConfig.shortcuts ?? {}),
-          } as AppConfig['shortcuts'],
-          speechInput: mergeSpeechInputConfig(storedConfig.speechInput),
-          wakeInput: mergeWakeInputConfig(storedConfig.wakeInput),
-          tts: mergeTtsConfig(storedConfig.tts),
-          voice: {
-            postProcess: mergeVoicePostProcessConfig(storedConfig.voice?.postProcess),
-          },
-          providers: mergedProviders as AppConfig['providers'],
-        });
       }
     } catch (error) {
       console.error('[ConfigService] init failed:', error);
@@ -339,7 +398,7 @@ class ConfigService {
   async updateConfig(newConfig: Partial<AppConfig>) {
     const normalizedProviders = normalizeProvidersConfig(newConfig.providers as AppConfig['providers'] | undefined);
     const storedConfig = await localStore.getItem<AppConfig>(CONFIG_KEYS.APP_CONFIG);
-    const baseConfig = storedConfig ?? this.config;
+    const baseConfig = storedConfig ? hydrateStoredConfig(storedConfig) : this.config;
     const mergedSpeechInput = newConfig.speechInput
       ? mergeSpeechInputConfig({
           ...baseConfig.speechInput,
