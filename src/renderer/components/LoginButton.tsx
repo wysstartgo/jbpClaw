@@ -708,18 +708,18 @@ const QtbLoginPanel: React.FC<{
   };
 
   return (
-    <div className={`absolute z-[70] rounded-2xl border border-claude-border bg-claude-surface p-4 shadow-popover dark:border-claude-darkBorder dark:bg-claude-darkSurface popover-enter ${panelClassName ?? 'bottom-full left-0 mb-2'} ${loginMode === AuthLoginMode.Scan ? 'w-[19rem]' : 'w-[16.5rem]'}`}>
-      <div className="mb-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium tracking-[0.02em] text-red-700 ring-1 ring-red-100 dark:bg-red-500/10 dark:text-red-200 dark:ring-red-400/15">
+    <div className={`jbp-visual-panel absolute z-[70] rounded-2xl p-4 popover-enter ${panelClassName ?? 'bottom-full left-0 mb-2'} ${loginMode === AuthLoginMode.Scan ? 'w-[19rem]' : 'w-[16.5rem]'}`}>
+      <div className="jbp-visual-status-pill mb-2 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium tracking-[0.02em]">
         聚宝盆
       </div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="text-sm font-semibold text-claude-text dark:text-claude-darkText">
+        <div className="text-sm font-semibold text-foreground">
           {i18nService.t('authLoginPanelTitle')}
         </div>
         <button
           type="button"
           onClick={() => switchLoginMode(loginMode === AuthLoginMode.Scan ? AuthLoginMode.Manual : AuthLoginMode.Scan)}
-          className="rounded-full px-1.5 py-0.5 text-[10px] font-medium text-claude-textSecondary/75 transition-colors hover:text-claude-text dark:text-claude-darkTextSecondary/75 dark:hover:text-claude-darkText"
+          className="rounded-full px-2 py-1 text-[10px] font-medium text-secondary transition-colors hover:bg-surface-raised hover:text-foreground"
         >
           {loginMode === AuthLoginMode.Scan
             ? i18nService.t('authLoginModeManual')
@@ -729,17 +729,17 @@ const QtbLoginPanel: React.FC<{
 
       {loginMode === AuthLoginMode.Scan ? (
         <div className="space-y-2.5">
-          <div className="rounded-[20px] bg-[radial-gradient(circle_at_top,_rgba(185,28,28,0.10),_transparent_58%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(253,250,250,0.96))] px-4 pb-4 pt-4 ring-1 ring-red-100/70 dark:bg-[radial-gradient(circle_at_top,_rgba(185,28,28,0.18),_transparent_54%),linear-gradient(180deg,rgba(15,15,18,0.98),rgba(24,10,12,0.96))] dark:ring-red-500/10">
+          <div className="rounded-2xl border border-border-subtle bg-surface-raised/55 px-4 pb-4 pt-4 shadow-subtle">
             <div className="flex flex-col items-center text-center">
               <FeishuSdkQrPanel
                 authorizeUrl={feishuScanSession?.authorizeUrl}
                 qrCodeContent={feishuScanSession?.qrCodeContent}
               />
-              <div className="mt-3 text-[11px] leading-5 text-claude-textSecondary dark:text-claude-darkTextSecondary">
+              <div className="mt-3 text-[11px] leading-5 text-secondary">
                 {notice || i18nService.t('authFeishuScanPanelHint')}
               </div>
-              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/68 px-2 py-0.5 text-[10px] font-medium text-red-700 ring-1 ring-red-200/60 dark:bg-red-950/24 dark:text-red-200 dark:ring-red-400/10">
-                <span className="h-1.5 w-1.5 rounded-full bg-red-600" />
+              <div className="jbp-visual-status-pill mt-2 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                 {i18nService.t('authFeishuLoginCountdown').replace('{seconds}', String(feishuCountdown))}
               </div>
             </div>
@@ -749,7 +749,7 @@ const QtbLoginPanel: React.FC<{
                 type="button"
                 onClick={() => void handleRefreshFeishuScan()}
                 disabled={isCreatingFeishuSession || submittingMode !== null}
-                className="text-[10px] font-medium text-red-700/90 transition-colors hover:text-red-800 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-200/90 dark:hover:text-red-100"
+                className="rounded-full px-1.5 py-0.5 text-[10px] font-medium text-primary transition-colors hover:bg-primary-muted disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isCreatingFeishuSession
                   ? i18nService.t('authFeishuScanLoading')
@@ -758,7 +758,7 @@ const QtbLoginPanel: React.FC<{
               <button
                 type="button"
                 onClick={() => switchLoginMode(AuthLoginMode.Manual)}
-                className="text-[10px] font-medium text-claude-textSecondary/90 transition-colors hover:text-claude-text dark:text-claude-darkTextSecondary/90 dark:hover:text-claude-darkText"
+                className="rounded-full px-1.5 py-0.5 text-[10px] font-medium text-secondary transition-colors hover:bg-surface hover:text-foreground"
               >
                 {i18nService.t('authLoginModeManual')}
               </button>
@@ -766,13 +766,13 @@ const QtbLoginPanel: React.FC<{
           </div>
 
           {error && (
-            <div className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-500/10 dark:text-red-300">
+            <div className="jbp-visual-danger-note rounded-xl px-3 py-2 text-xs">
               {error}
             </div>
           )}
 
           {localOnlyScanCallback && (
-            <div className="rounded-xl bg-amber-50/90 px-3 py-2 text-[11px] leading-5 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
+            <div className="jbp-visual-warning-note rounded-xl px-3 py-2 text-[11px] leading-5">
               {i18nService.t('authFeishuScanLocalCallbackHint')}
             </div>
           )}
@@ -780,7 +780,7 @@ const QtbLoginPanel: React.FC<{
       ) : (
         <div className="space-y-2">
           <label className="block">
-            <div className="mb-1 text-xs text-claude-textSecondary dark:text-claude-darkTextSecondary">
+            <div className="mb-1 text-xs text-secondary">
               {i18nService.t('authUsername')}
             </div>
             <input
@@ -789,12 +789,12 @@ const QtbLoginPanel: React.FC<{
               onChange={(event) => setUsername(event.target.value)}
               disabled={inputsDisabled}
               placeholder={i18nService.t('authUsernamePlaceholder')}
-              className="w-full rounded-xl border border-claude-border bg-white px-3 py-2 text-sm text-claude-text outline-none transition-colors focus:border-claude-accent disabled:cursor-not-allowed disabled:opacity-60 dark:border-claude-darkBorder dark:bg-claude-darkSurfaceHover dark:text-claude-darkText"
+              className="jbp-visual-soft-field w-full rounded-xl px-3 py-2 text-sm outline-none transition-[border-color,box-shadow,background-color] disabled:cursor-not-allowed disabled:opacity-60"
             />
           </label>
 
           <label className="block">
-            <div className="mb-1 text-xs text-claude-textSecondary dark:text-claude-darkTextSecondary">
+            <div className="mb-1 text-xs text-secondary">
               {i18nService.t('password')}
             </div>
             <input
@@ -808,12 +808,12 @@ const QtbLoginPanel: React.FC<{
                 }
               }}
               placeholder={i18nService.t('authPasswordPlaceholder')}
-              className="w-full rounded-xl border border-claude-border bg-white px-3 py-2 text-sm text-claude-text outline-none transition-colors focus:border-claude-accent disabled:cursor-not-allowed disabled:opacity-60 dark:border-claude-darkBorder dark:bg-claude-darkSurfaceHover dark:text-claude-darkText"
+              className="jbp-visual-soft-field w-full rounded-xl px-3 py-2 text-sm outline-none transition-[border-color,box-shadow,background-color] disabled:cursor-not-allowed disabled:opacity-60"
             />
           </label>
 
           {error && (
-            <div className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-500/10 dark:text-red-300">
+            <div className="jbp-visual-danger-note rounded-xl px-3 py-2 text-xs">
               {error}
             </div>
           )}
@@ -822,7 +822,7 @@ const QtbLoginPanel: React.FC<{
             type="button"
             onClick={() => void handlePasswordLogin()}
             disabled={inputsDisabled}
-            className="mt-1 w-full rounded-xl bg-claude-accent px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="jbp-visual-primary-action mt-1 w-full rounded-xl px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submittingMode === 'password'
               ? i18nService.t('authLoggingIn')
@@ -833,7 +833,7 @@ const QtbLoginPanel: React.FC<{
             type="button"
             onClick={() => void handleBrowserFeishuLogin()}
             disabled={submittingMode === 'browser' || isCreatingFeishuSession}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-claude-border px-3 py-2 text-sm font-medium text-claude-text transition-colors hover:bg-claude-surfaceHover disabled:cursor-not-allowed disabled:opacity-60 dark:border-claude-darkBorder dark:text-claude-darkText dark:hover:bg-claude-darkSurfaceHover"
+            className="jbp-visual-secondary-action flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           >
             <svg viewBox="0 0 1024 1024" width="16" height="16" aria-hidden="true">
               <path
@@ -940,7 +940,7 @@ const UserMenu: React.FC<{
                 </div>
               )}
             </div>
-            <div className="shrink-0 text-[11px] text-claude-accent dark:text-red-300">
+            <div className="shrink-0 text-[11px] text-primary">
               {i18nService.t('authOpenQtbWeb')}
             </div>
           </div>
@@ -1030,7 +1030,7 @@ const UserMenu: React.FC<{
         <button
           type="button"
           onClick={handleLogout}
-          className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-surface-raised transition-colors cursor-pointer flex items-center gap-2"
+          className="flex w-full cursor-pointer items-center gap-2 px-4 py-2 text-left text-sm text-[color:var(--lobster-destructive)] transition-colors hover:bg-surface-raised"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -1146,12 +1146,12 @@ const LoginButton: React.FC<LoginButtonProps> = ({ variant = 'default' }) => {
                 <UserAvatar
                   avatarUrl={user?.avatarUrl}
                   displayName={primaryIdentity}
-                  className="h-11 w-11 ring-1 ring-red-400/12"
+                  className="h-11 w-11 ring-1 ring-primary/12"
                 />
                 <span className="absolute -bottom-1 -right-1">
                   <QingShuBrandMark
-                    className="relative flex h-4.5 w-4.5 items-center justify-center overflow-hidden rounded-full bg-red-600 shadow-sm shadow-red-950/25 ring-2 ring-background"
-                    iconClassName="text-[9px] font-semibold leading-none text-white"
+                    className="relative flex h-4.5 w-4.5 items-center justify-center overflow-hidden rounded-full bg-primary shadow-sm ring-2 ring-background"
+                    iconClassName="text-[9px] font-semibold leading-none text-primary-foreground"
                   />
                 </span>
               </span>
@@ -1169,12 +1169,12 @@ const LoginButton: React.FC<LoginButtonProps> = ({ variant = 'default' }) => {
         ) : (
           <>
             {isSidebarVariant ? (
-              <span className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-red-500/10 text-red-700 shadow-subtle ring-1 ring-red-400/10 dark:text-red-300">
+              <span className="jbp-visual-icon-tile relative flex h-11 w-11 items-center justify-center rounded-2xl shadow-subtle">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 0 0-16 0" /></svg>
                 <span className="absolute -bottom-1 -right-1">
                   <QingShuBrandMark
-                    className="relative flex h-4.5 w-4.5 items-center justify-center overflow-hidden rounded-full bg-red-600 shadow-sm shadow-red-950/25 ring-2 ring-background"
-                    iconClassName="text-[9px] font-semibold leading-none text-white"
+                    className="relative flex h-4.5 w-4.5 items-center justify-center overflow-hidden rounded-full bg-primary shadow-sm ring-2 ring-background"
+                    iconClassName="text-[9px] font-semibold leading-none text-primary-foreground"
                   />
                 </span>
               </span>

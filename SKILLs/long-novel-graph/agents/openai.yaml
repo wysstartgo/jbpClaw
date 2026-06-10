@@ -1,0 +1,3 @@
+display_name: Long Novel Graph
+short_description: Import long TXT novels, build chapter indexes, locate questions, and prepare evidence-anchored graphs.
+default_prompt: Build a chapter index and locator for this long novel, then prepare an evidence-anchored graph workflow.

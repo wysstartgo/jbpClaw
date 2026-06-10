@@ -60,20 +60,20 @@ const EngineStartupOverlay: React.FC<EngineStartupOverlayProps> = ({ suspended =
     : null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/90 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-card">
-        <div className="flex flex-col items-center text-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-primary/15 text-primary flex items-center justify-center animate-pulse">
+    <div className="jbp-visual-backdrop fixed inset-0 z-[100] flex items-center justify-center px-6">
+      <div className="jbp-visual-panel w-full max-w-md rounded-[calc(var(--lobster-radius)*3)] px-6 py-5">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="jbp-visual-icon-tile flex h-11 w-11 items-center justify-center rounded-2xl animate-pulse">
             <ChatBubbleLeftRightIcon className="h-5 w-5" />
           </div>
-          <div className="text-sm text-foreground">
+          <div className="text-sm font-medium text-foreground">
             {resolveEngineStatusText(status)}
           </div>
           {progressPercent !== null && (
             <div className="w-full space-y-1">
-              <div className="h-1.5 w-full rounded-full bg-primary/15 overflow-hidden">
+              <div className="jbp-visual-progress-track h-1.5 w-full overflow-hidden rounded-full">
                 <div
-                  className="h-full rounded-full bg-primary transition-all"
+                  className="jbp-visual-progress-bar h-full rounded-full transition-all"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>

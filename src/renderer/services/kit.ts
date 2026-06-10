@@ -144,11 +144,35 @@ const NOVEL_COMIC_WECHAT_POST_SKILLS = [
     },
   },
   {
+    id: 'long-novel-graph',
+    name: { zh: '长篇小说图谱检索', en: 'Long Novel Graph' },
+    description: {
+      zh: '定位小说章节、检索人物线和关系图谱证据，保证每个内容点可反查到 chapterId + lineStart + lineEnd。',
+      en: 'Locate chapters, retrieve character arcs and graph evidence, and anchor each content point to chapterId + lineStart + lineEnd.',
+    },
+  },
+  {
+    id: 'baoyu-comic',
+    name: { zh: '漫画化分镜', en: 'Baoyu Comic' },
+    description: {
+      zh: '负责漫画化内容分析、三套分镜方案、角色设定、漫画页 prompt 结构和可选 PDF 合成。',
+      en: 'Handles comic-style analysis, storyboard variants, character sheets, comic page prompt structure, and optional PDF assembly.',
+    },
+  },
+  {
     id: 'explosive-cover-generator-gzh',
     name: { zh: '公众号爆款封面策划', en: 'Explosive WeChat Cover Strategy' },
     description: {
       zh: '复用已安装的封面策划能力，分析同赛道爆款封面规律并输出封面方案与提示词。',
       en: 'Reuse the installed cover strategy skill to analyze high-performing covers and produce schemes and prompts.',
+    },
+  },
+  {
+    id: 'xiaohu-wechat-cover',
+    name: { zh: '一步式公众号封面', en: 'One-Step WeChat Cover' },
+    description: {
+      zh: '作为更简单的封面后端备选，根据文章主题快速生成公众号封面方案和封面图。',
+      en: 'A simpler cover backend fallback for quickly generating WeChat cover schemes and images from an article topic.',
     },
   },
   {
@@ -467,12 +491,12 @@ export const BUILTIN_NOVEL_COMIC_WECHAT_POST_KIT: MarketplaceKit = {
   id: 'novel-comic-wechat-post-kit',
   name: { zh: '小说漫画公众号推文套件', en: 'Novel Comic WeChat Post Kit' },
   description: {
-    zh: '把小说漫画公众号推文主流程包装成一个 Kit：主编排 Skill 负责章节证据、分镜和文章，封面策划复用已安装的 explosive-cover-generator-gzh，绘图统一走 JBPClaw 内置专用绘图 Skill，排版发布复用已安装的 xiaohu-wechat-format。',
-    en: 'A kit for comic-style novel WeChat posts: the main skill orchestrates evidence, storyboard, and article writing; cover planning reuses explosive-cover-generator-gzh; image generation uses JBPClaw dedicated image generation; formatting and publishing reuse xiaohu-wechat-format.',
+    zh: '把小说漫画公众号推文完整流程包装成一个 Kit：章节证据、图谱检索、漫画分镜、爆款封面、一步式封面备选、专用绘图、公众号排版发布全链路串联。',
+    en: 'A complete kit for comic-style novel WeChat posts: chapter evidence, graph retrieval, comic storyboard, high-click cover strategy, one-step cover fallback, dedicated image generation, and WeChat formatting/publishing.',
   },
   icon: '📚',
   author: 'JBPClaw',
-  version: '2026.06.09',
+  version: '2026.06.10',
   tryAsking: [
     {
       zh: '把这段小说名场面做成漫画公众号推文，先出方案和分镜。',

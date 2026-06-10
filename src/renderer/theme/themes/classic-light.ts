@@ -5,9 +5,9 @@ export const classicLight: ThemeDefinition = {
   meta: {
     id: 'classic-light',
     name: '经典浅色',
-    description: '原生默认浅色主题，黑红品牌',
+    description: '原生默认浅色主题，红绿品牌',
     appearance: 'light',
-    preview: ['#F8F9FB', '#111827', '#b91c1c', '#6B7280'],
+    preview: ['#F8F9FB', '#059669', '#b91c1c', '#6B7280'],
   },
   tokens: {
     ...SHARED_TOKENS,
@@ -15,7 +15,7 @@ export const classicLight: ThemeDefinition = {
     'primary-foreground': '#ffffff',
     'primary-hover':      '#991b1b',
     'primary-muted':      'rgba(185,28,28,0.10)',
-    'accent':             '#111827',
+    'accent':             '#059669',
     'accent-foreground':  '#ffffff',
     'background':         '#F8F9FB',
     'foreground':         '#1A1D23',

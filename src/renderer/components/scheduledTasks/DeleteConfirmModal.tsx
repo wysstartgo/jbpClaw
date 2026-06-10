@@ -15,20 +15,17 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
 }) => {
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      className="jbp-visual-backdrop fixed inset-0 z-[9999] flex items-center justify-center"
       onClick={onCancel}
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40 dark:bg-black/60" />
-
       {/* Modal */}
       <div
-        className="relative w-80 rounded-xl shadow-2xl bg-surface border border-border p-5"
+        className="jbp-visual-panel relative w-80 rounded-2xl p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-col items-center text-center">
-          <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-3">
-            <ExclamationTriangleIcon className="w-5 h-5 text-red-500" />
+          <div className="jbp-visual-danger-note mb-3 flex h-10 w-10 items-center justify-center rounded-2xl">
+            <ExclamationTriangleIcon className="h-5 w-5" />
           </div>
           <h3 className="text-sm font-semibold text-foreground mb-2">
             {i18nService.t('scheduledTasksDelete')}
@@ -40,14 +37,14 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 px-4 py-2 text-sm rounded-lg text-foreground border border-border hover:bg-surface-raised transition-colors"
+              className="jbp-visual-secondary-action flex-1 rounded-xl px-4 py-2 text-sm transition-colors"
             >
               {i18nService.t('cancel')}
             </button>
             <button
               type="button"
               onClick={onConfirm}
-              className="flex-1 px-4 py-2 text-sm rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
+              className="jbp-visual-danger-action flex-1 rounded-xl px-4 py-2 text-sm transition-colors"
             >
               {i18nService.t('scheduledTasksDelete')}
             </button>

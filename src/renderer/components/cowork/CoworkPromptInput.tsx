@@ -1162,8 +1162,8 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
   };
 
   const containerClass = isLarge
-    ? 'relative rounded-[16px] border border-black/5 dark:border-white/5 bg-surface shadow-[0_2px_6px_rgba(0,0,0,0.05)] focus-within:shadow-[0_4px_12px_rgba(0,0,0,0.06)] focus-within:ring-1 focus-within:ring-primary/20 focus-within:border-primary transition-all duration-300'
-    : 'relative flex items-end gap-2 p-3 rounded-[16px] border border-black/5 dark:border-white/5 bg-surface';
+    ? 'jbp-visual-panel relative rounded-[16px] bg-surface shadow-[0_2px_6px_rgba(0,0,0,0.05)] focus-within:shadow-[0_4px_12px_rgba(0,0,0,0.06)] focus-within:ring-1 focus-within:ring-primary/20 focus-within:border-primary transition-all duration-300'
+    : 'jbp-visual-soft-card relative flex items-end gap-2 p-3 rounded-[16px]';
 
   const textareaClass = isLarge
     ? `w-full resize-none bg-transparent px-4 pt-3 pb-3 text-foreground placeholder:dark:text-foregroundSecondary/60 placeholder:text-secondary/60 focus:outline-none text-[15px] leading-6 min-h-[${minHeight}px] max-h-[${maxHeight}px]`
@@ -1646,7 +1646,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
         </div>
       )}
       {imageVisionHint && (
-        <div className="mb-2 flex items-start gap-1.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-400">
+        <div className="jbp-visual-warning-note mb-2 flex items-start gap-1.5 rounded-md px-2.5 py-1.5 text-xs">
           <ExclamationTriangleIcon className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
           <span>
             {i18nService.getLanguage() === 'zh'
@@ -1656,7 +1656,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
           <button
             type="button"
             onClick={() => setImageVisionHint(false)}
-            className="ml-auto flex-shrink-0 rounded-full p-0.5 hover:bg-amber-200/50 dark:hover:bg-amber-800/50"
+            className="ml-auto flex-shrink-0 rounded-full p-0.5 hover:bg-[color-mix(in_srgb,var(--lobster-warning)_18%,transparent)]"
           >
             <XMarkIcon className="h-3 w-3" />
           </button>
@@ -1686,7 +1686,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                   <button
                     type="button"
                     onClick={() => handleRemoveQueuedInput(item)}
-                    className="flex-shrink-0 rounded p-1 text-primary/70 hover:bg-red-500/10 hover:text-red-500"
+                    className="flex-shrink-0 rounded p-1 text-primary/70 hover:bg-[color-mix(in_srgb,var(--lobster-destructive)_10%,transparent)] hover:text-[color:var(--lobster-destructive)]"
                     title={i18nService.t('coworkQueueDelete')}
                     aria-label={i18nService.t('coworkQueueDelete')}
                   >
@@ -1831,7 +1831,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                         : i18nService.t('scheduledTasksFormModelDefault')}
                     />
                     {coworkAgentEngine === 'openclaw' && agentModelIsInvalid && (
-                      <span className="max-w-60 text-[11px] leading-4 text-red-500">
+                      <span className="max-w-60 text-[11px] leading-4 text-[color:var(--lobster-destructive)]">
                         {i18nService.t('agentModelInvalidHint')}
                       </span>
                     )}
@@ -1843,7 +1843,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                     onClick={handleSpeechToggle}
                     className={`flex items-center justify-center p-1.5 rounded-lg text-sm transition-colors ${
                       isSpeechActive
-                        ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'
+                        ? 'text-[color:var(--lobster-destructive)] hover:bg-[color-mix(in_srgb,var(--lobster-destructive)_10%,transparent)]'
                         : 'text-secondary hover:bg-surface-raised hover:text-foreground'
                     }`}
                     title={speechButtonTitle}
@@ -1885,7 +1885,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                   <button
                     type="button"
                     onClick={handleStopClick}
-                    className="p-2 rounded-xl bg-red-500 hover:bg-red-600 text-white transition-all shadow-subtle hover:shadow-card active:scale-95"
+                    className="jbp-visual-danger-action p-2 rounded-xl transition-all shadow-subtle hover:shadow-card active:scale-95"
                     aria-label={i18nService.t('stop')}
                   >
                     <StopIcon className="h-5 w-5" />
@@ -1898,7 +1898,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                     }}
                     disabled={!canSubmit}
                     title={submitTitle}
-                    className="p-2 rounded-xl bg-primary hover:bg-primary-hover text-white transition-all shadow-subtle hover:shadow-card active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="p-2 rounded-xl bg-primary hover:bg-primary-hover text-primary-foreground transition-all shadow-subtle hover:shadow-card active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label={submitTitle}
                   >
                     <PaperAirplaneIcon className="h-5 w-5" />
@@ -1932,7 +1932,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                     onClick={handleSpeechToggle}
                     className={`flex-shrink-0 p-1.5 rounded-lg transition-colors ${
                       isSpeechActive
-                        ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'
+                        ? 'text-[color:var(--lobster-destructive)] hover:bg-[color-mix(in_srgb,var(--lobster-destructive)_10%,transparent)]'
                         : 'text-secondary hover:bg-surface-raised hover:text-foreground'
                     }`}
                     title={speechButtonTitle}
@@ -1967,7 +1967,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
               <button
                 type="button"
                 onClick={handleStopClick}
-                className="flex-shrink-0 p-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-all shadow-subtle hover:shadow-card active:scale-95"
+                className="jbp-visual-danger-action flex-shrink-0 p-2 rounded-lg transition-all shadow-subtle hover:shadow-card active:scale-95"
                 aria-label={i18nService.t('stop')}
               >
                 <StopIcon className="h-4 w-4" />
@@ -1980,7 +1980,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
                 }}
                 disabled={!canSubmit}
                 title={submitTitle}
-                className="flex-shrink-0 p-2 rounded-lg bg-primary hover:bg-primary-hover text-white transition-all shadow-subtle hover:shadow-card active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-shrink-0 p-2 rounded-lg bg-primary hover:bg-primary-hover text-primary-foreground transition-all shadow-subtle hover:shadow-card active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label={submitTitle}
               >
                 <PaperAirplaneIcon className="h-4 w-4" />
@@ -1990,7 +1990,7 @@ const CoworkPromptInput = React.forwardRef<CoworkPromptInputRef, CoworkPromptInp
         )}
       </div>
       {showFolderRequiredWarning && (
-        <div className="mt-2 text-xs text-red-500 dark:text-red-400">
+        <div className="mt-2 text-xs text-[color:var(--lobster-destructive)]">
           {i18nService.t('coworkSelectFolderFirst')}
         </div>
       )}

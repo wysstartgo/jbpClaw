@@ -14,10 +14,10 @@ interface TaskRunHistoryProps {
 }
 
 const statusIcons: Record<string, { icon: string; color: string }> = {
-  success: { icon: '✓', color: 'text-green-500' },
-  error: { icon: '✗', color: 'text-red-500' },
-  skipped: { icon: '↷', color: 'text-yellow-500' },
-  running: { icon: '●', color: 'text-blue-500' },
+  success: { icon: '✓', color: 'text-success' },
+  error: { icon: '✗', color: 'text-destructive' },
+  skipped: { icon: '↷', color: 'text-warning' },
+  running: { icon: '●', color: 'text-primary' },
 };
 
 const STATUS_OPTIONS = ['success', 'error', 'skipped', 'running'] as const;
@@ -25,23 +25,23 @@ const STATUS_OPTIONS = ['success', 'error', 'skipped', 'running'] as const;
 const statusFilterConfig: Record<string, { label: string; tone: string; badgeClass: string }> = {
   success: {
     label: 'scheduledTasksStatusSuccess',
-    tone: 'text-green-600 dark:text-green-500',
-    badgeClass: 'bg-green-50 dark:bg-green-500/10',
+    tone: 'text-success',
+    badgeClass: 'jbp-visual-success-pill',
   },
   error: {
     label: 'scheduledTasksStatusError',
-    tone: 'text-red-500 dark:text-red-400',
-    badgeClass: 'bg-red-50 dark:bg-red-500/10',
+    tone: 'text-destructive',
+    badgeClass: 'jbp-visual-danger-note',
   },
   skipped: {
     label: 'scheduledTasksStatusSkipped',
-    tone: 'text-yellow-600 dark:text-yellow-500',
-    badgeClass: 'bg-yellow-50 dark:bg-yellow-500/10',
+    tone: 'text-warning',
+    badgeClass: 'jbp-visual-warning-note',
   },
   running: {
     label: 'scheduledTasksStatusRunning',
-    tone: 'text-primary dark:text-primary-hover',
-    badgeClass: 'bg-primary/10 dark:bg-primary/20',
+    tone: 'text-primary',
+    badgeClass: 'jbp-visual-status-pill',
   },
 };
 
@@ -115,7 +115,7 @@ const TaskRunHistory: React.FC<TaskRunHistoryProps> = ({ taskId, runs }) => {
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-surface/70 px-3 py-2">
+      <div className="jbp-visual-soft-card mb-3 flex flex-wrap items-center gap-2 rounded-xl px-3 py-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {STATUS_OPTIONS.map((status) => {
             const cfg = statusFilterConfig[status];
@@ -128,7 +128,7 @@ const TaskRunHistory: React.FC<TaskRunHistoryProps> = ({ taskId, runs }) => {
                 className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
                   selected
                     ? `${cfg.badgeClass} ${cfg.tone}`
-                    : 'text-secondary hover:bg-surface-raised hover:text-foreground'
+                    : 'jbp-visual-muted-pill hover:text-foreground'
                 }`}
               >
                 {i18nService.t(cfg.label)}
@@ -144,7 +144,7 @@ const TaskRunHistory: React.FC<TaskRunHistoryProps> = ({ taskId, runs }) => {
               value={filter.startDate ?? ''}
               max={filter.endDate}
               onChange={(event) => handleStartDateChange(event.target.value)}
-              className="h-7 rounded-md border border-border bg-surface px-2 text-xs text-foreground outline-none focus:border-primary"
+              className="jbp-visual-soft-field h-7 rounded-md px-2 text-xs outline-none"
             />
           </label>
           <label className="flex items-center gap-1.5 text-xs text-secondary">
@@ -154,14 +154,14 @@ const TaskRunHistory: React.FC<TaskRunHistoryProps> = ({ taskId, runs }) => {
               value={filter.endDate ?? ''}
               min={filter.startDate}
               onChange={(event) => handleEndDateChange(event.target.value)}
-              className="h-7 rounded-md border border-border bg-surface px-2 text-xs text-foreground outline-none focus:border-primary"
+              className="jbp-visual-soft-field h-7 rounded-md px-2 text-xs outline-none"
             />
           </label>
           {isFilterActive && (
             <button
               type="button"
               onClick={handleClearFilter}
-              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-secondary transition-colors hover:bg-surface-raised hover:text-foreground"
+              className="jbp-visual-secondary-action inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs transition-colors"
               title={i18nService.t('scheduledTasksFilterClear')}
             >
               <XMarkIcon className="h-3.5 w-3.5" />
@@ -175,11 +175,11 @@ const TaskRunHistory: React.FC<TaskRunHistoryProps> = ({ taskId, runs }) => {
           {i18nService.t('scheduledTasksFilterNoResults')}
         </div>
       )}
-      <div className="divide-y divide-border/50">
+      <div className="space-y-1">
         {displayedRuns.map((run) => {
           const statusInfo = statusIcons[run.status] || { icon: '?', color: '' };
           return (
-            <div key={run.id} className="flex items-center justify-between py-2.5 px-1">
+            <div key={run.id} className="jbp-visual-selectable-card flex items-center justify-between rounded-xl px-3 py-2.5">
               <div className="flex items-center gap-3 min-w-0">
                 <span className={`text-sm font-bold ${statusInfo.color}`}>{statusInfo.icon}</span>
                 <div className="min-w-0">
@@ -196,7 +196,7 @@ const TaskRunHistory: React.FC<TaskRunHistoryProps> = ({ taskId, runs }) => {
                 )}
                 {run.status === 'error' && run.error && (
                   <span
-                    className="text-xs text-red-500 max-w-[150px] truncate"
+                    className="max-w-[150px] truncate text-xs text-destructive"
                     title={run.error}
                   >
                     {run.error}
@@ -206,7 +206,7 @@ const TaskRunHistory: React.FC<TaskRunHistoryProps> = ({ taskId, runs }) => {
                   <button
                     type="button"
                     onClick={() => setViewingRun(run)}
-                    className="text-xs text-primary hover:text-primary-hover transition-colors"
+                    className="jbp-visual-secondary-action rounded-lg px-2 py-1 text-xs transition-colors"
                   >
                     {i18nService.t('scheduledTasksViewSession')}
                   </button>
@@ -220,7 +220,7 @@ const TaskRunHistory: React.FC<TaskRunHistoryProps> = ({ taskId, runs }) => {
         <button
           type="button"
           onClick={handleLoadMore}
-          className="w-full py-2 mt-2 text-sm text-primary hover:text-primary-hover transition-colors"
+          className="jbp-visual-secondary-action mt-2 w-full rounded-xl py-2 text-sm transition-colors"
         >
           {i18nService.t('scheduledTasksLoadMore')}
         </button>

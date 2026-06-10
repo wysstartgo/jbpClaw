@@ -7,3 +7,222 @@
 .lobster-theme-transition *::after {
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease !important;
 }
+
+/* Theme-aware visual polish primitives for shared overlays and shells. */
+.jbp-visual-backdrop {
+  background: color-mix(in srgb, var(--lobster-background) 88%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.jbp-visual-panel {
+  border: 1px solid color-mix(in srgb, var(--lobster-border) 82%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--lobster-surface-raised) 82%, transparent),
+      color-mix(in srgb, var(--lobster-surface) 96%, transparent)
+    );
+  box-shadow:
+    0 24px 72px color-mix(in srgb, var(--lobster-foreground) 14%, transparent),
+    0 0 36px color-mix(in srgb, var(--lobster-accent) 6%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--lobster-surface-raised) 86%, transparent);
+}
+
+.jbp-visual-workbench-rail {
+  border-color: color-mix(in srgb, var(--lobster-border) 78%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--lobster-surface-raised) 48%, var(--lobster-surface)),
+      color-mix(in srgb, var(--lobster-surface) 92%, var(--lobster-background))
+    );
+}
+
+.jbp-visual-soft-card {
+  border: 1px solid color-mix(in srgb, var(--lobster-border-subtle) 86%, transparent);
+  background: color-mix(in srgb, var(--lobster-surface-raised) 42%, var(--lobster-surface));
+}
+
+.jbp-visual-selectable-card {
+  border: 1px solid color-mix(in srgb, var(--lobster-border-subtle) 86%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--lobster-surface-raised) 54%, transparent),
+      color-mix(in srgb, var(--lobster-surface) 94%, transparent)
+    );
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--lobster-surface-raised) 72%, transparent);
+}
+
+.jbp-visual-selectable-card:hover {
+  border-color: color-mix(in srgb, var(--lobster-primary) 28%, var(--lobster-border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--lobster-primary-muted) 34%, var(--lobster-surface-raised)),
+      color-mix(in srgb, var(--lobster-surface) 95%, transparent)
+    );
+  box-shadow:
+    0 12px 30px color-mix(in srgb, var(--lobster-foreground) 9%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--lobster-surface-raised) 80%, transparent);
+}
+
+.jbp-visual-selectable-card.is-active {
+  border-color: color-mix(in srgb, var(--lobster-primary) 42%, var(--lobster-border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--lobster-primary-muted) 58%, var(--lobster-surface-raised)),
+      color-mix(in srgb, var(--lobster-surface) 92%, transparent)
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--lobster-primary) 12%, transparent),
+    0 14px 34px color-mix(in srgb, var(--lobster-primary) 11%, transparent),
+    0 0 22px color-mix(in srgb, var(--lobster-accent) 7%, transparent);
+}
+
+.jbp-visual-selectable-card.is-disabled {
+  background: color-mix(in srgb, var(--lobster-muted) 22%, var(--lobster-surface));
+  filter: saturate(0.62);
+  opacity: 0.82;
+}
+
+.jbp-visual-icon-tile {
+  border: 1px solid color-mix(in srgb, var(--lobster-primary) 18%, transparent);
+  background: color-mix(in srgb, var(--lobster-primary-muted) 88%, transparent);
+  color: var(--lobster-primary);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--lobster-surface-raised) 72%, transparent);
+}
+
+.jbp-visual-progress-track {
+  background: color-mix(in srgb, var(--lobster-primary-muted) 58%, var(--lobster-surface-raised));
+}
+
+.jbp-visual-progress-bar {
+  background: linear-gradient(
+    90deg,
+    var(--lobster-primary),
+    color-mix(in srgb, var(--lobster-accent) 32%, var(--lobster-primary-hover))
+  );
+  box-shadow: 0 0 18px color-mix(in srgb, var(--lobster-accent) 18%, var(--lobster-primary));
+}
+
+.jbp-visual-status-pill {
+  border: 1px solid color-mix(in srgb, var(--lobster-primary) 18%, transparent);
+  background: color-mix(in srgb, var(--lobster-primary-muted) 68%, transparent);
+  color: var(--lobster-primary);
+}
+
+.jbp-visual-muted-pill {
+  border: 1px solid color-mix(in srgb, var(--lobster-border) 86%, transparent);
+  background: color-mix(in srgb, var(--lobster-muted) 28%, var(--lobster-surface));
+  color: var(--lobster-secondary);
+}
+
+.jbp-visual-success-pill {
+  border: 1px solid color-mix(in srgb, var(--lobster-success) 22%, transparent);
+  background: color-mix(in srgb, var(--lobster-success) 11%, var(--lobster-surface));
+  color: color-mix(in srgb, var(--lobster-success) 82%, var(--lobster-foreground));
+}
+
+.jbp-visual-agent-tab {
+  color: var(--lobster-secondary);
+}
+
+.jbp-visual-agent-tab:hover {
+  background: color-mix(in srgb, var(--lobster-surface-raised) 56%, transparent);
+  color: var(--lobster-foreground);
+}
+
+.jbp-visual-agent-tab.is-active {
+  border: 1px solid color-mix(in srgb, var(--lobster-primary) 18%, transparent);
+  background: color-mix(in srgb, var(--lobster-primary-muted) 68%, transparent);
+  color: var(--lobster-primary);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--lobster-surface-raised) 76%, transparent);
+}
+
+.jbp-visual-soft-field {
+  border: 1px solid color-mix(in srgb, var(--lobster-input-border) 92%, transparent);
+  background: color-mix(in srgb, var(--lobster-surface-raised) 36%, var(--lobster-surface));
+  color: var(--lobster-foreground);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--lobster-surface-raised) 70%, transparent);
+}
+
+.jbp-visual-soft-field:focus {
+  border-color: color-mix(in srgb, var(--lobster-primary) 70%, var(--lobster-input-border));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--lobster-primary-muted) 72%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--lobster-surface-raised) 72%, transparent);
+}
+
+.jbp-visual-primary-action {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--lobster-primary) 92%, var(--lobster-surface-raised)),
+    var(--lobster-primary)
+  );
+  color: var(--lobster-primary-foreground);
+  box-shadow:
+    0 10px 24px color-mix(in srgb, var(--lobster-primary) 24%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--lobster-primary-foreground) 24%, transparent);
+}
+
+.jbp-visual-primary-action:hover {
+  background: var(--lobster-primary-hover);
+}
+
+.jbp-visual-secondary-action {
+  border: 1px solid color-mix(in srgb, var(--lobster-border) 88%, transparent);
+  background: color-mix(in srgb, var(--lobster-surface-raised) 44%, transparent);
+  color: var(--lobster-foreground);
+}
+
+.jbp-visual-secondary-action:hover {
+  border-color: color-mix(in srgb, var(--lobster-accent) 30%, var(--lobster-border));
+  background: color-mix(in srgb, var(--lobster-accent) 8%, var(--lobster-surface-raised));
+}
+
+.jbp-visual-danger-action {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--lobster-destructive) 90%, var(--lobster-surface-raised)),
+    var(--lobster-destructive)
+  );
+  color: var(--lobster-destructive-foreground);
+  box-shadow:
+    0 10px 22px color-mix(in srgb, var(--lobster-destructive) 22%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--lobster-destructive-foreground) 22%, transparent);
+}
+
+.jbp-visual-danger-action:hover {
+  background: color-mix(in srgb, var(--lobster-destructive) 86%, var(--lobster-foreground));
+}
+
+.jbp-visual-danger-note {
+  border: 1px solid color-mix(in srgb, var(--lobster-destructive) 18%, transparent);
+  background: color-mix(in srgb, var(--lobster-destructive) 9%, var(--lobster-surface));
+  color: var(--lobster-destructive);
+}
+
+.jbp-visual-warning-note {
+  border: 1px solid color-mix(in srgb, var(--lobster-warning) 20%, transparent);
+  background: color-mix(in srgb, var(--lobster-warning) 10%, var(--lobster-surface));
+  color: color-mix(in srgb, var(--lobster-warning) 84%, var(--lobster-foreground));
+}
+
+.jbp-visual-toggle {
+  background: color-mix(in srgb, var(--lobster-muted) 46%, var(--lobster-surface-raised));
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--lobster-foreground) 12%, transparent);
+}
+
+.jbp-visual-toggle.is-on {
+  background: var(--lobster-primary);
+  box-shadow:
+    0 6px 14px color-mix(in srgb, var(--lobster-primary) 22%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--lobster-primary-foreground) 22%, transparent);
+}
+
+.jbp-visual-toggle-knob {
+  background: var(--lobster-surface);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--lobster-foreground) 20%, transparent);
+}

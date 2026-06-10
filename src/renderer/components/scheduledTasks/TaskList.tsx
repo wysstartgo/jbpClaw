@@ -42,13 +42,13 @@ const TaskListItem: React.FC<TaskListItemProps> = ({ task, onRequestDelete }) =>
   const statusLabel = i18nService.t(getStatusLabelKey(effectiveStatus));
   const statusTone = getStatusTone(effectiveStatus);
   const statusBadgeClass = effectiveStatus === 'running'
-    ? 'bg-primary/12 text-primary'
-    : 'bg-surface-raised text-secondary';
+    ? 'jbp-visual-status-pill'
+    : 'jbp-visual-muted-pill';
   const nextRunRelative = task.enabled ? formatNextRunRelative(task.state.nextRunAtMs) : null;
 
   return (
     <div
-      className="rounded-2xl border border-border bg-surface p-4 shadow-subtle transition-colors hover:border-primary/25 hover:bg-surface-raised/60 cursor-pointer"
+      className="jbp-visual-selectable-card cursor-pointer rounded-2xl p-4 transition-all hover:-translate-y-[1px]"
       onClick={() => dispatch(selectTask(task.id))}
     >
       <div className="flex items-start justify-between gap-4">
@@ -56,7 +56,7 @@ const TaskListItem: React.FC<TaskListItemProps> = ({ task, onRequestDelete }) =>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3">
             {/* Semantic Icon Container */}
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shadow-sm relative">
+            <div className="jbp-visual-icon-tile relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
               {effectiveStatus === 'running' ? <BoltIcon className="h-5 w-5" /> : <PlayCircleIcon className="h-5 w-5" />}
             </div>
             
@@ -67,12 +67,12 @@ const TaskListItem: React.FC<TaskListItemProps> = ({ task, onRequestDelete }) =>
                 </div>
                 {/* Micro Tag for EXEUCTION STATUS */}
                 {effectiveStatus !== null && (
-                  <span className={`px-1.5 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded-md ${statusTone} ${statusBadgeClass}`}>
+                  <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${statusTone} ${statusBadgeClass}`}>
                     {statusLabel}
                   </span>
                 )}
                 {effectiveStatus === null && (
-                  <span className="px-1.5 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded-md bg-secondary/10 text-secondary">
+                  <span className="jbp-visual-muted-pill rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
                     {i18nService.t('scheduledTasksStatusIdle')}
                   </span>
                 )}
@@ -122,13 +122,11 @@ const TaskListItem: React.FC<TaskListItemProps> = ({ task, onRequestDelete }) =>
               event.stopPropagation();
               void scheduledTaskService.toggleTask(task.id, !task.enabled);
             }}
-            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1 focus:ring-offset-surface ${
-              task.enabled ? 'bg-primary' : 'bg-neutral-300 dark:bg-neutral-600 shadow-inner'
-            }`}
+            className={`jbp-visual-toggle relative h-5 w-9 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1 focus:ring-offset-surface ${task.enabled ? 'is-on' : ''}`}
             aria-label={i18nService.t('scheduledTasksFormEnabled')}
           >
             <span
-              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform shadow-sm ${
+              className={`jbp-visual-toggle-knob absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform ${
                 task.enabled ? 'translate-x-4' : 'translate-x-0'
               }`}
             />
@@ -147,7 +145,7 @@ const TaskListItem: React.FC<TaskListItemProps> = ({ task, onRequestDelete }) =>
               <EllipsisVerticalIcon className="h-5 w-5" />
             </button>
             {showMenu && (
-              <div className="absolute right-0 top-full z-50 mt-1 w-32 rounded-xl border border-border bg-surface shadow-popover py-1">
+              <div className="jbp-visual-panel absolute right-0 top-full z-50 mt-1 w-36 rounded-xl py-1">
                 <button
                   type="button"
                   onClick={(event) => {
@@ -180,7 +178,7 @@ const TaskListItem: React.FC<TaskListItemProps> = ({ task, onRequestDelete }) =>
                     setShowMenu(false);
                     onRequestDelete(task.id, task.name);
                   }}
-                  className="w-full px-3 py-1.5 text-left text-sm text-red-500 transition-colors hover:bg-surface-raised"
+                  className="w-full px-3 py-1.5 text-left text-sm text-destructive transition-colors hover:bg-surface-raised"
                 >
                   {i18nService.t('scheduledTasksDelete')}
                 </button>
@@ -215,8 +213,10 @@ const TaskList: React.FC<TaskListProps> = ({ onRequestDelete, tasks: providedTas
 
   if (tasks.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 px-6">
-        <ClockIcon className="h-12 w-12 text-secondary/40 mb-4" />
+      <div className="flex flex-col items-center justify-center px-6 py-16">
+        <div className="jbp-visual-icon-tile mb-4 flex h-12 w-12 items-center justify-center rounded-2xl">
+          <ClockIcon className="h-6 w-6" />
+        </div>
         <p className="text-sm font-medium text-secondary mb-1">
           {i18nService.t('scheduledTasksEmptyState')}
         </p>
@@ -228,7 +228,7 @@ const TaskList: React.FC<TaskListProps> = ({ onRequestDelete, tasks: providedTas
   }
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-5xl space-y-4 p-4">
       {tasks.map((task) => (
         <TaskListItem key={task.id} task={task} onRequestDelete={onRequestDelete} />
       ))}

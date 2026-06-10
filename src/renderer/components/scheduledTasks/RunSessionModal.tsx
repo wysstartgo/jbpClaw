@@ -162,19 +162,16 @@ const RunSessionModal: React.FC<RunSessionModalProps> = ({ sessionId, sessionKey
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      className="jbp-visual-backdrop fixed inset-0 z-[9999] flex items-center justify-center"
       onClick={onClose}
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40 dark:bg-black/60" />
-
       {/* Modal */}
       <div
-        className="relative w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col rounded-2xl shadow-2xl bg-background border border-border overflow-hidden"
+        className="jbp-visual-panel relative mx-4 flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-border-subtle bg-surface/50 shrink-0">
+        <div className="flex items-center justify-between border-b border-border-subtle bg-surface/50 px-5 py-3 shrink-0">
           <h3 className="text-sm font-semibold text-foreground truncate">
             {session?.title || i18nService.t('scheduledTasksViewSession')}
           </h3>
@@ -209,7 +206,7 @@ const RunSessionModal: React.FC<RunSessionModalProps> = ({ sessionId, sessionKey
               <button
                 type="button"
                 onClick={handleManualRetry}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg text-primary hover:bg-surface-raised transition-colors"
+                className="jbp-visual-secondary-action inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-colors"
               >
                 <ArrowPathIcon className="w-3.5 h-3.5" />
                 {i18nService.t('scheduledTasksSessionRetry')}

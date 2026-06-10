@@ -387,6 +387,81 @@ const ShortcutRecorder: React.FC<{ value: string; onChange: (v: string) => void 
   );
 };
 
+const settingsInputClassName = 'jbp-visual-soft-field w-full rounded-lg px-3 py-2 text-sm outline-none transition-shadow placeholder:text-secondary/60';
+
+const SettingsSectionCard: React.FC<{
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+  className?: string;
+}> = ({ title, description, children, action, className = '' }) => (
+  <section className={`jbp-visual-soft-card rounded-xl px-4 py-4 ${className}`}>
+    <div className="mb-4 flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+        {description && (
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-secondary">{description}</p>
+        )}
+      </div>
+      {action}
+    </div>
+    {children}
+  </section>
+);
+
+const SettingsFieldRow: React.FC<{
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  children: React.ReactNode;
+  align?: 'center' | 'start';
+}> = ({ title, description, children, align = 'center' }) => (
+  <div className={`flex gap-4 py-3 first:pt-0 last:pb-0 ${align === 'start' ? 'items-start' : 'items-center'} justify-between`}>
+    <div className="min-w-0">
+      <div className="text-sm font-medium text-foreground">{title}</div>
+      {description && (
+        <div className="mt-1 text-xs leading-5 text-secondary">{description}</div>
+      )}
+    </div>
+    <div className="shrink-0">{children}</div>
+  </div>
+);
+
+const SettingsToggle: React.FC<{
+  checked: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  ariaLabel: string;
+}> = ({ checked, onClick, disabled = false, ariaLabel }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-label={ariaLabel}
+    aria-checked={checked}
+    onClick={onClick}
+    disabled={disabled}
+    className={`jbp-visual-toggle relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+      checked ? 'is-on' : ''
+    } ${disabled ? 'cursor-not-allowed opacity-55' : ''}`}
+  >
+    <span
+      className={`jbp-visual-toggle-knob inline-block h-4 w-4 transform rounded-full transition-transform ${
+        checked ? 'translate-x-6' : 'translate-x-1'
+      }`}
+    />
+  </button>
+);
+
+const SettingsFieldLabel: React.FC<{
+  children: React.ReactNode;
+  hint?: React.ReactNode;
+}> = ({ children, hint }) => (
+  <>
+    <div className="mb-1 text-xs font-medium text-secondary">{children}</div>
+    {hint && <div className="mt-1 text-[11px] leading-4 text-secondary">{hint}</div>}
+  </>
+);
+
 const Settings: React.FC<SettingsProps> = ({
   onClose,
   initialTab,
@@ -2776,644 +2851,482 @@ const Settings: React.FC<SettingsProps> = ({
     switch(activeTab) {
       case 'general':
         return (
-          <div className="space-y-8">
-            {/* Language Section */}
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-foreground">
-                {i18nService.t('language')}
-              </h4>
-              <div className="w-[140px] shrink-0">
-                <ThemedSelect
-                  id="language"
-                  value={language}
-                  onChange={(value) => {
-                    const nextLanguage = value as LanguageType;
-                    setLanguage(nextLanguage);
-                    i18nService.setLanguage(nextLanguage, { persist: false });
-                  }}
-                  options={[
-                    { value: 'zh', label: i18nService.t('chinese') },
-                    { value: 'en', label: i18nService.t('english') }
-                  ]}
-                />
+          <div className="space-y-5">
+            <SettingsSectionCard title={i18nService.t('general')}>
+              <div className="divide-y divide-border/60">
+                <SettingsFieldRow title={i18nService.t('language')}>
+                  <div className="w-[150px]">
+                    <ThemedSelect
+                      id="language"
+                      value={language}
+                      onChange={(value) => {
+                        const nextLanguage = value as LanguageType;
+                        setLanguage(nextLanguage);
+                        i18nService.setLanguage(nextLanguage, { persist: false });
+                      }}
+                      options={[
+                        { value: 'zh', label: i18nService.t('chinese') },
+                        { value: 'en', label: i18nService.t('english') }
+                      ]}
+                    />
+                  </div>
+                </SettingsFieldRow>
+
+                <SettingsFieldRow
+                  title={i18nService.t('autoLaunch')}
+                  description={i18nService.t('autoLaunchDescription')}
+                >
+                  <SettingsToggle
+                    checked={autoLaunch}
+                    disabled={isUpdatingAutoLaunch}
+                    ariaLabel={i18nService.t('autoLaunch')}
+                    onClick={async () => {
+                      if (isUpdatingAutoLaunch) return;
+                      const next = !autoLaunch;
+                      setIsUpdatingAutoLaunch(true);
+                      try {
+                        const result = await window.electron.autoLaunch.set(next);
+                        if (result.success) {
+                          setAutoLaunchState(next);
+                        } else {
+                          setError(result.error || 'Failed to update auto-launch setting');
+                        }
+                      } catch (err) {
+                        console.error('Failed to set auto-launch:', err);
+                        setError('Failed to update auto-launch setting');
+                      } finally {
+                        setIsUpdatingAutoLaunch(false);
+                      }
+                    }}
+                  />
+                </SettingsFieldRow>
+
+                <SettingsFieldRow
+                  title={i18nService.t('preventSleep')}
+                  description={i18nService.t('preventSleepDescription')}
+                >
+                  <SettingsToggle
+                    checked={preventSleep}
+                    disabled={isUpdatingPreventSleep}
+                    ariaLabel={i18nService.t('preventSleep')}
+                    onClick={async () => {
+                      if (isUpdatingPreventSleep) return;
+                      const next = !preventSleep;
+                      setIsUpdatingPreventSleep(true);
+                      try {
+                        const result = await window.electron.preventSleep.set(next);
+                        if (result.success) {
+                          setPreventSleepState(next);
+                        } else {
+                          setError(result.error || 'Failed to update prevent-sleep setting');
+                        }
+                      } catch (err) {
+                        console.error('Failed to set prevent-sleep:', err);
+                        setError('Failed to update prevent-sleep setting');
+                      } finally {
+                        setIsUpdatingPreventSleep(false);
+                      }
+                    }}
+                  />
+                </SettingsFieldRow>
+
+                <SettingsFieldRow
+                  title={i18nService.t('useSystemProxy')}
+                  description={i18nService.t('useSystemProxyDescription')}
+                >
+                  <SettingsToggle
+                    checked={useSystemProxy}
+                    ariaLabel={i18nService.t('useSystemProxy')}
+                    onClick={() => setUseSystemProxy((prev) => !prev)}
+                  />
+                </SettingsFieldRow>
               </div>
-            </div>
-
-            {/* Auto-launch Section */}
-            <div>
-              <h4 className="text-sm font-medium text-foreground mb-3">
-                {i18nService.t('autoLaunch')}
-              </h4>
-              <label className="flex items-center justify-between cursor-pointer">
-                <span className="text-sm text-secondary">
-                  {i18nService.t('autoLaunchDescription')}
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={autoLaunch}
-                  onClick={async () => {
-                    if (isUpdatingAutoLaunch) return;
-                    const next = !autoLaunch;
-                    setIsUpdatingAutoLaunch(true);
-                    try {
-                      const result = await window.electron.autoLaunch.set(next);
-                      if (result.success) {
-                        setAutoLaunchState(next);
-                      } else {
-                        setError(result.error || 'Failed to update auto-launch setting');
-                      }
-                    } catch (err) {
-                      console.error('Failed to set auto-launch:', err);
-                      setError('Failed to update auto-launch setting');
-                    } finally {
-                      setIsUpdatingAutoLaunch(false);
-                    }
-                  }}
-                  disabled={isUpdatingAutoLaunch}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                    isUpdatingAutoLaunch ? 'opacity-50 cursor-not-allowed' : ''
-                  } ${
-                    autoLaunch
-                      ? 'bg-primary'
-                      : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      autoLaunch ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </label>
-            </div>
-
-            {/* Prevent Sleep Section */}
-            <div>
-              <h4 className="text-sm font-medium text-foreground mb-3">
-                {i18nService.t('preventSleep')}
-              </h4>
-              <label className="flex items-center justify-between cursor-pointer">
-                <span className="text-sm text-secondary">
-                  {i18nService.t('preventSleepDescription')}
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={preventSleep}
-                  onClick={async () => {
-                    if (isUpdatingPreventSleep) return;
-                    const next = !preventSleep;
-                    setIsUpdatingPreventSleep(true);
-                    try {
-                      const result = await window.electron.preventSleep.set(next);
-                      if (result.success) {
-                        setPreventSleepState(next);
-                      } else {
-                        setError(result.error || 'Failed to update prevent-sleep setting');
-                      }
-                    } catch (err) {
-                      console.error('Failed to set prevent-sleep:', err);
-                      setError('Failed to update prevent-sleep setting');
-                    } finally {
-                      setIsUpdatingPreventSleep(false);
-                    }
-                  }}
-                  disabled={isUpdatingPreventSleep}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                    isUpdatingPreventSleep ? 'opacity-50 cursor-not-allowed' : ''
-                  } ${
-                    preventSleep
-                      ? 'bg-primary'
-                      : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      preventSleep ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </label>
-            </div>
-
-            {/* System proxy Section */}
-            <div>
-              <h4 className="text-sm font-medium text-foreground mb-3">
-                {i18nService.t('useSystemProxy')}
-              </h4>
-              <label className="flex items-center justify-between cursor-pointer">
-                <span className="text-sm text-secondary">
-                  {i18nService.t('useSystemProxyDescription')}
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={useSystemProxy}
-                  onClick={() => {
-                    setUseSystemProxy((prev) => !prev);
-                  }}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                    useSystemProxy
-                      ? 'bg-primary'
-                      : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      useSystemProxy ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </label>
-            </div>
+            </SettingsSectionCard>
 
             <PetSettingsSection />
 
             {isMac && (
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-sm font-medium dark:text-claude-darkText text-claude-text mb-1">
-                    {i18nService.t('speechInputCommandsTitle')}
-                  </h4>
-                  <p className="text-sm dark:text-claude-darkSecondaryText text-claude-secondaryText">
-                    {i18nService.t('speechInputCommandsDescription')}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border dark:border-claude-darkBorder border-claude-border px-4 py-3">
-                  <div className="space-y-3">
+              <SettingsSectionCard
+                title={i18nService.t('speechInputCommandsTitle')}
+                description={i18nService.t('speechInputCommandsDescription')}
+              >
+                <div className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block">
-                      <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                      <SettingsFieldLabel>
                         {i18nService.t('speechInputStopCommandLabel')}
-                      </div>
+                      </SettingsFieldLabel>
                       <input
                         type="text"
                         value={speechStopCommand}
                         onChange={(event) => setSpeechStopCommand(event.target.value)}
                         placeholder={i18nService.t('speechInputStopCommandPlaceholder')}
-                        className="w-full rounded-lg border dark:border-claude-darkBorder border-claude-border px-3 py-2 text-sm dark:bg-claude-darkSurface bg-white dark:text-claude-darkText text-claude-text"
+                        className={settingsInputClassName}
                       />
                     </label>
 
                     <label className="block">
-                      <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                      <SettingsFieldLabel>
                         {i18nService.t('speechInputSubmitCommandLabel')}
-                      </div>
+                      </SettingsFieldLabel>
                       <input
                         type="text"
                         value={speechSubmitCommand}
                         onChange={(event) => setSpeechSubmitCommand(event.target.value)}
                         placeholder={i18nService.t('speechInputSubmitCommandPlaceholder')}
-                        className="w-full rounded-lg border dark:border-claude-darkBorder border-claude-border px-3 py-2 text-sm dark:bg-claude-darkSurface bg-white dark:text-claude-darkText text-claude-text"
+                        className={settingsInputClassName}
                       />
-                    </label>
-
-                    <label className="flex items-start justify-between gap-4 cursor-pointer">
-                      <div className="min-w-0">
-                        <div className="text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                          {i18nService.t('speechInputAutoRestartAfterReplyLabel')}
-                        </div>
-                        <div className="mt-1 text-[11px] dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                          {i18nService.t('speechInputAutoRestartAfterReplyHint')}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={speechAutoRestartAfterReply}
-                        onClick={() => setSpeechAutoRestartAfterReply((prev) => !prev)}
-                        className={`relative mt-0.5 inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                          speechAutoRestartAfterReply ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            speechAutoRestartAfterReply ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </label>
-
-                    <label className="flex items-start justify-between gap-4 cursor-pointer">
-                      <div className="min-w-0">
-                        <div className="text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                          {i18nService.t('speechInputLlmCorrectionLabel')}
-                        </div>
-                        <div className="mt-1 text-[11px] dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                          {i18nService.t('speechInputLlmCorrectionHint')}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={sttLlmCorrectionEnabled}
-                        onClick={() => setSttLlmCorrectionEnabled((prev) => !prev)}
-                        className={`relative mt-0.5 inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                          sttLlmCorrectionEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            sttLlmCorrectionEnabled ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
                     </label>
                   </div>
 
-                  <p className="mt-3 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                  <div className="divide-y divide-border/60">
+                    <SettingsFieldRow
+                      title={i18nService.t('speechInputAutoRestartAfterReplyLabel')}
+                      description={i18nService.t('speechInputAutoRestartAfterReplyHint')}
+                    >
+                      <SettingsToggle
+                        checked={speechAutoRestartAfterReply}
+                        ariaLabel={i18nService.t('speechInputAutoRestartAfterReplyLabel')}
+                        onClick={() => setSpeechAutoRestartAfterReply((prev) => !prev)}
+                      />
+                    </SettingsFieldRow>
+
+                    <SettingsFieldRow
+                      title={i18nService.t('speechInputLlmCorrectionLabel')}
+                      description={i18nService.t('speechInputLlmCorrectionHint')}
+                    >
+                      <SettingsToggle
+                        checked={sttLlmCorrectionEnabled}
+                        ariaLabel={i18nService.t('speechInputLlmCorrectionLabel')}
+                        onClick={() => setSttLlmCorrectionEnabled((prev) => !prev)}
+                      />
+                    </SettingsFieldRow>
+                  </div>
+
+                  <p className="jbp-visual-muted-pill rounded-lg px-3 py-2 text-xs leading-5">
                     {i18nService.t('speechInputCommandsHint')}
                   </p>
                 </div>
-              </div>
+              </SettingsSectionCard>
             )}
 
             {isMac && (
-              <div className="space-y-4">
-                <button
-                  type="button"
-                  aria-expanded={wakeInputSectionExpanded}
-                  onClick={() => setWakeInputSectionExpanded((prev) => !prev)}
-                  className="flex w-full items-start justify-between gap-4 rounded-xl border dark:border-claude-darkBorder border-claude-border px-4 py-3 text-left transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-                >
-                  <div>
-                    <h4 className="text-sm font-medium dark:text-claude-darkText text-claude-text mb-1">
-                      {i18nService.t('wakeInputTitle')}
-                    </h4>
-                    <p className="text-sm dark:text-claude-darkSecondaryText text-claude-secondaryText">
-                      {i18nService.t('wakeInputDescription')}
-                    </p>
-                  </div>
-                  <ChevronDownIcon
-                    className={`mt-0.5 h-4 w-4 shrink-0 text-secondary transition-transform ${
-                      wakeInputSectionExpanded ? 'rotate-180' : ''
-                    }`}
-                  />
-                </button>
-
-                {wakeInputSectionExpanded && (
-                  <div className="rounded-xl border dark:border-claude-darkBorder border-claude-border px-4 py-3 space-y-3">
-                    <label className="flex items-center justify-between cursor-pointer">
-                      <span className="text-sm text-secondary">
-                        {i18nService.t('wakeInputEnabledLabel')}
-                      </span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={wakeInputEnabled}
+              <SettingsSectionCard
+                title={i18nService.t('wakeInputTitle')}
+                description={i18nService.t('wakeInputDescription')}
+                action={
+                  <button
+                    type="button"
+                    aria-expanded={wakeInputSectionExpanded}
+                    onClick={() => setWakeInputSectionExpanded((prev) => !prev)}
+                    className="jbp-visual-secondary-action inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+                  >
+                    <ChevronDownIcon
+                      className={'h-4 w-4 transition-transform ' + (wakeInputSectionExpanded ? 'rotate-180' : '')}
+                    />
+                  </button>
+                }
+              >
+                <div className="space-y-4">
+                  <div className="divide-y divide-border/60">
+                    <SettingsFieldRow title={i18nService.t('wakeInputEnabledLabel')}>
+                      <SettingsToggle
+                        checked={wakeInputEnabled}
+                        ariaLabel={i18nService.t('wakeInputEnabledLabel')}
                         onClick={() => setWakeInputEnabled((prev) => !prev)}
-                        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                          wakeInputEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            wakeInputEnabled ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </label>
-
-                    <label className="block">
-                      <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                        {i18nService.t('wakeInputWakeWordsLabel')}
-                      </div>
-                      <textarea
-                        value={wakeInputWakeWordsText}
-                        onChange={(event) => setWakeInputWakeWordsText(event.target.value)}
-                        placeholder={i18nService.t('wakeInputWakeWordsPlaceholder')}
-                        rows={3}
-                        className="w-full rounded-lg border dark:border-claude-darkBorder border-claude-border px-3 py-2 text-sm dark:bg-claude-darkSurface bg-white dark:text-claude-darkText text-claude-text"
                       />
-                      <div className="mt-1 text-[11px] dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                        {i18nService.t('wakeInputWakeWordsHint')}
-                      </div>
-                    </label>
-                    <div className="text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                      {i18nService.t('wakeInputStatusLabel')}: {wakeInputStatus ? i18nService.t(`wakeInputStatus_${wakeInputStatus.status}`) : i18nService.t('loading')}
-                    </div>
+                    </SettingsFieldRow>
 
-                    <label className="block">
-                      <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                        {i18nService.t('wakeInputSubmitCommandLabel')}
-                      </div>
-                      <input
-                        type="text"
-                        value={wakeInputSubmitCommand}
-                        onChange={(event) => setWakeInputSubmitCommand(event.target.value)}
-                        placeholder={i18nService.t('wakeInputSubmitCommandPlaceholder')}
-                        className="w-full rounded-lg border dark:border-claude-darkBorder border-claude-border px-3 py-2 text-sm dark:bg-claude-darkSurface bg-white dark:text-claude-darkText text-claude-text"
-                      />
-                    </label>
-
-                    <label className="block">
-                      <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                        {i18nService.t('wakeInputCancelCommandLabel')}
-                      </div>
-                      <input
-                        type="text"
-                        value={wakeInputCancelCommand}
-                        onChange={(event) => setWakeInputCancelCommand(event.target.value)}
-                        placeholder={i18nService.t('wakeInputCancelCommandPlaceholder')}
-                        className="w-full rounded-lg border dark:border-claude-darkBorder border-claude-border px-3 py-2 text-sm dark:bg-claude-darkSurface bg-white dark:text-claude-darkText text-claude-text"
-                      />
-                    </label>
-
-                    <label className="flex items-center justify-between cursor-pointer">
-                      <span className="text-sm text-secondary">
-                        {i18nService.t('wakeInputActivationReplyEnabledLabel')}
+                    <SettingsFieldRow
+                      title={i18nService.t('wakeInputStatusLabel')}
+                      description={wakeInputStatus ? i18nService.t('wakeInputStatus_' + wakeInputStatus.status) : i18nService.t('loading')}
+                    >
+                      <span className={wakeInputEnabled ? 'jbp-visual-status-pill rounded-full px-2.5 py-1 text-xs font-medium' : 'jbp-visual-muted-pill rounded-full px-2.5 py-1 text-xs font-medium'}>
+                        {wakeInputEnabled ? i18nService.t('enabled') : i18nService.t('disabled')}
                       </span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={wakeInputActivationReplyEnabled}
-                        onClick={() => setWakeInputActivationReplyEnabled((prev) => !prev)}
-                        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                          wakeInputActivationReplyEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            wakeInputActivationReplyEnabled ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </label>
-
-                    <label className="block">
-                      <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                        {i18nService.t('wakeInputActivationReplyTextLabel')}
-                      </div>
-                      <input
-                        type="text"
-                        value={wakeInputActivationReplyText}
-                        onChange={(event) => setWakeInputActivationReplyText(event.target.value)}
-                        placeholder={DEFAULT_WAKE_INPUT_CONFIG.activationReplyText}
-                        className="w-full rounded-lg border dark:border-claude-darkBorder border-claude-border px-3 py-2 text-sm dark:bg-claude-darkSurface bg-white dark:text-claude-darkText text-claude-text"
-                      />
-                      <div className="mt-1 text-[11px] dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                        {i18nService.t('wakeInputActivationReplyTextHint')}
-                      </div>
-                    </label>
+                    </SettingsFieldRow>
                   </div>
-                )}
-              </div>
+
+                  {wakeInputSectionExpanded && (
+                    <div className="space-y-4 border-t border-border/60 pt-4">
+                      <label className="block">
+                        <SettingsFieldLabel>
+                          {i18nService.t('wakeInputWakeWordsLabel')}
+                        </SettingsFieldLabel>
+                        <textarea
+                          value={wakeInputWakeWordsText}
+                          onChange={(event) => setWakeInputWakeWordsText(event.target.value)}
+                          placeholder={i18nService.t('wakeInputWakeWordsPlaceholder')}
+                          rows={3}
+                          className={settingsInputClassName}
+                        />
+                        <div className="mt-1 text-[11px] leading-4 text-secondary">
+                          {i18nService.t('wakeInputWakeWordsHint')}
+                        </div>
+                      </label>
+
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="block">
+                          <SettingsFieldLabel>
+                            {i18nService.t('wakeInputSubmitCommandLabel')}
+                          </SettingsFieldLabel>
+                          <input
+                            type="text"
+                            value={wakeInputSubmitCommand}
+                            onChange={(event) => setWakeInputSubmitCommand(event.target.value)}
+                            placeholder={i18nService.t('wakeInputSubmitCommandPlaceholder')}
+                            className={settingsInputClassName}
+                          />
+                        </label>
+
+                        <label className="block">
+                          <SettingsFieldLabel>
+                            {i18nService.t('wakeInputCancelCommandLabel')}
+                          </SettingsFieldLabel>
+                          <input
+                            type="text"
+                            value={wakeInputCancelCommand}
+                            onChange={(event) => setWakeInputCancelCommand(event.target.value)}
+                            placeholder={i18nService.t('wakeInputCancelCommandPlaceholder')}
+                            className={settingsInputClassName}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="divide-y divide-border/60 rounded-lg border border-border/60 px-3">
+                        <SettingsFieldRow title={i18nService.t('wakeInputActivationReplyEnabledLabel')}>
+                          <SettingsToggle
+                            checked={wakeInputActivationReplyEnabled}
+                            ariaLabel={i18nService.t('wakeInputActivationReplyEnabledLabel')}
+                            onClick={() => setWakeInputActivationReplyEnabled((prev) => !prev)}
+                          />
+                        </SettingsFieldRow>
+                      </div>
+
+                      <label className="block">
+                        <SettingsFieldLabel>
+                          {i18nService.t('wakeInputActivationReplyTextLabel')}
+                        </SettingsFieldLabel>
+                        <input
+                          type="text"
+                          value={wakeInputActivationReplyText}
+                          onChange={(event) => setWakeInputActivationReplyText(event.target.value)}
+                          placeholder={DEFAULT_WAKE_INPUT_CONFIG.activationReplyText}
+                          className={settingsInputClassName}
+                        />
+                        <div className="mt-1 text-[11px] leading-4 text-secondary">
+                          {i18nService.t('wakeInputActivationReplyTextHint')}
+                        </div>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              </SettingsSectionCard>
             )}
 
             {isMac && (
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-sm font-medium dark:text-claude-darkText text-claude-text mb-1">
-                    {i18nService.t('ttsTitle')}
-                  </h4>
-                  <p className="text-sm dark:text-claude-darkSecondaryText text-claude-secondaryText">
-                    {i18nService.t('ttsDescription')}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border dark:border-claude-darkBorder border-claude-border px-4 py-3 space-y-4">
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <span className="text-sm text-secondary">
-                      {i18nService.t('ttsEnabledLabel')}
-                    </span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={ttsEnabled}
-                      onClick={() => setTtsEnabled((prev) => !prev)}
-                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                        ttsEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          ttsEnabled ? 'translate-x-6' : 'translate-x-1'
-                        }`}
+              <SettingsSectionCard
+                title={i18nService.t('ttsTitle')}
+                description={i18nService.t('ttsDescription')}
+              >
+                <div className="space-y-4">
+                  <div className="divide-y divide-border/60">
+                    <SettingsFieldRow title={i18nService.t('ttsEnabledLabel')}>
+                      <SettingsToggle
+                        checked={ttsEnabled}
+                        ariaLabel={i18nService.t('ttsEnabledLabel')}
+                        onClick={() => setTtsEnabled((prev) => !prev)}
                       />
-                    </button>
-                  </label>
+                    </SettingsFieldRow>
 
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <span className="text-sm text-secondary">
-                      {i18nService.t('ttsAutoPlayLabel')}
-                    </span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={ttsAutoPlayAssistantReply}
-                      onClick={() => setTtsAutoPlayAssistantReply((prev) => !prev)}
-                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                        ttsAutoPlayAssistantReply ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          ttsAutoPlayAssistantReply ? 'translate-x-6' : 'translate-x-1'
-                        }`}
+                    <SettingsFieldRow title={i18nService.t('ttsAutoPlayLabel')}>
+                      <SettingsToggle
+                        checked={ttsAutoPlayAssistantReply}
+                        ariaLabel={i18nService.t('ttsAutoPlayLabel')}
+                        onClick={() => setTtsAutoPlayAssistantReply((prev) => !prev)}
                       />
-                    </button>
-                  </label>
+                    </SettingsFieldRow>
 
-                  <label className="flex items-start justify-between gap-4 cursor-pointer">
-                    <div className="min-w-0">
-                      <div className="text-sm text-secondary">
-                        {i18nService.t('ttsLlmRewriteLabel')}
-                      </div>
-                      <div className="mt-1 text-[11px] dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                        {i18nService.t('ttsLlmRewriteHint')}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={ttsLlmRewriteEnabled}
-                      onClick={() => setTtsLlmRewriteEnabled((prev) => !prev)}
-                      className={`relative mt-0.5 inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
-                        ttsLlmRewriteEnabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
-                      }`}
+                    <SettingsFieldRow
+                      title={i18nService.t('ttsLlmRewriteLabel')}
+                      description={i18nService.t('ttsLlmRewriteHint')}
                     >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          ttsLlmRewriteEnabled ? 'translate-x-6' : 'translate-x-1'
-                        }`}
+                      <SettingsToggle
+                        checked={ttsLlmRewriteEnabled}
+                        ariaLabel={i18nService.t('ttsLlmRewriteLabel')}
+                        onClick={() => setTtsLlmRewriteEnabled((prev) => !prev)}
                       />
-                    </button>
-                  </label>
-
-                  <div>
-                    <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                      {i18nService.t('ttsEngineLabel')}
-                    </div>
-                    <ThemedSelect
-                      id="tts-engine"
-                      value={ttsEngine}
-                      onChange={(value) => setTtsEngine(value as TtsEngine)}
-                      options={[
-                        { value: TtsEngine.MacOsNative, label: i18nService.t('ttsEngineMacOsNative') },
-                        { value: TtsEngine.EdgeTts, label: i18nService.t('ttsEngineEdgeTts') },
-                      ]}
-                    />
-                    <div className="mt-1 text-[11px] dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                      {i18nService.t(`ttsPrepareStatus_${ttsAvailability?.prepareStatus ?? TtsPrepareStatus.Idle}`)}
-                      {ttsAvailability?.error ? `: ${ttsAvailability.error}` : ''}
-                    </div>
-                    {ttsEngine === TtsEngine.EdgeTts && (
-                      <button
-                        type="button"
-                        onClick={handleRetryEdgeTtsPrepare}
-                        disabled={isPreparingEdgeTts || ttsAvailability?.canRetryPrepare === false}
-                        className={`mt-2 rounded-lg border px-3 py-1.5 text-xs ${
-                          isPreparingEdgeTts || ttsAvailability?.canRetryPrepare === false
-                            ? 'cursor-not-allowed opacity-70 dark:border-claude-darkBorder border-claude-border dark:text-claude-darkText text-claude-text'
-                            : 'dark:border-claude-darkBorder border-claude-border dark:text-claude-darkText text-claude-text hover:bg-black/5 dark:hover:bg-white/5'
-                        }`}
-                      >
-                        {isPreparingEdgeTts
-                          ? i18nService.t('ttsPrepareRetrying')
-                          : ttsAvailability?.canRetryPrepare === false
-                            ? i18nService.t('ttsPrepareRetryUnavailable')
-                            : i18nService.t('ttsPrepareRetry')}
-                      </button>
-                    )}
+                    </SettingsFieldRow>
                   </div>
 
-                  <div>
-                    <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                      {i18nService.t('ttsVoiceLabel')}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <SettingsFieldLabel>
+                        {i18nService.t('ttsEngineLabel')}
+                      </SettingsFieldLabel>
+                      <ThemedSelect
+                        id="tts-engine"
+                        value={ttsEngine}
+                        onChange={(value) => setTtsEngine(value as TtsEngine)}
+                        options={[
+                          { value: TtsEngine.MacOsNative, label: i18nService.t('ttsEngineMacOsNative') },
+                          { value: TtsEngine.EdgeTts, label: i18nService.t('ttsEngineEdgeTts') },
+                        ]}
+                      />
+                      <div className="mt-1 text-[11px] leading-4 text-secondary">
+                        {i18nService.t('ttsPrepareStatus_' + (ttsAvailability?.prepareStatus ?? TtsPrepareStatus.Idle))}
+                        {ttsAvailability?.error ? ': ' + ttsAvailability.error : ''}
+                      </div>
+                      {ttsEngine === TtsEngine.EdgeTts && (
+                        <button
+                          type="button"
+                          onClick={handleRetryEdgeTtsPrepare}
+                          disabled={isPreparingEdgeTts || ttsAvailability?.canRetryPrepare === false}
+                          className={'mt-2 rounded-lg px-3 py-1.5 text-xs transition-colors ' + (
+                            isPreparingEdgeTts || ttsAvailability?.canRetryPrepare === false
+                              ? 'jbp-visual-secondary-action cursor-not-allowed opacity-70'
+                              : 'jbp-visual-secondary-action'
+                          )}
+                        >
+                          {isPreparingEdgeTts
+                            ? i18nService.t('ttsPrepareRetrying')
+                            : ttsAvailability?.canRetryPrepare === false
+                              ? i18nService.t('ttsPrepareRetryUnavailable')
+                              : i18nService.t('ttsPrepareRetry')}
+                        </button>
+                      )}
                     </div>
-                    <ThemedSelect
-                      id="tts-voice"
-                      value={ttsVoiceId}
-                      onChange={(value) => setTtsVoiceId(value)}
-                      options={[
-                        { value: '', label: i18nService.t('ttsVoiceAuto') },
-                        ...ttsVoices.map((voice) => ({
-                          value: voice.identifier,
-                          label: `${voice.name} (${voice.language})`,
-                        })),
-                      ]}
-                    />
+
+                    <div>
+                      <SettingsFieldLabel>
+                        {i18nService.t('ttsVoiceLabel')}
+                      </SettingsFieldLabel>
+                      <ThemedSelect
+                        id="tts-voice"
+                        value={ttsVoiceId}
+                        onChange={(value) => setTtsVoiceId(value)}
+                        options={[
+                          { value: '', label: i18nService.t('ttsVoiceAuto') },
+                          ...ttsVoices.map((voice) => ({
+                            value: voice.identifier,
+                            label: voice.name + ' (' + voice.language + ')',
+                          })),
+                        ]}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block rounded-lg border border-border/60 px-3 py-3">
+                      <div className="mb-2 flex items-center justify-between text-xs font-medium text-secondary">
+                        <span>{i18nService.t('ttsRateLabel')}</span>
+                        <span className="text-foreground">{ttsRate.toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="1"
+                        step="0.05"
+                        value={ttsRate}
+                        onChange={(event) => setTtsRate(Number(event.target.value))}
+                        className="w-full accent-primary"
+                      />
+                    </label>
+
+                    <label className="block rounded-lg border border-border/60 px-3 py-3">
+                      <div className="mb-2 flex items-center justify-between text-xs font-medium text-secondary">
+                        <span>{i18nService.t('ttsVolumeLabel')}</span>
+                        <span className="text-foreground">{ttsVolume.toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={ttsVolume}
+                        onChange={(event) => setTtsVolume(Number(event.target.value))}
+                        className="w-full accent-primary"
+                      />
+                    </label>
                   </div>
 
                   <label className="block">
-                    <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                      {i18nService.t('ttsRateLabel')}: {ttsRate.toFixed(2)}
-                    </div>
-                    <input
-                      type="range"
-                      min="0.1"
-                      max="1"
-                      step="0.05"
-                      value={ttsRate}
-                      onChange={(event) => setTtsRate(Number(event.target.value))}
-                      className="w-full"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                      {i18nService.t('ttsVolumeLabel')}: {ttsVolume.toFixed(2)}
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={ttsVolume}
-                      onChange={(event) => setTtsVolume(Number(event.target.value))}
-                      className="w-full"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                    <SettingsFieldLabel>
                       {i18nService.t('ttsSkipKeywordsLabel')}
-                    </div>
+                    </SettingsFieldLabel>
                     <textarea
                       value={ttsSkipKeywordsText}
                       onChange={(event) => setTtsSkipKeywordsText(event.target.value)}
                       placeholder={i18nService.t('ttsSkipKeywordsPlaceholder')}
                       rows={4}
-                      className="w-full rounded-lg border dark:border-claude-darkBorder border-claude-border px-3 py-2 text-sm dark:bg-claude-darkSurface bg-white dark:text-claude-darkText text-claude-text"
+                      className={settingsInputClassName}
                     />
-                    <div className="mt-1 text-[11px] dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                    <div className="mt-1 text-[11px] leading-4 text-secondary">
                       {i18nService.t('ttsSkipKeywordsHint')}
                     </div>
                   </label>
 
-                  <p className="text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
+                  <p className="jbp-visual-muted-pill rounded-lg px-3 py-2 text-xs leading-5">
                     {ttsEngine === TtsEngine.EdgeTts
                       ? i18nService.t('ttsEdgeVoiceHint')
                       : i18nService.t('ttsVoiceHint')}
                   </p>
                 </div>
-              </div>
+              </SettingsSectionCard>
             )}
 
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-sm font-medium dark:text-claude-darkText text-claude-text mb-1">
-                  {i18nService.t('authSettingsTitle')}
-                </h4>
-                <p className="text-sm dark:text-claude-darkSecondaryText text-claude-secondaryText">
-                  {i18nService.t('authSettingsDescription')}
-                </p>
+            <SettingsSectionCard
+              title={i18nService.t('authSettingsTitle')}
+              description={i18nService.t('authSettingsDescription')}
+              action={<span className="jbp-visual-status-pill rounded-full px-2.5 py-1 text-xs font-medium">{i18nService.t('authBackendQtb')}</span>}
+            >
+              <div className="space-y-4">
+                <label className="block">
+                  <SettingsFieldLabel>
+                    {i18nService.t('authQtbApiBaseUrl')}
+                  </SettingsFieldLabel>
+                  <input
+                    type="text"
+                    value={qtbApiBaseUrl}
+                    onChange={(event) => setQtbApiBaseUrl(event.target.value)}
+                    placeholder={i18nService.t('authQtbApiBaseUrlPlaceholder')}
+                    className={settingsInputClassName}
+                  />
+                  <p className="mt-1 text-[11px] leading-4 text-secondary">
+                    {i18nService.t('authQtbApiBaseUrlHint')}
+                  </p>
+                </label>
+
+                <label className="block">
+                  <SettingsFieldLabel>
+                    {i18nService.t('authQtbWebBaseUrl')}
+                  </SettingsFieldLabel>
+                  <input
+                    type="text"
+                    value={qtbWebBaseUrl}
+                    onChange={(event) => setQtbWebBaseUrl(event.target.value)}
+                    placeholder={i18nService.t('authQtbWebBaseUrlPlaceholder')}
+                    className={settingsInputClassName}
+                  />
+                </label>
+
+                <label className="block">
+                  <SettingsFieldLabel>
+                    {i18nService.t('authEladminMpBaseUrl')}
+                  </SettingsFieldLabel>
+                  <input
+                    type="text"
+                    value={eladminMpBaseUrl}
+                    onChange={(event) => setEladminMpBaseUrl(event.target.value)}
+                    placeholder={i18nService.t('authEladminMpBaseUrlPlaceholder')}
+                    className={settingsInputClassName}
+                  />
+                  <p className="mt-1 text-[11px] leading-4 text-secondary">
+                    {i18nService.t('authEladminMpBaseUrlHint')}
+                  </p>
+                </label>
               </div>
-
-              <div className="rounded-xl border dark:border-claude-darkBorder border-claude-border px-4 py-3">
-                <div className="text-sm font-medium dark:text-claude-darkText text-claude-text">
-                  {i18nService.t('authBackendQtb')}
-                </div>
-                <div className="mt-3 space-y-3">
-                  <label className="block">
-                    <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                      {i18nService.t('authQtbApiBaseUrl')}
-                    </div>
-                    <input
-                      type="text"
-                      value={qtbApiBaseUrl}
-                      onChange={(event) => setQtbApiBaseUrl(event.target.value)}
-                      placeholder={i18nService.t('authQtbApiBaseUrlPlaceholder')}
-                      className="w-full rounded-lg border dark:border-claude-darkBorder border-claude-border px-3 py-2 text-sm dark:bg-claude-darkSurface bg-white dark:text-claude-darkText text-claude-text"
-                    />
-                    <p className="mt-1 text-[11px] dark:text-claude-darkSecondaryText text-claude-secondaryText">
-                      {i18nService.t('authQtbApiBaseUrlHint')}
-                    </p>
-                  </label>
-
-                  <label className="block">
-                    <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                      {i18nService.t('authQtbWebBaseUrl')}
-                    </div>
-                    <input
-                      type="text"
-                      value={qtbWebBaseUrl}
-                      onChange={(event) => setQtbWebBaseUrl(event.target.value)}
-                      placeholder={i18nService.t('authQtbWebBaseUrlPlaceholder')}
-                      className="w-full rounded-lg border dark:border-claude-darkBorder border-claude-border px-3 py-2 text-sm dark:bg-claude-darkSurface bg-white dark:text-claude-darkText text-claude-text"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <div className="mb-1 text-xs dark:text-claude-darkTextSecondary text-claude-textSecondary">
-                      {i18nService.t('authEladminMpBaseUrl')}
-                    </div>
-                    <input
-                      type="text"
-                      value={eladminMpBaseUrl}
-                      onChange={(event) => setEladminMpBaseUrl(event.target.value)}
-                      placeholder={i18nService.t('authEladminMpBaseUrlPlaceholder')}
-                      className="w-full rounded-lg border dark:border-claude-darkBorder border-claude-border px-3 py-2 text-sm dark:bg-claude-darkSurface bg-white dark:text-claude-darkText text-claude-text"
-                    />
-                    <p className="mt-1 text-[11px] dark:text-claude-darkSecondaryText text-claude-secondaryText">
-                      {i18nService.t('authEladminMpBaseUrlHint')}
-                    </p>
-                  </label>
-                </div>
-              </div>
-            </div>
-
+            </SettingsSectionCard>
           </div>
         );
 

@@ -445,12 +445,10 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
 
   const renderToggle = (isOn: boolean) => (
     <div
-      className={`relative w-9 h-5 rounded-full transition-colors ${
-        isOn ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
-      }`}
+      className={`jbp-visual-toggle relative h-5 w-9 rounded-full transition-colors ${isOn ? 'is-on' : ''}`}
     >
       <div
-        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+        className={`jbp-visual-toggle-knob absolute top-0.5 h-4 w-4 rounded-full transition-transform ${
           isOn ? 'translate-x-4' : 'translate-x-0.5'
         }`}
       />
@@ -466,47 +464,48 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={handleClose}>
+    <div className="jbp-visual-backdrop fixed inset-0 z-50 flex items-center justify-center" onClick={handleClose}>
       <div
-        className="w-full max-w-2xl mx-4 rounded-xl shadow-xl bg-surface border border-border max-h-[80vh] flex flex-col"
+        className="jbp-visual-panel w-full max-w-2xl mx-4 rounded-2xl max-h-[80vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header: agent icon + name + close */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">{icon || '🤖'}</span>
-            <h3 className="text-base font-semibold text-foreground">
-              {name || (i18nService.t('agentSettings') || 'Agent Settings')}
-            </h3>
+        <div className="relative flex items-center justify-between px-6 py-5 border-b border-border">
+          <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-primary/25 to-transparent" />
+          <div className="flex items-center gap-3">
+            <div className="jbp-visual-icon-tile flex h-10 w-10 items-center justify-center rounded-2xl">
+              <span className="text-xl">{icon || '🤖'}</span>
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-foreground">
+                {name || (i18nService.t('agentSettings') || 'Agent Settings')}
+              </h3>
+              <p className="mt-0.5 text-[11px] text-muted">
+                {isManagedReadOnly ? i18nService.t('managedAgents') : i18nService.t('agentSettings')}
+              </p>
+            </div>
           </div>
-          <button type="button" onClick={handleClose} className="p-1 rounded-lg hover:bg-surface-raised">
+          <button type="button" onClick={handleClose} className="rounded-xl p-2 text-secondary hover:bg-surface-raised hover:text-foreground transition-colors">
             <XMarkIcon className="h-5 w-5 text-secondary" />
           </button>
         </div>
 
         {/* Tab bar */}
-        <div className="flex border-b border-border px-5">
+        <div className="flex gap-1 border-b border-border bg-surface-raised/30 px-6 py-2">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               type="button"
               onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2.5 text-sm font-medium transition-colors relative ${
-                activeTab === tab.key
-                  ? 'text-primary'
-                  : 'text-secondary hover:text-foreground'
-              }`}
+              className={`jbp-visual-agent-tab rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200 ${activeTab === tab.key ? 'is-active' : ''}`}
             >
               {tab.label}
-              {activeTab === tab.key && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
-              )}
             </button>
           ))}
         </div>
 
         {/* Tab content */}
-        <div className="px-5 py-4 overflow-y-auto flex-1 min-h-[300px]">
+        <div className="px-6 py-5 overflow-y-auto flex-1 min-h-[300px]">
           {activeTab === 'basic' && (
             <div className="space-y-4">
               <div>
@@ -519,8 +518,8 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
                   </p>
                 )}
                 {isManagedUnavailable && (
-                  <div className="mb-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-secondary">
-                    <div className="inline-flex items-center gap-1 rounded-full border border-border bg-background/80 px-2 py-1 text-[10px] font-medium text-secondary">
+                  <div className="jbp-visual-muted-pill mb-2 rounded-xl px-3 py-2 text-xs">
+                    <div className="jbp-visual-muted-pill inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium">
                       <LockClosedIcon className="h-3 w-3" />
                       {i18nService.t('managedUnavailableTag')}
                     </div>
@@ -530,8 +529,8 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
                   </div>
                 )}
                 {isManagedForbidden && !isManagedUnavailable && (
-                  <div className="mb-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-secondary">
-                    <div className="inline-flex items-center gap-1 rounded-full border border-border bg-background/80 px-2 py-1 text-[10px] font-medium text-secondary">
+                  <div className="jbp-visual-muted-pill mb-2 rounded-xl px-3 py-2 text-xs">
+                    <div className="jbp-visual-muted-pill inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium">
                       <LockClosedIcon className="h-3 w-3" />
                       {i18nService.t('managedForbiddenTag')}
                     </div>
@@ -547,7 +546,7 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     disabled={isManagedReadOnly}
-                    className="flex-1 px-3 py-2 rounded-lg border border-border bg-transparent text-foreground text-sm"
+                    className="jbp-visual-soft-field flex-1 rounded-xl px-3 py-2.5 text-sm outline-none transition-[border-color,box-shadow,background-color] disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </div>
               </div>
@@ -560,7 +559,7 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   disabled={isManagedReadOnly}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-transparent text-foreground text-sm"
+                  className="jbp-visual-soft-field w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-[border-color,box-shadow,background-color] disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </div>
               <div>
@@ -572,7 +571,7 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
                   onChange={(e) => setSystemPrompt(e.target.value)}
                   disabled={isManagedReadOnly}
                   rows={4}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-transparent text-foreground text-sm resize-none"
+                  className="jbp-visual-soft-field w-full rounded-xl px-3 py-2.5 text-sm resize-none outline-none transition-[border-color,box-shadow,background-color] disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </div>
               <div>
@@ -585,7 +584,7 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
                   disabled={isManagedReadOnly}
                   rows={3}
                   placeholder={i18nService.t('agentIdentityPlaceholder') || 'Identity description (IDENTITY.md)...'}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-transparent text-foreground text-sm resize-none"
+                  className="jbp-visual-soft-field w-full rounded-xl px-3 py-2.5 text-sm resize-none outline-none transition-[border-color,box-shadow,background-color] disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </div>
               {!isManagedReadOnly && (
@@ -595,7 +594,7 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
                 />
               )}
               {agent?.policyNote && (
-                <div className="rounded-lg border border-border bg-surface-raised/60 px-3 py-2 text-xs text-secondary">
+                <div className="jbp-visual-muted-pill rounded-xl px-3 py-2 text-xs">
                   {agent.policyNote}
                 </div>
               )}
@@ -910,7 +909,7 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
 
                       return (
                         <div key={platform} className="rounded-lg border border-border overflow-hidden">
-                          <div className="flex items-center gap-3 px-3 py-2.5 bg-surface-raised">
+                        <div className="flex items-center gap-3 border-b border-border/60 px-3 py-2.5 bg-surface-raised">
                             <div className="flex h-8 w-8 items-center justify-center">
                               <img src={logo} alt={i18nService.t(platform)} className="w-6 h-6 object-contain rounded" />
                             </div>
@@ -933,12 +932,12 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
                                 onClick={() => handleToggleIMBinding(bindingKey)}
                               >
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                  <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-success" />
                                   <span className="truncate text-sm text-foreground">
                                     {instance.instanceName}
                                   </span>
                                   {boundToOther && otherAgentName && (
-                                    <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-600 dark:text-amber-400">
+                                    <span className="jbp-visual-warning-note shrink-0 rounded-md px-1.5 py-0.5 text-xs">
                                       {(i18nService.t('agentIMBoundToOther') || '→ {agent}').replace('{agent}', otherAgentName)}
                                     </span>
                                   )}
@@ -981,7 +980,7 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
                             )}
                           </div>
                           {boundToOther && otherAgentName && (
-                            <span className="shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-600 dark:text-amber-400">
+                            <span className="jbp-visual-warning-note shrink-0 rounded-md px-1.5 py-0.5 text-xs">
                               {(i18nService.t('agentIMBoundToOther') || '→ {agent}').replace('{agent}', otherAgentName)}
                             </span>
                           )}
@@ -1004,13 +1003,13 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-4 border-t border-border">
+        <div className="flex items-center justify-between gap-3 border-t border-border px-6 py-4">
           <div>
             {!isMainAgent && !showDeleteConfirm && !isManagedReadOnly && (
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(true)}
-                className="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                className="jbp-visual-danger-action inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-medium transition-colors"
               >
                 <TrashIcon className="h-4 w-4" />
                 {i18nService.t('delete') || 'Delete'}
@@ -1020,11 +1019,11 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
           <div className="flex items-center gap-3">
             <div className="min-h-[1rem]">
               {saveWarningState ? (
-                <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-right">
-                  <div className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                <div className="jbp-visual-warning-note rounded-xl px-3 py-2 text-right">
+                  <div className="text-xs font-medium">
                     {i18nService.t('agentToolBundlesSaveWarningTitle')}
                   </div>
-                  <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                  <div className="mt-1 text-xs">
                     {i18nService.t('agentToolBundlesSaveWarningBody')
                       .replace('{count}', String(saveWarningState.missingBundles.length))
                       .replace('{bundles}', saveWarningState.previewBundles.join(', '))
@@ -1044,7 +1043,7 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
                     onSwitchAgent(agentId);
                   }}
                   disabled={isManagedUnavailable || isManagedForbidden}
-                  className="px-4 py-2 text-sm font-medium rounded-lg border border-primary text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="jbp-visual-secondary-action rounded-xl px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {(isManagedUnavailable || isManagedForbidden)
                     ? (isManagedUnavailable
@@ -1056,7 +1055,7 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
               <button
                 type="button"
                 onClick={handleClose}
-                className="px-4 py-2 text-sm font-medium rounded-lg text-secondary hover:bg-surface-raised transition-colors"
+                className="jbp-visual-secondary-action rounded-xl px-4 py-2 text-sm font-medium transition-colors"
               >
                 {i18nService.t('cancel') || 'Cancel'}
               </button>
@@ -1066,7 +1065,7 @@ const AgentSettingsPanel: React.FC<AgentSettingsPanelProps> = ({ agentId, onClos
                   disabled={isManagedReadOnly
                   ? (saving || isManagedUnavailable || isManagedForbidden || (!hasManagedExtraSkillChanges && !hasImBindingChanges))
                   : saving}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="jbp-visual-primary-action rounded-xl px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saveButtonLabel}
               </button>

@@ -598,7 +598,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
     : true;
 
   const homeHeader = (
-    <div className="draggable flex h-12 items-center justify-between px-4 border-b border-black/5 dark:border-white/5 bg-surface/80 backdrop-blur-md z-10 shrink-0">
+    <div className="jbp-visual-workbench-rail draggable flex h-12 items-center justify-between border-b px-4 backdrop-blur-md z-10 shrink-0">
       <div className="non-draggable h-8 flex items-center">
         {isSidebarCollapsed && (
           <div className={`flex items-center gap-1 mr-2 ${isMac ? 'pl-[68px]' : ''}`}>
@@ -631,9 +631,9 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         />
       </div>
       <div className="non-draggable flex items-center">
-        <div className="flex items-center gap-1.5 mr-2 px-2.5 py-1">
-          <ShieldCheckIcon className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-          <span className="text-xs text-green-600 dark:text-green-400 whitespace-nowrap">
+        <div className="mr-2 flex items-center gap-1.5 rounded-full bg-[color-mix(in_srgb,var(--lobster-success)_10%,transparent)] px-2.5 py-1 text-[color:var(--lobster-success)]">
+          <ShieldCheckIcon className="h-3.5 w-3.5" />
+          <span className="text-xs whitespace-nowrap">
             {i18nService.t('lobsterGuardEnabled')}
           </span>
         </div>
@@ -644,9 +644,9 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
 
   // Engine status banner for error/non-running states (starting overlay is now global in App.tsx)
   const engineStatusBanner = shouldShowEngineStatus && openClawStatus && openClawStatus.phase !== 'starting' ? (
-    <div className={`shrink-0 flex items-center justify-between px-4 py-2 text-xs ${isEngineError
-      ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300'
-      : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+    <div className={`shrink-0 flex items-center justify-between border-b px-4 py-2 text-xs ${isEngineError
+      ? 'jbp-visual-danger-note'
+      : 'jbp-visual-warning-note'
     }`}>
       <div className="flex items-center gap-2">
         <span>{resolveEngineStatusText(openClawStatus)}</span>
@@ -659,8 +659,8 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
         onClick={handleRestartGateway}
         disabled={isRestartingGateway}
         className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isEngineError
-          ? 'bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600'
-          : 'bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-700 dark:hover:bg-amber-600'
+          ? 'jbp-visual-danger-action'
+          : 'jbp-visual-primary-action'
         }`}
       >
         {i18nService.t('coworkOpenClawRestartGateway')}
@@ -734,8 +734,8 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
           {/* Welcome Section */}
           <div className="text-center space-y-4">
             <QingShuBrandMark
-              className="relative mx-auto flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-red-600 shadow-[0_0_0_1px_rgba(0,0,0,0.55),0_12px_26px_rgba(220,38,38,0.38)] ring-1 ring-white/45"
-              iconClassName="text-[34px] font-semibold leading-none text-white"
+              className="relative mx-auto flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-primary shadow-card ring-1 ring-white/45"
+              iconClassName="text-[34px] font-semibold leading-none text-primary-foreground"
             />
             <h2 className="text-[32px] tracking-tight text-foreground">
               {i18nService.getLanguage() === 'zh' ? (
@@ -744,7 +744,7 @@ const CoworkView: React.FC<CoworkViewProps> = ({ onRequestAppSettings, onShowSki
                 <span className="font-semibold">{i18nService.t('coworkWelcome')}</span>
               )}
             </h2>
-            <p className="text-sm text-[#888888] dark:text-[#888888] font-medium max-w-md mx-auto">
+            <p className="mx-auto max-w-md text-sm font-medium text-secondary">
               {i18nService.t('coworkDescription')}
             </p>
           </div>

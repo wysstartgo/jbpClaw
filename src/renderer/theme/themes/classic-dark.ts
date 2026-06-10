@@ -5,9 +5,9 @@ export const classicDark: ThemeDefinition = {
   meta: {
     id: 'classic-dark',
     name: '经典深色',
-    description: '原生默认深色主题，纯净近黑',
+    description: '原生默认深色主题，红绿点缀',
     appearance: 'dark',
-    preview: ['#0F1117', '#ef4444', '#991b1b', '#8B8FA3'],
+    preview: ['#0F1117', '#ef4444', '#34d399', '#8B8FA3'],
   },
   tokens: {
     ...SHARED_TOKENS,
@@ -15,7 +15,7 @@ export const classicDark: ThemeDefinition = {
     'primary-foreground': '#ffffff',
     'primary-hover':      '#f87171',
     'primary-muted':      'rgba(239,68,68,0.14)',
-    'accent':             '#991b1b',
+    'accent':             '#34d399',
     'accent-foreground':  '#ffffff',
     'background':         '#0F1117',
     'foreground':         '#E4E5E9',

@@ -58,7 +58,7 @@ const AgentToolBundleSelector: React.FC<AgentToolBundleSelectorProps> = ({
   };
 
   return (
-    <div className="mb-3 rounded-xl border border-border bg-surface-raised/60 p-3">
+    <div className="jbp-visual-soft-card mb-3 rounded-xl p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-semibold tracking-[0.14em] text-secondary uppercase">
@@ -68,7 +68,7 @@ const AgentToolBundleSelector: React.FC<AgentToolBundleSelectorProps> = ({
             {i18nService.t('agentToolBundlesEditorTitle')}
           </div>
         </div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
+        <span className="jbp-visual-status-pill inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium">
           <Squares2X2Icon className="h-3.5 w-3.5" />
           {i18nService.t('agentToolBundlesEditorBadge')}
         </span>
@@ -95,10 +95,10 @@ const AgentToolBundleSelector: React.FC<AgentToolBundleSelectorProps> = ({
                 key={option.bundleId}
                 type="button"
                 onClick={() => handleToggle(option.bundleId)}
-                className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
+                className={`jbp-visual-selectable-card w-full rounded-lg px-3 py-3 text-left transition-colors ${
                   selected
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border bg-surface hover:bg-background'
+                    ? 'is-active'
+                    : ''
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">

@@ -15,7 +15,7 @@ Always plan before media generation or publishing. First write or update a方案
 - selected chapter IDs or character/faction/story arc filter
 - narration mode: `summary` / `excerpt` / `commentary`
 - comic style and aspect ratio
-- cover backend: `explosive-cover-generator-gzh` / `qingshu-image` / manual prompt
+- cover backend: `explosive-cover-generator-gzh` / `xiaohu-wechat-cover` / `qingshu-image` / manual prompt
 - article output directory
 - whether to only draft, generate images, format HTML, or publish draft
 - validation command and review checkpoints
@@ -24,11 +24,12 @@ Do not generate cover images, comic pages, or publish a WeChat draft until the c
 
 ## Dependencies
 
-- `novel-comic-wechat-post`: orchestrates chapter selection, storyboard, comic article, cover prompt, image prompt, formatting, and publishing checkpoints.
-- `xiaohu-wechat-format`: installed WeChat formatting and draft publishing pipeline. Reuse the already installed JBPClaw runtime skill; do not install another xiaohu copy.
-- `explosive-cover-generator-gzh`: installed cover planning skill for data-informed公众号爆款封面 analysis and cover scheme generation.
+- `long-novel-graph`: locate chapters, retrieval hits, graph relations, and evidence anchors so every content point can trace back to `chapterId + lineStart + lineEnd`.
+- `baoyu-comic`: content analysis, storyboard variants, character sheets, comic page prompt structure, and optional PDF merge.
+- `explosive-cover-generator-gzh`: data-informed公众号爆款封面 analysis, title hooks, cover schemes, and cover prompts.
+- `xiaohu-wechat-cover`: one-step公众号封面 generation when a simpler cover backend is enough.
+- `xiaohu-wechat-format`: Markdown to WeChat-compatible HTML and optional draft publishing. Reuse the already installed JBPClaw runtime skill; do not install another xiaohu copy.
 - `qingshu-image`: JBPClaw 内置专用绘图 Skill. Use it for cover and comic image generation instead of `$codex-image`, OpenAI direct image calls, or API-key based image tools.
-- Optional source/storyboard helpers may be used only when present in the current runtime. If `long-novel-graph`, `baoyu-comic`, or `xiaohu-wechat-cover` are not installed, keep their work as structured article planning inside this skill and route actual image generation to `qingshu-image`.
 
 ## Output Contract
 
@@ -84,15 +85,16 @@ comic-wechat/{topic-slug}/
    - Keep character appearance consistent; use `characters.md` and `characters.png` as reference when supported.
 
 4. **Cover Strategy**
-   - Use `explosive-cover-generator-gzh` when the user wants high-click/爆款封面, title hooks, or market-style cover options.
-   - Use `qingshu-image` when a cover image must actually be generated inside JBPClaw; treat `explosive-cover-generator-gzh` output as the cover strategy and prompt source.
+- Use `explosive-cover-generator-gzh` when the user wants high-click/爆款封面, title hooks, or market-style cover options.
+- Use `xiaohu-wechat-cover` when the user wants one-step cover generation from the article topic.
+- Use `qingshu-image` when a cover image must actually be generated inside JBPClaw; treat `explosive-cover-generator-gzh` output as the cover strategy and prompt source.
    - Cover prompt must include:
      - article hook in 8 Chinese characters or fewer when text is needed
      - core character or scene
      - 2.35:1 WeChat cover composition
      - high contrast and clear mobile preview
-   - If using `explosive-cover-generator-gzh`, follow its rule: use its data interface, do not replace it with web search.
-   - Do not call `xiaohu-wechat-cover` unless that skill is explicitly installed in the current runtime. In the JBPClaw built-in kit, cover generation is `explosive-cover-generator-gzh` + `qingshu-image`.
+- If using `explosive-cover-generator-gzh`, follow its rule: use its data interface, do not replace it with web search.
+- In the JBPClaw built-in kit, cover generation can use either `explosive-cover-generator-gzh` + `qingshu-image` or the simpler `xiaohu-wechat-cover` route.
 
 5. **Generate Images**
    - Generate cover and comic page images only after storyboard and prompts are reviewed.
@@ -144,9 +146,11 @@ comic-wechat/{topic-slug}/
 ## Coordination With Existing Skills
 
 - Read `explosive-cover-generator-gzh/SKILL.md` when doing 爆款封面 analysis.
+- Read `long-novel-graph/SKILL.md` for chapter/retrieval/graph evidence lookup.
+- Read `baoyu-comic/SKILL.md` when building storyboard, characters, prompts, or PDF.
+- Read `xiaohu-wechat-cover/SKILL.md` when using the one-step cover generator.
 - Read `qingshu-image/SKILL.md` before generating cover or comic images.
 - Read `xiaohu-wechat-format/SKILL.md` before formatting or publishing.
-- If `long-novel-graph` or `baoyu-comic` are unavailable, keep chapter evidence and storyboard output in this skill's `source/`, `storyboards/`, `characters/`, and `prompts/` files.
 
 ## Completion Report
 

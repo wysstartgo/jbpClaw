@@ -296,12 +296,10 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
 
   const renderToggle = (isOn: boolean) => (
     <div
-      className={`relative w-9 h-5 rounded-full transition-colors ${
-        isOn ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'
-      }`}
+      className={`jbp-visual-toggle relative h-5 w-9 rounded-full transition-colors ${isOn ? 'is-on' : ''}`}
     >
       <div
-        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+        className={`jbp-visual-toggle-knob absolute top-0.5 h-4 w-4 rounded-full transition-transform ${
           isOn ? 'translate-x-4' : 'translate-x-0.5'
         }`}
       />
@@ -315,9 +313,9 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop" onClick={handleRequestClose}>
+    <div className="jbp-visual-backdrop fixed inset-0 z-50 flex items-center justify-center" onClick={handleRequestClose}>
       <div
-        className="w-full max-w-2xl mx-4 rounded-2xl shadow-2xl bg-white border border-border max-h-[80vh] flex flex-col modal-content overflow-hidden"
+        className="jbp-visual-panel w-full max-w-2xl mx-4 rounded-2xl max-h-[80vh] flex flex-col modal-content overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -325,7 +323,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
           {/* Top gradient light */}
           <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-primary/25 to-transparent" />
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 ring-1 ring-primary/10">
+            <div className="jbp-visual-icon-tile flex h-10 w-10 items-center justify-center rounded-2xl">
               <span className="text-xl">{icon || '🤖'}</span>
             </div>
             <div>
@@ -347,11 +345,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
               key={tab.key}
               type="button"
               onClick={() => setActiveTab(tab.key)}
-              className={`rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200 ${
-                activeTab === tab.key
-                  ? 'bg-primary/10 text-primary ring-1 ring-primary/15 shadow-sm'
-                  : 'text-secondary hover:text-foreground hover:bg-surface-raised'
-              }`}
+              className={`jbp-visual-agent-tab rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200 ${activeTab === tab.key ? 'is-active' : ''}`}
             >
               {tab.label}
             </button>
@@ -362,7 +356,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
         <div className="px-6 py-5 overflow-y-auto flex-1 min-h-[300px]">
           {activeTab === 'basic' && (
             <div className="space-y-4">
-              <div className="rounded-xl border border-border bg-background/70 p-3">
+              <div className="jbp-visual-soft-card rounded-xl p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-foreground">
@@ -372,7 +366,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
                       {i18nService.t('agentCreateModeHint')}
                     </p>
                   </div>
-                  <div className="inline-flex rounded-xl bg-surface-raised p-1">
+                  <div className="jbp-visual-soft-card inline-flex rounded-xl p-1">
                     <button
                       type="button"
                       onClick={() => setCreateMode('blank')}
@@ -413,14 +407,14 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
                             key={preset.id}
                             type="button"
                             onClick={() => applyPresetTemplate(preset)}
-                            className={`rounded-xl border px-3 py-3 text-left transition-all ${
+                            className={`jbp-visual-selectable-card rounded-xl px-3 py-3 text-left transition-all ${
                               isSelected
-                                ? 'border-primary bg-primary/8 shadow-sm'
-                                : 'border-border bg-surface hover:border-primary/30 hover:bg-surface-raised'
+                                ? 'is-active'
+                                : ''
                             }`}
                           >
                             <div className="flex items-start gap-3">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-background text-xl">
+                              <div className="jbp-visual-icon-tile flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-xl">
                                 {preset.icon}
                               </div>
                               <div className="min-w-0 flex-1">
@@ -429,7 +423,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
                                     {presetName}
                                   </div>
                                   {preset.installed && (
-                                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                                    <span className="jbp-visual-status-pill rounded-full px-2 py-0.5 text-[10px] font-medium">
                                       {i18nService.t('agentPresetTemplateInstalled')}
                                     </span>
                                   )}
@@ -458,7 +452,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder={i18nService.t('agentNamePlaceholder') || 'Agent name'}
-                    className="flex-1 px-3 py-2.5 rounded-xl border border-border bg-background/50 text-foreground text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+                    className="jbp-visual-soft-field flex-1 rounded-xl px-3 py-2.5 text-sm outline-none transition-[border-color,box-shadow,background-color]"
                     autoFocus
                   />
                 </div>
@@ -472,7 +466,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder={i18nService.t('agentDescriptionPlaceholder') || 'Brief description'}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background/50 text-foreground text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+                  className="jbp-visual-soft-field w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-[border-color,box-shadow,background-color]"
                 />
               </div>
               <div>
@@ -484,7 +478,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
                   onChange={(e) => setSystemPrompt(e.target.value)}
                   placeholder={i18nService.t('systemPromptPlaceholder') || 'Describe the agent\'s role and behavior...'}
                   rows={4}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background/50 text-foreground text-sm resize-none transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+                  className="jbp-visual-soft-field w-full rounded-xl px-3 py-2.5 text-sm resize-none outline-none transition-[border-color,box-shadow,background-color]"
                 />
               </div>
               <div>
@@ -496,7 +490,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
                   onChange={(e) => setIdentity(e.target.value)}
                   rows={3}
                   placeholder={i18nService.t('agentIdentityPlaceholder') || 'Identity description (IDENTITY.md)...'}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background/50 text-foreground text-sm resize-none transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+                  className="jbp-visual-soft-field w-full rounded-xl px-3 py-2.5 text-sm resize-none outline-none transition-[border-color,box-shadow,background-color]"
                 />
               </div>
               <AgentWorkingDirectoryField
@@ -557,7 +551,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
                       return (
                         <div
                           key={platform}
-                          className="flex items-center justify-between px-3 py-2.5 rounded-lg opacity-50"
+                    className="jbp-visual-soft-card flex items-center justify-between rounded-lg px-3 py-2.5 opacity-60"
                         >
                           <div className="flex items-center gap-3">
                             <div className="flex h-8 w-8 items-center justify-center">
@@ -580,8 +574,8 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
                     }
 
                     return (
-                      <div key={platform} className="rounded-xl border border-border overflow-hidden">
-                        <div className="flex items-center gap-3 px-3 py-2.5 bg-surface-raised/70">
+                      <div key={platform} className="jbp-visual-soft-card overflow-hidden rounded-xl">
+                        <div className="flex items-center gap-3 border-b border-border/60 px-3 py-2.5 bg-surface-raised/70">
                           <div className="flex h-8 w-8 items-center justify-center">
                             <img src={logo} alt={i18nService.t(platform)} className="w-6 h-6 object-contain rounded" />
                           </div>
@@ -598,18 +592,16 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
                           return (
                             <div
                               key={instance.instanceId}
-                              className={`flex items-center justify-between px-3 py-2 pl-14 transition-colors ${
-                                'cursor-pointer hover:bg-surface-raised'
-                              } ${index < enabledInstances.length - 1 ? 'border-b border-border/60' : ''}`}
+                              className={`flex cursor-pointer items-center justify-between px-3 py-2 pl-14 transition-colors hover:bg-surface-raised ${index < enabledInstances.length - 1 ? 'border-b border-border/60' : ''}`}
                               onClick={() => handleToggleIMBinding(bindingKey)}
                             >
                               <div className="flex items-center gap-2 min-w-0">
-                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-success" />
                                 <span className="truncate text-sm text-foreground">
                                   {instance.instanceName}
                                 </span>
                                 {boundToOther && otherAgentName && (
-                                  <span className="shrink-0 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-600 dark:text-amber-400">
+                                  <span className="jbp-visual-warning-note shrink-0 rounded-md px-1.5 py-0.5 text-xs">
                                     {(i18nService.t('agentIMBoundToOther') || '→ {agent}').replace('{agent}', otherAgentName)}
                                   </span>
                                 )}
@@ -630,11 +622,11 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
                   return (
                     <div
                       key={platform}
-                      className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors ${
-                        configured
-                          ? 'hover:bg-surface-raised cursor-pointer'
-                          : 'opacity-50'
-                      }`}
+                        className={`flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors ${
+                          configured
+                            ? 'cursor-pointer hover:bg-surface-raised'
+                            : 'jbp-visual-soft-card opacity-60'
+                        }`}
                       onClick={() => configured && handleToggleIMBinding(platform)}
                     >
                       <div className="flex items-center gap-3 min-w-0">
@@ -652,7 +644,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
                           )}
                         </div>
                         {boundToOther && otherAgentName && (
-                          <span className="shrink-0 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-600 dark:text-amber-400">
+                          <span className="jbp-visual-warning-note shrink-0 rounded-md px-1.5 py-0.5 text-xs">
                             {(i18nService.t('agentIMBoundToOther') || '→ {agent}').replace('{agent}', otherAgentName)}
                           </span>
                         )}
@@ -678,11 +670,11 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
         <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-border">
           <div className="min-h-[1rem] flex-1">
             {saveWarningState ? (
-              <div className="rounded-xl border border-amber-500/25 bg-amber-500/8 px-3 py-2">
-                <div className="text-xs font-medium text-amber-800 dark:text-amber-200">
+              <div className="jbp-visual-warning-note rounded-xl px-3 py-2">
+                <div className="text-xs font-medium">
                   {i18nService.t('agentToolBundlesSaveWarningTitle')}
                 </div>
-                <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                <div className="mt-1 text-xs">
                   {i18nService.t('agentToolBundlesSaveWarningBody')
                     .replace('{count}', String(saveWarningState.missingBundles.length))
                     .replace('{bundles}', saveWarningState.previewBundles.join(', '))
@@ -695,7 +687,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
             <button
               type="button"
               onClick={handleRequestClose}
-              className="px-4 py-2.5 text-sm font-medium rounded-xl text-secondary hover:bg-surface-raised transition-colors"
+              className="jbp-visual-secondary-action rounded-xl px-4 py-2.5 text-sm font-medium transition-colors"
             >
               {i18nService.t('cancel') || 'Cancel'}
             </button>
@@ -703,7 +695,7 @@ const AgentCreateModal: React.FC<AgentCreateModalProps> = ({ isOpen, onClose }) 
               type="button"
               onClick={handleCreate}
               disabled={creating}
-              className="px-5 py-2.5 text-sm font-medium rounded-xl bg-primary text-white shadow-sm hover:bg-primary-hover hover:shadow-md hover:-translate-y-[1px] active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-sm transition-all duration-200"
+              className="jbp-visual-primary-action rounded-xl px-5 py-2.5 text-sm font-medium transition-all duration-200 hover:-translate-y-[1px] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
             >
               {saveButtonLabel}
             </button>

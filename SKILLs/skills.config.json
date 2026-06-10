@@ -302,12 +302,24 @@
       "order": 700,
       "enabled": true
     },
-    "explosive-cover-generator-gzh": {
+    "long-novel-graph": {
       "order": 701,
       "enabled": true
     },
-    "xiaohu-wechat-format": {
+    "baoyu-comic": {
       "order": 702,
+      "enabled": true
+    },
+    "explosive-cover-generator-gzh": {
+      "order": 703,
+      "enabled": true
+    },
+    "xiaohu-wechat-cover": {
+      "order": 704,
+      "enabled": true
+    },
+    "xiaohu-wechat-format": {
+      "order": 705,
       "enabled": true
     }
   }

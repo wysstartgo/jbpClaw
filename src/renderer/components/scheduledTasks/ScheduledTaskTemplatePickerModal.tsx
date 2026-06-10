@@ -42,8 +42,8 @@ const ScheduledTaskTemplatePickerModal: React.FC<ScheduledTaskTemplatePickerModa
     <Modal
       isOpen
       onClose={onClose}
-      overlayClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/10 dark:bg-black/50"
-      className="w-[calc(100vw-56px)] max-w-[820px] max-h-[82vh] rounded-xl border border-surface bg-surface shadow-[0_12px_40px_rgba(0,0,0,0.16)] overflow-hidden flex flex-col"
+      overlayClassName="jbp-visual-backdrop fixed inset-0 z-[60] flex items-center justify-center"
+      className="jbp-visual-panel flex max-h-[82vh] w-[calc(100vw-56px)] max-w-[820px] flex-col overflow-hidden rounded-2xl"
     >
       <div className="flex shrink-0 items-center justify-between gap-3 px-5 py-4">
         <div className="min-w-0">
@@ -58,7 +58,7 @@ const ScheduledTaskTemplatePickerModal: React.FC<ScheduledTaskTemplatePickerModa
           <button
             type="button"
             onClick={onNew}
-            className="h-8 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-foreground hover:bg-surface-raised transition-colors"
+            className="jbp-visual-secondary-action h-8 rounded-xl px-3 text-sm font-medium transition-colors"
           >
             {i18nService.t('scheduledTasksTemplateNew')}
           </button>
@@ -82,10 +82,10 @@ const ScheduledTaskTemplatePickerModal: React.FC<ScheduledTaskTemplatePickerModa
                   key={template.id}
                   type="button"
                   onClick={() => onSelect(template)}
-                  className="group flex min-h-[156px] flex-col items-start rounded-lg border border-border bg-surface p-4 text-left transition-colors hover:border-primary/40 hover:bg-surface-raised"
+                  className="jbp-visual-selectable-card group flex min-h-[156px] flex-col items-start rounded-xl p-4 text-left transition-colors"
                 >
                   <div className="flex w-full items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <div className="jbp-visual-icon-tile flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
                       <Icon className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1">

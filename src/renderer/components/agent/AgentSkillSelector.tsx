@@ -83,7 +83,7 @@ const AgentSkillSelector: React.FC<AgentSkillSelectorProps> = ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={i18nService.t('agentSkillsSearch') || 'Search skills...'}
-              className="w-full pl-8 pr-3 py-1.5 text-sm rounded border border-border bg-transparent text-foreground"
+              className="jbp-visual-soft-field w-full rounded-lg py-1.5 pl-8 pr-3 text-sm outline-none transition-[border-color,box-shadow,background-color]"
             />
           </div>
         </div>
@@ -101,9 +101,7 @@ const AgentSkillSelector: React.FC<AgentSkillSelectorProps> = ({
                 key={skill.id}
                 type="button"
                 onClick={() => toggle(skill.id)}
-                className={`group w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-surface-raised transition-colors rounded-lg ${
-                  isSelected ? 'bg-primary/5' : ''
-                }`}
+                className={`jbp-visual-selectable-card group mb-1 flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left transition-colors ${isSelected ? 'is-active' : ''}`}
               >
                 <div className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-colors ${
                   isSelected

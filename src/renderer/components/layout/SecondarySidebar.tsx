@@ -135,8 +135,8 @@ const AgentAvatar: React.FC<{ agent: SidebarAgent; title: string }> = ({ agent, 
   if (agent.id === 'main') {
     return (
       <QingShuBrandMark
-        className="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-red-600 shadow-[0_0_0_1px_rgba(0,0,0,0.55),0_3px_10px_rgba(220,38,38,0.42)] ring-1 ring-white/45"
-        iconClassName="text-[11px] font-semibold leading-none text-white"
+        className="relative flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary shadow-subtle ring-1 ring-white/45"
+        iconClassName="text-[11px] font-semibold leading-none text-primary-foreground"
       />
     );
   }
@@ -174,8 +174,8 @@ const ManagedAgentMark: React.FC = () => (
     aria-label={i18nService.t('sourceTypeQingShuManaged')}
   >
     <QingShuBrandMark
-      className="relative flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-red-600 shadow-[0_0_0_1px_rgba(0,0,0,0.55),0_3px_10px_rgba(220,38,38,0.42)] ring-1 ring-white/45"
-      iconClassName="text-[10px] font-semibold leading-none text-white"
+      className="relative flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-primary shadow-subtle ring-1 ring-white/45"
+      iconClassName="text-[10px] font-semibold leading-none text-primary-foreground"
     />
   </span>
 );
@@ -250,7 +250,7 @@ const ConversationGroupBlock: React.FC<{
   const isManagedAgent = group.agent.source === 'managed';
 
   return (
-    <section className="group rounded-2xl bg-surface/45 px-1.5 py-1.5">
+    <section className="jbp-visual-soft-card group rounded-2xl px-1.5 py-1.5">
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -301,7 +301,7 @@ const ConversationGroupBlock: React.FC<{
                   key={session.id}
                   className={`group/session relative flex items-center gap-1.5 rounded-lg px-2.5 py-2 transition-colors duration-200 ${
                     isActive
-                      ? 'bg-transparent text-primary font-medium before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-r-full before:bg-primary'
+                      ? 'bg-primary-muted text-primary font-medium before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-r-full before:bg-primary'
                       : 'text-foreground hover:bg-surface-raised'
                   } ${session.status === 'running' && !isActive ? 'qs-session-running' : ''}`}
                 >
@@ -311,8 +311,8 @@ const ConversationGroupBlock: React.FC<{
                       onClick={() => onToggleSelection(session.id)}
                       className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
                         selectedSessionIds.has(session.id)
-                          ? 'border-primary bg-primary text-white'
-                        : 'border-border bg-surface text-transparent'
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-surface text-transparent'
                       }`}
                       aria-label={selectedSessionIds.has(session.id)
                         ? i18nService.t('batchDeselectSession')
@@ -848,7 +848,7 @@ const SecondarySidebar: React.FC<SecondarySidebarProps> = ({
 
   return (
     <>
-      <aside className={`flex w-[320px] shrink-0 flex-col border-r border-black/5 dark:border-white/5 bg-surface px-5 pb-5 ${window.electron?.platform === 'darwin' ? 'pt-8' : 'pt-5'}`}>
+      <aside className={`jbp-visual-workbench-rail flex w-[320px] shrink-0 flex-col border-r px-5 pb-5 ${window.electron?.platform === 'darwin' ? 'pt-8' : 'pt-5'}`}>
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
@@ -862,7 +862,7 @@ const SecondarySidebar: React.FC<SecondarySidebarProps> = ({
                   }
                 }}
                 placeholder={i18nService.t('workbenchConversationSearchPlaceholder')}
-                className="w-full rounded-lg border border-border bg-surface py-2.5 pl-9 pr-3 text-sm text-foreground outline-none transition-colors placeholder:text-secondary focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+                className="jbp-visual-soft-field w-full rounded-lg py-2.5 pl-9 pr-3 text-sm outline-none transition-[border-color,box-shadow,background-color] placeholder:text-secondary"
               />
             </div>
           </div>
@@ -871,9 +871,9 @@ const SecondarySidebar: React.FC<SecondarySidebarProps> = ({
             <button
               type="button"
               onClick={() => setIsCreateAgentOpen(true)}
-              className="group flex h-[38px] items-center justify-center gap-2 rounded-lg border border-transparent bg-primary px-3 text-sm font-medium text-white shadow-sm transition-all hover:bg-primary-hover active:scale-[0.98]"
+              className="jbp-visual-primary-action group flex h-[38px] items-center justify-center gap-2 rounded-lg border border-transparent px-3 text-sm font-medium transition-all active:scale-[0.98]"
             >
-              <span className="flex items-center justify-center text-white">
+              <span className="flex items-center justify-center text-primary-foreground">
                 <PlusIcon className="h-4 w-4" strokeWidth={2.5} />
               </span>
               <span>{i18nService.t('workbenchCreateDedicatedAgent')}</span>
@@ -1015,7 +1015,7 @@ const SecondarySidebar: React.FC<SecondarySidebarProps> = ({
                 type="button"
                 onClick={() => setShowBatchDeleteConfirm(true)}
                 disabled={selectedSessionIds.size === 0}
-                className="flex items-center gap-2 rounded-2xl bg-red-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                className="jbp-visual-danger-action flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <TrashIcon className="h-4 w-4" />
                 {i18nService.t('batchDelete')} ({selectedSessionIds.size})
@@ -1096,7 +1096,7 @@ const SecondarySidebar: React.FC<SecondarySidebarProps> = ({
           <button
             type="button"
             onClick={() => handleRequestDeleteSession(selectedSession.id)}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-500 transition-colors hover:bg-red-500/10"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[color:var(--lobster-destructive)] transition-colors hover:bg-[color-mix(in_srgb,var(--lobster-destructive)_10%,transparent)]"
           >
             <TrashIcon className="h-4 w-4" />
             {i18nService.t('deleteConversation')}
@@ -1106,15 +1106,15 @@ const SecondarySidebar: React.FC<SecondarySidebarProps> = ({
 
       {pendingDeleteSessionId && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="jbp-visual-backdrop fixed inset-0 z-50 flex items-center justify-center"
           onClick={() => setPendingDeleteSessionId(null)}
         >
           <div
-            className="w-full max-w-sm rounded-[28px] border border-border bg-surface p-5 shadow-2xl"
+            className="jbp-visual-panel w-full max-w-sm rounded-[28px] p-5"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+              <div className="jbp-visual-danger-note flex h-10 w-10 items-center justify-center rounded-2xl">
                 <TrashIcon className="h-5 w-5" />
               </div>
               <div>
@@ -1140,7 +1140,7 @@ const SecondarySidebar: React.FC<SecondarySidebarProps> = ({
               <button
                 type="button"
                 onClick={() => void handleDeleteSession(pendingDeleteSessionId)}
-                className="rounded-2xl bg-red-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600"
+                className="jbp-visual-danger-action rounded-2xl px-4 py-2 text-sm font-medium transition-colors"
               >
                 {i18nService.t('deleteConversation')}
               </button>
@@ -1151,15 +1151,15 @@ const SecondarySidebar: React.FC<SecondarySidebarProps> = ({
 
       {showBatchDeleteConfirm && batchGroup && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          className="jbp-visual-backdrop fixed inset-0 z-50 flex items-center justify-center"
           onClick={() => setShowBatchDeleteConfirm(false)}
         >
           <div
-            className="w-full max-w-sm rounded-[28px] border border-border bg-surface p-5 shadow-2xl"
+            className="jbp-visual-panel w-full max-w-sm rounded-[28px] p-5"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+              <div className="jbp-visual-danger-note flex h-10 w-10 items-center justify-center rounded-2xl">
                 <TrashIcon className="h-5 w-5" />
               </div>
               <div>
@@ -1185,7 +1185,7 @@ const SecondarySidebar: React.FC<SecondarySidebarProps> = ({
               <button
                 type="button"
                 onClick={() => void handleBatchDelete()}
-                className="rounded-2xl bg-red-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600"
+                className="jbp-visual-danger-action rounded-2xl px-4 py-2 text-sm font-medium transition-colors"
               >
                 {i18nService.t('batchDelete')} ({selectedSessionIds.size})
               </button>

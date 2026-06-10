@@ -112,9 +112,9 @@ const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
   const showTabs = viewMode === 'list' && !selectedTaskId;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-surface">
       {/* Header */}
-      <div className="draggable flex h-12 items-center justify-between px-4 border-b border-border shrink-0">
+      <div className="jbp-visual-workbench-rail draggable flex h-12 items-center justify-between px-4 border-b shrink-0">
         <div className="flex items-center space-x-3 h-8">
           {isSidebarCollapsed && (
             <div className={`non-draggable flex items-center gap-1 ${isMac ? 'pl-[68px]' : ''}`}>
@@ -138,7 +138,7 @@ const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
           {viewMode !== 'list' && (
             <button
               onClick={handleBackToList}
-              className="non-draggable p-2 rounded-lg hover:bg-surface-raised text-secondary transition-colors"
+              className="non-draggable rounded-lg p-2 text-secondary hover:bg-surface-raised transition-colors"
               aria-label={i18nService.t('back')}
             >
               <ArrowLeftIcon className="h-5 w-5" />
@@ -153,42 +153,28 @@ const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
 
       {/* Tabs + New Task button */}
       {showTabs && (
-        <div className="flex items-center justify-between border-b border-border px-4 shrink-0">
-          <div className="flex">
+        <div className="jbp-visual-workbench-rail flex items-center justify-between border-b px-4 py-2 shrink-0">
+          <div className="jbp-visual-soft-card flex gap-1 rounded-xl p-1">
             <button
               type="button"
               onClick={() => handleTabChange('tasks')}
-              className={`px-4 py-3 text-sm font-medium transition-colors relative ${
-                activeTab === 'tasks'
-                  ? 'text-foreground font-bold'
-                  : 'text-secondary hover:text-foreground'
-              }`}
+              className={`jbp-visual-agent-tab rounded-lg px-4 py-2 text-sm font-medium transition-all ${activeTab === 'tasks' ? 'is-active' : ''}`}
             >
               {i18nService.t('scheduledTasksTabTasks')}
-              {activeTab === 'tasks' && (
-                <span className="absolute bottom-0 left-3 right-3 h-[3px] bg-primary rounded-t-sm" />
-              )}
             </button>
             <button
               type="button"
               onClick={() => handleTabChange('history')}
-              className={`px-4 py-3 text-sm font-medium transition-colors relative ${
-                activeTab === 'history'
-                  ? 'text-foreground font-bold'
-                  : 'text-secondary hover:text-foreground'
-              }`}
+              className={`jbp-visual-agent-tab rounded-lg px-4 py-2 text-sm font-medium transition-all ${activeTab === 'history' ? 'is-active' : ''}`}
             >
               {i18nService.t('scheduledTasksTabHistory')}
-              {activeTab === 'history' && (
-                <span className="absolute bottom-0 left-3 right-3 h-[3px] bg-primary rounded-t-sm" />
-              )}
             </button>
           </div>
           {activeTab === 'tasks' && (
             <button
               type="button"
               onClick={() => setShowTemplatePicker(true)}
-              className="px-4 py-1.5 text-sm font-semibold bg-primary text-white rounded-[10px] hover:bg-primary-hover transition-colors shadow-sm"
+              className="jbp-visual-primary-action rounded-xl px-4 py-2 text-sm font-semibold transition-colors"
             >
               {i18nService.t('scheduledTasksNewTask')}
             </button>
@@ -255,12 +241,12 @@ const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
       )}
 
       {showLeaveConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35">
+        <div className="jbp-visual-backdrop fixed inset-0 z-50 flex items-center justify-center">
           <div
             role="dialog"
             aria-modal="true"
             onClick={(event) => event.stopPropagation()}
-            className="w-full max-w-sm rounded-2xl bg-background border border-border shadow-modal p-5"
+            className="jbp-visual-panel w-full max-w-sm rounded-2xl p-5"
           >
             <h4 className="text-sm font-semibold text-foreground mb-2">
               {i18nService.t('taskFormUnsavedChanges')}
@@ -272,7 +258,7 @@ const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
               <button
                 type="button"
                 onClick={() => setShowLeaveConfirm(false)}
-                className="px-4 py-2 text-sm rounded-lg text-secondary hover:bg-surface-raised transition-colors border border-border"
+                className="jbp-visual-secondary-action rounded-xl px-4 py-2 text-sm transition-colors"
               >
                 {i18nService.t('taskFormStay')}
               </button>
@@ -283,7 +269,7 @@ const ScheduledTasksView: React.FC<ScheduledTasksViewProps> = ({
                   pendingLeaveActionRef.current?.();
                   pendingLeaveActionRef.current = null;
                 }}
-                className="px-4 py-2 text-sm font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                className="jbp-visual-danger-action rounded-xl px-4 py-2 text-sm font-medium transition-colors"
               >
                 {i18nService.t('taskFormLeave')}
               </button>

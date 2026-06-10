@@ -351,10 +351,10 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
     }
   };
 
-  const inputClass = 'w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50';
-  const textareaInputClass = 'w-full rounded-t-lg px-3 py-2 text-sm text-foreground focus:outline-none resize-none bg-transparent';
+  const inputClass = 'jbp-visual-soft-field w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-[border-color,box-shadow,background-color]';
+  const textareaInputClass = 'w-full rounded-t-xl px-3 py-2.5 text-sm text-foreground focus:outline-none resize-none bg-transparent';
   const labelClass = 'block text-sm font-medium text-foreground mb-1';
-  const errorClass = 'text-xs text-red-500 mt-1';
+  const errorClass = 'mt-1 text-xs text-destructive';
 
   const selectedModelValue: Model | null = form.modelId
     ? availableModels.find((model) => toOpenClawModelRef(model) === form.modelId) ?? null
@@ -434,7 +434,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
       return (
         <div>
           <label className={labelClass}>{i18nService.t('scheduledTasksFormScheduleType')}</label>
-          <div className="rounded-lg bg-surface-raised/30 p-3">
+          <div className="jbp-visual-soft-card rounded-xl p-3">
             <p className="text-sm text-secondary">
               {formatScheduleLabel(task!.schedule)}
             </p>
@@ -522,7 +522,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
             <select
               value={form.minute}
               onChange={(e) => updateForm({ minute: Number(e.target.value) })}
-              className="w-20 shrink-0 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground text-center focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="jbp-visual-soft-field w-20 shrink-0 rounded-xl px-3 py-2.5 text-center text-sm outline-none transition-[border-color,box-shadow,background-color]"
             >
               {Array.from({ length: 60 }, (_, i) => (
                 <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
@@ -585,10 +585,10 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
                   key={dayValue}
                   type="button"
                   onClick={() => toggleWeekday(dayValue)}
-                  className={`w-9 h-9 rounded-full text-sm font-medium transition-colors ${
+                  className={`h-9 w-9 rounded-full text-sm font-medium transition-colors ${
                     selected
-                      ? 'bg-primary text-white'
-                      : 'border border-border text-secondary hover:bg-surface-raised'
+                      ? 'jbp-visual-primary-action'
+                      : 'jbp-visual-secondary-action text-secondary'
                   }`}
                 >
                   {i18nService.t(key)}
@@ -644,7 +644,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
             <button
               type="button"
               onClick={() => setChannelDropdownOpen(!channelDropdownOpen)}
-              className={`${inputClass} w-full flex items-center justify-between cursor-pointer`}
+              className={`${inputClass} flex w-full cursor-pointer items-center justify-between`}
             >
               <span className="flex items-center gap-2 truncate">
                 {selectedLogo ? (
@@ -669,9 +669,9 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
             </button>
 
             {channelDropdownOpen && (
-              <div className="absolute z-50 w-full mt-1 rounded-xl border border-border bg-surface shadow-lg overflow-hidden">
+              <div className="jbp-visual-panel absolute z-50 mt-1 w-full overflow-hidden rounded-xl">
                 <div
-                  className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-surface-raised transition-colors"
+                  className="flex cursor-pointer items-center gap-2 px-3 py-2 transition-colors hover:bg-surface-raised"
                   onClick={() => {
                     updateForm({ notifyChannel: 'none', notifyTo: '', notifyAccountId: undefined });
                     setChannelDropdownOpen(false);
@@ -732,7 +732,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
                   if (!conversationsLoading) setConvDropdownOpen(!convDropdownOpen);
                 }}
                 disabled={conversationsLoading}
-                className={`${inputClass} w-full flex items-center justify-between cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
+                className={`${inputClass} flex w-full cursor-pointer items-center justify-between disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 <span className="truncate text-sm">
                   {conversationsLoading
@@ -744,7 +744,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
                 </svg>
               </button>
               {convDropdownOpen && !conversationsLoading && (
-                <div className="absolute z-50 w-full mt-1 rounded-xl border border-border bg-surface shadow-lg overflow-hidden">
+                <div className="jbp-visual-panel absolute z-50 mt-1 w-full overflow-hidden rounded-xl">
                   {conversations.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-secondary">
                       {i18nService.t('scheduledTasksFormNotifyConversationNone')}
@@ -782,7 +782,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
   };
 
   return (
-    <div className="p-4 space-y-4 max-w-3xl mx-auto">
+    <div className="mx-auto max-w-3xl space-y-4 p-4">
       <h2 className="text-lg font-semibold text-foreground">
         {mode === 'create' ? i18nService.t('scheduledTasksFormCreate') : i18nService.t('scheduledTasksFormUpdate')}
       </h2>
@@ -803,7 +803,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
         <label className={labelClass}>
           {i18nService.t('scheduledTasksFormPayloadTextAgent')}
         </label>
-        <div className="rounded-lg border border-border bg-surface focus-within:ring-1 focus-within:ring-primary/40 focus-within:border-primary">
+        <div className="jbp-visual-soft-field rounded-xl p-0 focus-within:border-primary">
           <textarea
             ref={payloadTextareaRef}
             value={form.payloadText}
@@ -839,14 +839,14 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
       {renderNotifyRow()}
 
       {submitError && (
-        <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40">
-          <span className="text-sm text-red-600 dark:text-red-400 break-words min-w-0">
+        <div className="jbp-visual-danger-note flex items-start gap-2 rounded-xl px-3 py-2.5">
+          <span className="min-w-0 break-words text-sm">
             {i18nService.t('scheduledTasksFormSubmitError')}{submitError}
           </span>
           <button
             type="button"
             onClick={() => setSubmitError(null)}
-            className="shrink-0 ml-auto p-0.5 text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors"
+            className="ml-auto shrink-0 p-0.5 text-destructive transition-colors hover:opacity-80"
             aria-label="dismiss"
           >
             <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
@@ -860,7 +860,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
         <button
           type="button"
           onClick={handleRequestCancel}
-          className="px-4 py-2 text-sm rounded-lg text-secondary hover:bg-surface-raised transition-colors"
+          className="jbp-visual-secondary-action rounded-xl px-4 py-2 text-sm transition-colors"
         >
           {i18nService.t('cancel')}
         </button>
@@ -868,7 +868,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
           type="button"
           onClick={() => void handleSubmit()}
           disabled={submitting}
-          className="px-4 py-2 text-sm font-medium bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50"
+          className="jbp-visual-primary-action rounded-xl px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
         >
           {submitting
             ? i18nService.t('saving')
@@ -879,12 +879,12 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
       </div>
 
       {showLeaveConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35">
+        <div className="jbp-visual-backdrop fixed inset-0 z-50 flex items-center justify-center">
           <div
             role="dialog"
             aria-modal="true"
             onClick={(event) => event.stopPropagation()}
-            className="w-full max-w-sm rounded-2xl bg-background border border-border shadow-modal p-5"
+            className="jbp-visual-panel w-full max-w-sm rounded-2xl p-5"
           >
             <h4 className="text-sm font-semibold text-foreground mb-2">
               {i18nService.t('taskFormUnsavedChanges')}
@@ -896,7 +896,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
               <button
                 type="button"
                 onClick={() => setShowLeaveConfirm(false)}
-                className="px-4 py-2 text-sm rounded-lg text-secondary hover:bg-surface-raised transition-colors border border-border"
+                className="jbp-visual-secondary-action rounded-xl px-4 py-2 text-sm transition-colors"
               >
                 {i18nService.t('taskFormStay')}
               </button>
@@ -907,7 +907,7 @@ const TaskForm: React.FC<TaskFormProps> = ({ mode, task, initialTemplate = null,
                   onDirtyChange?.(false);
                   onCancel();
                 }}
-                className="px-4 py-2 text-sm font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                className="jbp-visual-danger-action rounded-xl px-4 py-2 text-sm font-medium transition-colors"
               >
                 {i18nService.t('taskFormLeave')}
               </button>

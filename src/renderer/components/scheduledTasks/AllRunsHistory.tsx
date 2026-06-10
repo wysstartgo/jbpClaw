@@ -20,26 +20,26 @@ const STATUS_OPTIONS = [
 const statusConfig: Record<TaskStatus, { label: string; tone: string; badgeClass: string; icon: React.ReactNode }> = {
   [TaskStatus.Success]: {
     label: 'scheduledTasksStatusSuccess',
-    tone: 'text-green-600 dark:text-green-500',
-    badgeClass: 'bg-green-50 dark:bg-green-500/10',
+    tone: 'text-success',
+    badgeClass: 'jbp-visual-success-pill',
     icon: <CheckCircleIcon className="h-5 w-5" />,
   },
   [TaskStatus.Error]: {
     label: 'scheduledTasksStatusError',
-    tone: 'text-red-500 dark:text-red-400',
-    badgeClass: 'bg-red-50 dark:bg-red-500/10',
+    tone: 'text-destructive',
+    badgeClass: 'jbp-visual-danger-note',
     icon: <XCircleIcon className="h-5 w-5" />,
   },
   [TaskStatus.Skipped]: {
     label: 'scheduledTasksStatusSkipped',
-    tone: 'text-yellow-600 dark:text-yellow-500',
-    badgeClass: 'bg-yellow-50 dark:bg-yellow-500/10',
+    tone: 'text-warning',
+    badgeClass: 'jbp-visual-warning-note',
     icon: <PlayCircleIcon className="h-5 w-5" />,
   },
   [TaskStatus.Running]: {
     label: 'scheduledTasksStatusRunning',
-    tone: 'text-primary dark:text-primary-hover',
-    badgeClass: 'bg-primary/10 dark:bg-primary/20',
+    tone: 'text-primary',
+    badgeClass: 'jbp-visual-status-pill',
     icon: <ClockIcon className="h-5 w-5 animate-pulse" />,
   },
 };
@@ -121,8 +121,8 @@ const AllRunsHistory: React.FC = () => {
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-surface/70 px-3 py-2">
+    <div className="mx-auto max-w-5xl space-y-3 p-4">
+      <div className="jbp-visual-soft-card flex flex-wrap items-center gap-2 rounded-xl px-3 py-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {STATUS_OPTIONS.map((status) => {
             const cfg = statusConfig[status];
@@ -135,7 +135,7 @@ const AllRunsHistory: React.FC = () => {
                 className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
                   selected
                     ? `${cfg.badgeClass} ${cfg.tone}`
-                    : 'text-secondary hover:bg-surface-raised hover:text-foreground'
+                    : 'jbp-visual-muted-pill hover:text-foreground'
                 }`}
               >
                 {i18nService.t(cfg.label)}
@@ -151,7 +151,7 @@ const AllRunsHistory: React.FC = () => {
               value={filter.startDate ?? ''}
               max={filter.endDate}
               onChange={(event) => handleStartDateChange(event.target.value)}
-              className="h-7 rounded-md border border-border bg-surface px-2 text-xs text-foreground outline-none focus:border-primary"
+              className="jbp-visual-soft-field h-7 rounded-md px-2 text-xs outline-none"
             />
           </label>
           <label className="flex items-center gap-1.5 text-xs text-secondary">
@@ -161,14 +161,14 @@ const AllRunsHistory: React.FC = () => {
               value={filter.endDate ?? ''}
               min={filter.startDate}
               onChange={(event) => handleEndDateChange(event.target.value)}
-              className="h-7 rounded-md border border-border bg-surface px-2 text-xs text-foreground outline-none focus:border-primary"
+              className="jbp-visual-soft-field h-7 rounded-md px-2 text-xs outline-none"
             />
           </label>
           {isFilterActive && (
             <button
               type="button"
               onClick={handleClearFilter}
-              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-secondary transition-colors hover:bg-surface-raised hover:text-foreground"
+              className="jbp-visual-secondary-action inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs transition-colors"
               title={i18nService.t('scheduledTasksFilterClear')}
             >
               <XMarkIcon className="h-3.5 w-3.5" />
@@ -179,8 +179,10 @@ const AllRunsHistory: React.FC = () => {
       </div>
 
       {displayedRuns.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 px-6">
-          <ClockIcon className="h-12 w-12 text-secondary/40 mb-4" />
+        <div className="flex flex-col items-center justify-center px-6 py-16">
+          <div className="jbp-visual-icon-tile mb-4 flex h-12 w-12 items-center justify-center rounded-2xl">
+            <ClockIcon className="h-6 w-6" />
+          </div>
           <p className="text-sm font-medium text-secondary">
             {isFilterActive
               ? i18nService.t('scheduledTasksFilterNoResults')
@@ -201,9 +203,9 @@ const AllRunsHistory: React.FC = () => {
         return (
           <div
             key={run.id}
-            className={`flex items-center justify-between gap-4 py-3 px-4 rounded-xl transition-colors ${
+            className={`jbp-visual-selectable-card flex items-center justify-between gap-4 rounded-xl px-4 py-3 transition-colors ${
               hasSession
-                ? 'cursor-pointer hover:bg-surface-raised'
+                ? 'cursor-pointer'
                 : ''
             }`}
             onClick={() => handleViewSession(run)}
@@ -236,7 +238,7 @@ const AllRunsHistory: React.FC = () => {
                 </div>
               </div>
               <div className="w-20 flex justify-end">
-                <span className={`px-2 py-0.5 text-[11px] uppercase tracking-wider font-bold rounded-md ${cfg.tone} ${cfg.badgeClass}`}>
+                <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${cfg.tone} ${cfg.badgeClass}`}>
                   {i18nService.t(cfg.label)}
                 </span>
               </div>
@@ -249,7 +251,7 @@ const AllRunsHistory: React.FC = () => {
         <button
           type="button"
           onClick={handleLoadMore}
-          className="w-full mt-4 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-primary transition-colors hover:bg-surface-raised"
+          className="jbp-visual-secondary-action mt-4 w-full rounded-xl px-4 py-3 text-sm transition-colors"
         >
           {i18nService.t('scheduledTasksLoadMore')}
         </button>

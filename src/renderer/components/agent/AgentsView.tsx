@@ -101,7 +101,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
   return (
     <div className="flex-1 flex flex-col bg-surface h-full">
       {/* Header */}
-      <div className="draggable flex h-16 items-center justify-between px-8 border-b border-border shrink-0">
+      <div className="jbp-visual-workbench-rail draggable flex h-16 items-center justify-between px-8 border-b shrink-0">
         <div className={`flex items-center gap-3 ${isMac ? 'pl-[68px]' : ''}`}>
           {isSidebarCollapsed && (
             <div className="non-draggable flex items-center gap-1">
@@ -135,7 +135,7 @@ const AgentsView: React.FC<AgentsViewProps> = ({
           <button
             type="button"
             onClick={() => setIsCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-medium text-white shadow-sm transition-all hover:bg-primary-hover hover:shadow-md hover:-translate-y-[1px] active:translate-y-0"
+            className="jbp-visual-primary-action inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all hover:-translate-y-[1px] active:translate-y-0"
           >
             <PlusIcon className="h-3.5 w-3.5" />
             {i18nService.t('createNewAgent')}
@@ -195,11 +195,11 @@ const AgentsView: React.FC<AgentsViewProps> = ({
                   count={managedAgents.length}
                 />
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  <span className="jbp-visual-success-pill inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium">
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
                     {i18nService.t('managedAvailableSection')} {managedAvailableAgents.length}
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] font-medium text-secondary">
+                  <span className="jbp-visual-muted-pill inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium">
                     <LockClosedIcon className="h-3 w-3" />
                     {i18nService.t('managedLockedSection')} {managedLockedAgents.length}
                   </span>
@@ -283,9 +283,9 @@ const AgentsView: React.FC<AgentsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsCreateOpen(true)}
-                className="group flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border-2 border-dashed border-border/60 transition-all duration-300 min-h-[160px] cursor-pointer hover:border-primary/40 hover:bg-gradient-to-br hover:from-primary/[0.04] hover:to-transparent hover:shadow-[0_4px_24px_rgba(var(--lobster-primary-rgb,59,130,246),0.06)] hover:-translate-y-[2px] active:translate-y-0"
+                className="jbp-visual-selectable-card group flex min-h-[160px] cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-dashed p-6 transition-all duration-300 hover:-translate-y-[2px] active:translate-y-0"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 ring-1 ring-primary/10 transition-all duration-300 group-hover:scale-110 group-hover:ring-primary/25 group-hover:shadow-lg">
+                <div className="jbp-visual-icon-tile flex h-12 w-12 items-center justify-center rounded-2xl transition-all duration-300 group-hover:scale-110">
                   <PlusIcon className="h-5 w-5 text-primary" />
                 </div>
                 <div className="text-center">
@@ -322,7 +322,7 @@ const SectionHeader: React.FC<{ icon: string; title: string; count: number }> = 
   <div className="flex items-center gap-2.5 mb-4">
     <span className="text-base">{icon}</span>
     <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-    <span className="rounded-full bg-surface-raised px-2 py-0.5 text-[11px] font-medium text-muted tabular-nums">{count}</span>
+    <span className="jbp-visual-muted-pill rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums">{count}</span>
   </div>
 );
 
@@ -341,16 +341,16 @@ const AgentCard: React.FC<{
   <button
     type="button"
     onClick={onClick}
-    className={`group relative flex flex-col items-start gap-3 p-5 rounded-2xl border text-left transition-all duration-250 min-h-[160px] ${
+    className={`jbp-visual-selectable-card group relative flex min-h-[160px] flex-col items-start gap-3 rounded-2xl p-5 text-left transition-all duration-250 ${
       isUnavailable
-        ? 'border-border/50 bg-muted/20 saturate-[0.3] opacity-80'
+        ? 'is-disabled'
         : 'hover:-translate-y-[2px] hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_8px_30px_rgba(0,0,0,0.2)]'
     } ${
       isActive
-        ? 'border-primary/40 bg-gradient-to-br from-primary/[0.06] to-transparent ring-1 ring-primary/15'
+        ? 'is-active'
         : isUnavailable
           ? ''
-          : 'border-border/60 bg-surface/50 hover:border-primary/25 hover:bg-surface'
+          : ''
     }`}
   >
     {/* Active indicator dot */}
@@ -362,7 +362,7 @@ const AgentCard: React.FC<{
     )}
 
     {isUnavailable && (
-      <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-border bg-background/85 px-2 py-1 text-[10px] font-medium text-secondary shadow-sm">
+      <div className="jbp-visual-muted-pill absolute right-3 top-3 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium shadow-sm">
         <LockClosedIcon className="h-3 w-3" />
         {unavailableLabel}
       </div>
@@ -371,8 +371,8 @@ const AgentCard: React.FC<{
     {/* Icon with gradient background & mask */}
     <div className={`flex shrink-0 h-11 w-11 items-center justify-center rounded-[14px] overflow-hidden transition-transform duration-200 group-hover:scale-105 ${
       isActive
-        ? 'bg-primary/10 ring-1 ring-primary/20'
-        : 'bg-black/5 dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/5 shadow-sm'
+        ? 'jbp-visual-icon-tile'
+        : 'jbp-visual-soft-card shadow-sm'
     }`}>
       <span className="text-2xl drop-shadow-sm">{icon || '🤖'}</span>
     </div>
@@ -383,7 +383,7 @@ const AgentCard: React.FC<{
           {name}
         </div>
         {badgeLabel && (
-          <span className="shrink-0 px-1.5 py-0.5 rounded-md bg-primary/8 text-[10px] text-primary font-medium ring-1 ring-primary/10">
+          <span className="jbp-visual-status-pill shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium">
             {badgeLabel}
           </span>
         )}
@@ -394,7 +394,7 @@ const AgentCard: React.FC<{
         </div>
       )}
       {isUnavailable && (
-        <div className="mt-2.5 rounded-lg border border-border/60 bg-background/50 px-2.5 py-1.5 text-[11px] leading-4 text-muted">
+        <div className="jbp-visual-muted-pill mt-2.5 rounded-lg px-2.5 py-1.5 text-[11px] leading-4">
           {i18nService.t('managedUnavailableHint')}
         </div>
       )}
@@ -411,8 +411,8 @@ const UninstalledPresetCard: React.FC<{
   isAdding: boolean;
   onAdd: () => void;
 }> = ({ icon, name, description, isAdding, onAdd }) => (
-  <div className="group flex flex-col items-start gap-3 p-5 rounded-2xl border border-dashed border-border/50 bg-surface/30 transition-all duration-250 min-h-[160px] hover:border-primary/30 hover:bg-surface/50">
-    <div className="flex shrink-0 h-11 w-11 items-center justify-center rounded-[14px] overflow-hidden bg-background/80 ring-1 ring-border/50 shadow-sm">
+  <div className="jbp-visual-selectable-card group flex min-h-[160px] flex-col items-start gap-3 rounded-2xl border-dashed p-5 transition-all duration-250">
+    <div className="jbp-visual-soft-card flex shrink-0 h-11 w-11 items-center justify-center rounded-[14px] overflow-hidden shadow-sm">
       <span className="text-2xl opacity-60 drop-shadow-sm">{icon || '🤖'}</span>
     </div>
     <div className="min-w-0 w-full flex-1">
@@ -429,7 +429,7 @@ const UninstalledPresetCard: React.FC<{
       type="button"
       onClick={onAdd}
       disabled={isAdding}
-      className="self-end inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15 hover:bg-primary hover:text-white hover:ring-0 disabled:opacity-50 transition-all duration-200"
+      className="jbp-visual-secondary-action self-end inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-medium disabled:opacity-50 transition-all duration-200"
     >
       <SparklesIcon className="h-3 w-3" />
       {isAdding ? '...' : i18nService.t('addAgent')}

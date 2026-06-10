@@ -81,7 +81,7 @@ const AgentWorkingDirectoryField: React.FC<AgentWorkingDirectoryFieldProps> = ({
           ref={buttonRef}
           type="button"
           onClick={() => setShowFolderMenu((open) => !open)}
-          className="min-w-0 flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-transparent text-foreground text-sm hover:bg-surface-raised transition-colors"
+          className="jbp-visual-soft-field min-w-0 flex-1 flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm transition-[border-color,box-shadow,background-color]"
         >
           <FolderIcon className="h-4 w-4 flex-shrink-0 text-secondary" />
           <span className={`flex-1 truncate text-left ${value.trim() ? '' : 'text-secondary'}`}>
@@ -93,7 +93,7 @@ const AgentWorkingDirectoryField: React.FC<AgentWorkingDirectoryFieldProps> = ({
             type="button"
             aria-label={i18nService.t('clear')}
             onClick={() => onChange('')}
-            className="h-10 w-10 flex-shrink-0 inline-flex items-center justify-center rounded-lg border border-border text-secondary hover:bg-surface-raised hover:text-foreground transition-colors"
+            className="jbp-visual-secondary-action h-10 w-10 flex-shrink-0 inline-flex items-center justify-center rounded-xl text-secondary transition-colors"
           >
             <XMarkIcon className="h-3.5 w-3.5 text-secondary" />
           </button>
