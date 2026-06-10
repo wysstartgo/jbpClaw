@@ -11,6 +11,7 @@ class FakeRuntime extends EventEmitter {
   public readonly startCalls: Array<{ sessionId: string; prompt: string }> = [];
   public readonly stoppedSessionIds: string[] = [];
   public firstStartShouldFail = false;
+  public autoCompleteStartSession = true;
 
   async startSession(sessionId: string, prompt: string): Promise<void> {
     this.startCalls.push({ sessionId, prompt });
@@ -19,6 +20,8 @@ class FakeRuntime extends EventEmitter {
       this.firstStartShouldFail = false;
       throw new Error('API Error 400: payload too large');
     }
+
+    if (!this.autoCompleteStartSession) return;
 
     this.emit('message', sessionId, {
       id: 'assistant-1',
@@ -63,6 +66,7 @@ class FakeCoworkStore {
   }>();
   private readonly agents = new Map<string, { workingDirectory?: string }>();
   private sessionCounter = 0;
+  private messageCounter = 0;
 
   getConfig() {
     return {
@@ -115,7 +119,19 @@ class FakeCoworkStore {
     Object.assign(session, updates);
   }
 
-  addMessage(): void {}
+  addMessage(sessionId: string, message: Record<string, unknown>) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Unknown session: ${sessionId}`);
+    }
+    const created = {
+      id: `message-${++this.messageCounter}`,
+      timestamp: Date.now(),
+      ...message,
+    };
+    session.messages.push(created);
+    return created;
+  }
 }
 
 class FakeIMStore {
@@ -184,6 +200,20 @@ class FakeIMStore {
       entry.imConversationId !== imConversationId || entry.platform !== platform
     ));
   }
+}
+
+function createMessage(overrides: Record<string, unknown> = {}) {
+  return {
+    platform: 'nim',
+    messageId: 'im-msg-1',
+    conversationId: 'conv-1',
+    senderId: 'user-1',
+    senderName: 'Tester',
+    content: '2分钟后提醒我喝水',
+    chatType: 'direct',
+    timestamp: Date.parse('2026-03-15T16:28:00+08:00'),
+    ...overrides,
+  };
 }
 
 test('payload too large 400 from IM cowork retries with a fresh session', async () => {
@@ -277,4 +307,264 @@ test('native IM cowork session uses the bound agent working directory when avail
     handler.destroy();
     fs.rmSync(agentWorkspace, { recursive: true, force: true });
   }
+});
+
+test('uses only current-turn store messages when completing an IM reply', async () => {
+  const runtime = new FakeRuntime();
+  runtime.autoCompleteStartSession = false;
+  const coworkStore = new FakeCoworkStore();
+  const imStore = new FakeIMStore();
+
+  const handler = new IMCoworkHandler({
+    coworkRuntime: runtime,
+    coworkStore,
+    imStore,
+  });
+
+  const pending = handler.processMessage(createMessage({ content: '查测试环境日志' }));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const sessionId = 'session-1';
+  coworkStore.addMessage(sessionId, {
+    id: 'old-user',
+    type: 'user',
+    content: '上一轮问题',
+    metadata: {},
+  });
+  coworkStore.addMessage(sessionId, {
+    id: 'old-assistant',
+    type: 'assistant',
+    content: '上一轮答案，不应该出现在本次 IM 回复里。',
+    metadata: {},
+  });
+  coworkStore.addMessage(sessionId, {
+    id: 'current-user',
+    type: 'user',
+    content: '查测试环境日志',
+    metadata: {},
+  });
+  coworkStore.addMessage(sessionId, {
+    id: 'current-assistant',
+    type: 'assistant',
+    content: '当前轮最终答案。',
+    metadata: {},
+  });
+
+  runtime.emit('message', sessionId, {
+    id: 'current-user',
+    type: 'user',
+    content: '查测试环境日志',
+    timestamp: Date.now(),
+    metadata: {},
+  });
+  runtime.emit('message', sessionId, {
+    id: 'current-assistant',
+    type: 'assistant',
+    content: '当前轮流式快照',
+    timestamp: Date.now(),
+    metadata: {},
+  });
+  runtime.emit('complete', sessionId, null);
+
+  const reply = await pending;
+  expect(reply).toBe('当前轮最终答案。');
+  expect(reply).not.toContain('上一轮答案');
+
+  handler.destroy();
+});
+
+test('falls back to current user boundary when reconciled store message ids changed', async () => {
+  const runtime = new FakeRuntime();
+  runtime.autoCompleteStartSession = false;
+  const coworkStore = new FakeCoworkStore();
+  const imStore = new FakeIMStore();
+
+  const handler = new IMCoworkHandler({
+    coworkRuntime: runtime,
+    coworkStore,
+    imStore,
+  });
+
+  const pending = handler.processMessage(createMessage({ content: '继续查错误' }));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const sessionId = 'session-1';
+  coworkStore.addMessage(sessionId, {
+    id: 'history-user',
+    type: 'user',
+    content: '历史问题',
+    metadata: {},
+  });
+  coworkStore.addMessage(sessionId, {
+    id: 'history-assistant',
+    type: 'assistant',
+    content: '历史答案，不应该被发送。',
+    metadata: {},
+  });
+  coworkStore.addMessage(sessionId, {
+    id: 'store-current-user',
+    type: 'user',
+    content: '继续查错误',
+    metadata: {},
+  });
+  coworkStore.addMessage(sessionId, {
+    id: 'runtime-tool-use',
+    type: 'tool_use',
+    content: 'Using tool: exec',
+    metadata: { toolName: 'exec', toolUseId: 'tool-1' },
+  });
+  coworkStore.addMessage(sessionId, {
+    id: 'store-current-assistant',
+    type: 'assistant',
+    content: '按 boundary 找到的当前轮最终答案。',
+    metadata: {},
+  });
+
+  runtime.emit('message', sessionId, {
+    id: 'runtime-current-user',
+    type: 'user',
+    content: '继续查错误',
+    timestamp: Date.now(),
+    metadata: {},
+  });
+  runtime.emit('message', sessionId, {
+    id: 'runtime-tool-use',
+    type: 'tool_use',
+    content: 'Using tool: exec',
+    timestamp: Date.now(),
+    metadata: { toolName: 'exec', toolUseId: 'tool-1' },
+  });
+  runtime.emit('message', sessionId, {
+    id: 'runtime-current-assistant',
+    type: 'assistant',
+    content: '当前轮流式快照',
+    timestamp: Date.now(),
+    metadata: {},
+  });
+  runtime.emit('complete', sessionId, null);
+
+  const reply = await pending;
+  expect(reply).toBe('按 boundary 找到的当前轮最终答案。');
+  expect(reply).not.toContain('历史答案');
+
+  handler.destroy();
+});
+
+test('strips thinking blocks from normal IM replies', async () => {
+  const runtime = new FakeRuntime();
+  runtime.autoCompleteStartSession = false;
+  const coworkStore = new FakeCoworkStore();
+  const imStore = new FakeIMStore();
+
+  const handler = new IMCoworkHandler({
+    coworkRuntime: runtime,
+    coworkStore,
+    imStore,
+  });
+
+  const pending = handler.processMessage(createMessage({ content: '给我结论' }));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const sessionId = 'session-1';
+  coworkStore.addMessage(sessionId, {
+    id: 'current-user',
+    type: 'user',
+    content: '给我结论',
+    metadata: {},
+  });
+  coworkStore.addMessage(sessionId, {
+    id: 'thinking-message',
+    type: 'assistant',
+    content: '这段结构化 thinking 不应该发送',
+    metadata: { isThinking: true },
+  });
+  coworkStore.addMessage(sessionId, {
+    id: 'current-assistant',
+    type: 'assistant',
+    content: '<think>内部推理</think>最终答案',
+    metadata: {},
+  });
+
+  runtime.emit('message', sessionId, {
+    id: 'current-user',
+    type: 'user',
+    content: '给我结论',
+    timestamp: Date.now(),
+    metadata: {},
+  });
+  runtime.emit('message', sessionId, {
+    id: 'thinking-message',
+    type: 'assistant',
+    content: '这段结构化 thinking 不应该发送',
+    timestamp: Date.now(),
+    metadata: { isThinking: true },
+  });
+  runtime.emit('message', sessionId, {
+    id: 'current-assistant',
+    type: 'assistant',
+    content: '<think>内部推理</think>最终答案',
+    timestamp: Date.now(),
+    metadata: {},
+  });
+  runtime.emit('complete', sessionId, null);
+
+  const reply = await pending;
+  expect(reply).toBe('最终答案');
+
+  handler.destroy();
+});
+
+test('does not relay thinking content for raw async reminder replies', async () => {
+  const runtime = new FakeRuntime();
+  const coworkStore = new FakeCoworkStore();
+  const imStore = new FakeIMStore();
+  const relayedReplies: Array<{ platform: string; conversationId: string; text: string }> = [];
+
+  const session = coworkStore.createSession('IM-dingtalk', process.cwd(), '', 'auto');
+  imStore.createSessionMapping('default:user-42', 'dingtalk', session.id as string);
+
+  const handler = new IMCoworkHandler({
+    coworkRuntime: runtime,
+    coworkStore,
+    imStore,
+    sendAsyncReply: async (platform: string, conversationId: string, text: string) => {
+      relayedReplies.push({ platform, conversationId, text });
+      return true;
+    },
+  });
+
+  runtime.emit('message', session.id, {
+    id: 'system-1',
+    type: 'system',
+    content: '⏰ 提醒：开会',
+    timestamp: Date.now(),
+    metadata: {},
+  });
+  runtime.emit('message', session.id, {
+    id: 'thinking-1',
+    type: 'assistant',
+    content: '内部推理',
+    timestamp: Date.now(),
+    metadata: { isThinking: true },
+  });
+  runtime.emit('message', session.id, {
+    id: 'assistant-1',
+    type: 'assistant',
+    content: '<thinking>先判断提醒语气</thinking>时间到了，记得开会。',
+    timestamp: Date.now(),
+    metadata: {},
+  });
+  runtime.emit('complete', session.id, null);
+
+  await new Promise((resolve) => setImmediate(resolve));
+
+  expect(relayedReplies).toEqual([
+    {
+      platform: 'dingtalk',
+      conversationId: 'default:user-42',
+      text: '时间到了，记得开会。',
+    },
+  ]);
+
+  handler.destroy();
 });
