@@ -205,10 +205,11 @@ export class PluginManager {
   constructor(private readonly store: CoworkStore) {}
 
   async listPlugins(): Promise<PluginListItem[]> {
+    const hiddenIds = getHiddenPluginIds();
     const userPlugins = this.store.listUserPlugins();
     const extensionsDir = getExtensionsDir();
 
-    return userPlugins.map(plugin => {
+    return userPlugins.filter(plugin => !isHiddenPlugin(plugin.pluginId, hiddenIds)).map(plugin => {
       let description: string | undefined;
       let version = plugin.version;
       let hasConfig = false;
@@ -484,4 +485,83 @@ export class PluginManager {
     }
     return null;
   }
+}
+
+const INTERNAL_PLUGIN_IDS = [
+  'ask-user-question',
+  'memory-core',
+  'qwen-portal-auth',
+  'qqbot',
+  'acpx',
+  'browser',
+  'llm-task',
+  'thread-ownership',
+  'google',
+  'anthropic',
+  'openai',
+  'openai-codex',
+  'deepseek',
+  'moonshot',
+  'minimax',
+  'volcengine',
+  'qianfan',
+  'qwen',
+  'qwen-portal',
+  'zai',
+  'youdaozhiyun',
+  'stepfun',
+  'xiaomi',
+  'openrouter',
+  'ollama',
+  'lm-studio',
+  'lobsterai-server',
+  'github-copilot',
+  'lobsterai-copilot',
+  'lobster',
+  'kimi',
+  'dingtalk',
+  'feishu',
+  'feishu-openclaw-plugin',
+  'openclaw-nim',
+  'nim',
+  'nimsuite-openclaw-nim-channel',
+  'email',
+  'discord',
+  'telegram',
+  'talk-voice',
+  'memory-lancedb',
+  'memory-wiki',
+];
+
+function readPreinstalledPluginIdsFromPackageJson(): string[] {
+  try {
+    const pkgPath = path.join(app.getAppPath(), 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    const plugins = pkg.openclaw?.plugins;
+    if (!Array.isArray(plugins)) return [];
+    return plugins
+      .map((p: { id?: string }) => p.id)
+      .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function getHiddenPluginIds(): Set<string> {
+  const hidden = new Set<string>();
+  for (const id of readPreinstalledPluginIdsFromPackageJson()) {
+    hidden.add(id);
+  }
+  for (const id of INTERNAL_PLUGIN_IDS) {
+    hidden.add(id);
+  }
+  return hidden;
+}
+
+function isHiddenPlugin(pluginId: string, hiddenIds: Set<string>): boolean {
+  return hiddenIds.has(pluginId);
+}
+
+export function isHiddenUserPluginId(pluginId: string): boolean {
+  return isHiddenPlugin(pluginId, getHiddenPluginIds());
 }

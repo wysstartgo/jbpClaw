@@ -181,7 +181,7 @@ import {
 import { collectReferencedEnvVarNames, pickReferencedSecretEnvVars } from './libs/openclawSecretEnv';
 import { startOpenClawTokenProxy, stopOpenClawTokenProxy } from './libs/openclawTokenProxy';
 import { migrateMainAgentWorkspace } from './libs/openclawWorkspaceMigration';
-import { type PluginInstallParams,PluginManager } from './libs/pluginManager';
+import { isHiddenUserPluginId, type PluginInstallParams, PluginManager } from './libs/pluginManager';
 import { ensurePythonRuntimeReady } from './libs/pythonRuntime';
 import { resolveStdioCommand } from './libs/resolveStdioCommand';
 import { serializeForLog } from './libs/sanitizeForLog';
@@ -1788,7 +1788,10 @@ const getOpenClawConfigSync = (): OpenClawConfigSync => {
       getResolvedMcpServers: () => resolvedMcpServersCache,
       getAskUserCallbackUrl: () => mcpBridgeServer?.askUserCallbackUrl ?? null,
       getAgents: () => getAgentManager().listAgents(),
-      getUserPlugins: () => getCoworkStore().listUserPlugins(),
+      getUserPlugins: () =>
+        getCoworkStore()
+          .listUserPlugins()
+          .filter(p => !isHiddenUserPluginId(p.pluginId)),
       getQingShuEnabledToolBundles: () => qingShuExtensionHost?.getEnabledToolBundles() ?? [],
       getQingShuSharedToolCatalog: () => qingShuExtensionHost?.getSharedToolCatalog() ?? {
         generatedAt: Date.now(),

@@ -166,6 +166,7 @@ interface ProviderDefInput {
     readonly id: string;
     readonly name: string;
     readonly supportsImage: boolean;
+    readonly contextWindow?: number;
   }[];
   /**
    * Coding Plan dedicated model list. When unset, coding plan mode keeps the
@@ -175,6 +176,7 @@ interface ProviderDefInput {
     readonly id: string;
     readonly name: string;
     readonly supportsImage: boolean;
+    readonly contextWindow?: number;
   }[];
   /** OpenClaw gateway provider ID used when building runtime model refs */
   readonly openClawProviderId: OpenClawProviderId;
@@ -583,12 +585,14 @@ export interface ProviderDef {
     readonly id: string;
     readonly name: string;
     readonly supportsImage: boolean;
+    readonly contextWindow?: number;
   }[];
   /** Coding Plan dedicated model metadata */
   readonly codingPlanModels?: readonly {
     readonly id: string;
     readonly name: string;
     readonly supportsImage: boolean;
+    readonly contextWindow?: number;
   }[];
   /** OpenClaw gateway provider ID used when building runtime model refs */
   readonly openClawProviderId: OpenClawProviderId;
