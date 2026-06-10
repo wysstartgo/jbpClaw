@@ -47,6 +47,7 @@ import { ArtifactPreviewIpc } from '../shared/artifactPreview/constants';
 import { ClipboardIpc } from '../shared/clipboard/constants';
 import { CoworkIpcChannel } from '../shared/cowork/constants';
 import { DialogIpc } from '../shared/dialog/constants';
+import { HtmlShareIpc } from '../shared/htmlShare/constants';
 import type { KitSkillMetadata } from '../shared/kit/constants';
 import type { ListLocalWebServicesOptions, LocalWebService } from '../shared/localWebServices/constants';
 import { LocalWebServicesIpc } from '../shared/localWebServices/constants';
@@ -533,6 +534,28 @@ contextBridge.exposeInMainWorld('electron', {
     clearBrowserCache: () => ipcRenderer.invoke(ArtifactPreviewIpc.ClearBrowserCache),
     listLocalWebServices: (options?: ListLocalWebServicesOptions) =>
       ipcRenderer.invoke(LocalWebServicesIpc.List, options) as Promise<LocalWebService[]>,
+  },
+  htmlShare: {
+    createFromHtmlFile: (options: {
+      sessionId: string;
+      artifactId: string;
+      filePath: string;
+      title: string;
+    }) => ipcRenderer.invoke(HtmlShareIpc.CreateFromHtmlFile, options),
+    updateFromHtmlFile: (options: {
+      sessionId: string;
+      artifactId: string;
+      filePath: string;
+      title: string;
+      shareId: string;
+      currentStatus?: string;
+    }) => ipcRenderer.invoke(HtmlShareIpc.UpdateFromHtmlFile, options),
+    getByHtmlFile: (options: { filePath: string }) =>
+      ipcRenderer.invoke(HtmlShareIpc.GetByHtmlFile, options),
+    updateStatus: (options: { shareId: string; status: string }) =>
+      ipcRenderer.invoke(HtmlShareIpc.UpdateStatus, options),
+    disable: (shareId: string) => ipcRenderer.invoke(HtmlShareIpc.Disable, shareId),
+    get: (shareId: string) => ipcRenderer.invoke(HtmlShareIpc.Get, shareId),
   },
   autoLaunch: {
     get: () => ipcRenderer.invoke('app:getAutoLaunch'),

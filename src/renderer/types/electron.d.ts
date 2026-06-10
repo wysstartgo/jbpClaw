@@ -43,6 +43,24 @@ interface SpeechStateEvent {
   message?: string;
 }
 
+interface HtmlShareResult {
+  success: boolean;
+  shareId?: string;
+  url?: string;
+  accessMode?: string;
+  shareCode?: string;
+  shareCodeUnavailable?: boolean;
+  status?: string;
+  moderationStatus?: string;
+  updatedAt?: string;
+  contentUpdatedAt?: string;
+  disabledAt?: string | null;
+  disabledReason?: string | null;
+  warnings?: string[];
+  error?: string;
+  code?: number;
+}
+
 type SpeechStartSource = 'manual' | 'wake' | 'follow_up';
 
 interface SpeechFollowUpArmRequest {
@@ -844,6 +862,28 @@ interface IElectronAPI {
     clearBrowserCookies: () => Promise<{ success: boolean; error?: string }>;
     clearBrowserCache: () => Promise<{ success: boolean; error?: string }>;
     listLocalWebServices: (options?: ListLocalWebServicesOptions) => Promise<LocalWebService[]>;
+  };
+  htmlShare: {
+    createFromHtmlFile: (options: {
+      sessionId: string;
+      artifactId: string;
+      filePath: string;
+      title: string;
+    }) => Promise<HtmlShareResult>;
+    updateFromHtmlFile: (options: {
+      sessionId: string;
+      artifactId: string;
+      filePath: string;
+      title: string;
+      shareId: string;
+      currentStatus?: string;
+    }) => Promise<HtmlShareResult>;
+    getByHtmlFile: (options: {
+      filePath: string;
+    }) => Promise<{ success: boolean; share?: HtmlShareResult | null; error?: string; code?: number }>;
+    updateStatus: (options: { shareId: string; status: string }) => Promise<HtmlShareResult>;
+    disable: (shareId: string) => Promise<HtmlShareResult>;
+    get: (shareId: string) => Promise<HtmlShareResult>;
   };
   autoLaunch: {
     get: () => Promise<{ enabled: boolean }>;
