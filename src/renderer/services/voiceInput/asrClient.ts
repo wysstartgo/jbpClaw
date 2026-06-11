@@ -25,10 +25,7 @@ export const recognizeVoiceInput = async (wavBlob: Blob): Promise<AsrRecognizeDa
     langType: AsrLangType.ZhChs,
   });
   if (!result.success) {
-    throw new AsrClientError(
-      result.message || result.error || getFallbackAsrErrorMessage(result.code),
-      result.code,
-    );
+    throw new AsrClientError(getFallbackAsrErrorMessage(result.code), result.code);
   }
   if (!result.data.text.trim()) {
     throw new AsrClientError(getFallbackAsrErrorMessage(AsrApiCode.RecognitionFailed), AsrApiCode.RecognitionFailed);

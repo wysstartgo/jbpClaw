@@ -1,5 +1,6 @@
 import { i18nService } from '../i18n';
 import {
+  VOICE_INPUT_MIN_RECORDING_MS,
   VOICE_INPUT_TARGET_SAMPLE_RATE,
 } from './constants';
 import { AsrClientError } from './errors';
@@ -73,6 +74,9 @@ export const startVoiceRecording = async (): Promise<VoiceRecordingSession> => {
         throw new AsrClientError(i18nService.t('voiceInputNoAudioCaptured'));
       }
       const resampled = resampleLinear(merged, sourceSampleRate, VOICE_INPUT_TARGET_SAMPLE_RATE);
+      if (resampled.length < VOICE_INPUT_TARGET_SAMPLE_RATE * (VOICE_INPUT_MIN_RECORDING_MS / 1000)) {
+        throw new AsrClientError(i18nService.t('voiceInputNoAudioCaptured'));
+      }
       return encodePcm16Wav(resampled, VOICE_INPUT_TARGET_SAMPLE_RATE);
     },
     cancel: () => {
