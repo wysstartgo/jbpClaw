@@ -3,6 +3,7 @@ import React from 'react';
 
 import {
   AnthropicIcon,
+  BananaIcon,
   CustomProviderIcon,
   DeepSeekIcon,
   DoubaoIcon,
@@ -24,6 +25,7 @@ import {
 } from '../components/icons/providers';
 
 export const ProviderIconId = {
+  Banana: 'banana',
   Doubao: 'doubao',
 } as const;
 export type ProviderIconId = typeof ProviderIconId[keyof typeof ProviderIconId];
@@ -31,6 +33,7 @@ export type ProviderIconId = typeof ProviderIconId[keyof typeof ProviderIconId];
 const PROVIDER_ICON_MAP: Record<string, React.ReactNode> = {
   [ProviderName.OpenAI]: <OpenAIIcon />,
   [ProviderName.DeepSeek]: <DeepSeekIcon />,
+  [ProviderIconId.Banana]: <BananaIcon />,
   [ProviderIconId.Doubao]: <DoubaoIcon />,
   [ProviderName.Gemini]: <GeminiIcon />,
   [ProviderName.Anthropic]: <AnthropicIcon />,
