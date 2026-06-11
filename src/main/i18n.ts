@@ -48,6 +48,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
 
     // Cowork error messages (shared with renderer via classifyErrorKey)
     coworkErrorAuthInvalid: 'API 密钥无效或已过期，请检查配置。',
+    coworkErrorFreeQuotaExhausted:
+      '当前模型的免费额度已用完，升级套餐后可继续使用。\n\n[立即升级](https://c.youdao.com/dict/hardware/octopus/lobsterai-portal.html)',
     coworkErrorInsufficientBalance: 'API 余额不足，请充值后重试。',
     coworkErrorInputTooLong: '输入内容过长，超出模型上下文限制。',
     coworkErrorMessageTooLarge:
@@ -225,6 +227,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
 
     // Cowork error messages
     coworkErrorAuthInvalid: 'Invalid or expired API key. Please check your configuration.',
+    coworkErrorFreeQuotaExhausted:
+      'The current model\'s free quota has been used up. Upgrade your plan to continue.\n\n[Upgrade now](https://c.youdao.com/dict/hardware/octopus/lobsterai-portal.html)',
     coworkErrorInsufficientBalance: 'Insufficient API balance. Please top up and try again.',
     coworkErrorInputTooLong: 'Input too long, exceeding model context limit.',
     coworkErrorMessageTooLarge:

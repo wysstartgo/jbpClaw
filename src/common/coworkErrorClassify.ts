@@ -6,6 +6,8 @@
 const ERROR_RULES: Array<[RegExp, string]> = [
   // Auth: Anthropic, DeepSeek, OpenAI, Gemini, HTTP 401
   [/authentication[_ ](error|fails?)|api[_ ]key.*(invalid|expired|not[_ ]valid)|invalid.*api.*key|incorrect.*api.*key|unauthorized|PERMISSION_DENIED|\b401\b/i, 'coworkErrorAuthInvalid'],
+  // LobsterAI free tier quota.
+  [/免费额度.*(用完|耗尽)|free.*quota.*(exhausted|used up|limit)/i, 'coworkErrorFreeQuotaExhausted'],
   // Rate limit: HTTP 429, Anthropic/DeepSeek overloaded, Gemini RESOURCE_EXHAUSTED
   // (must precede billing so "RESOURCE_EXHAUSTED: quota exceeded" maps to rate-limit)
   [/\b429\b|rate[_ ]limit|too many requests|overloaded|RESOURCE_EXHAUSTED/i, 'coworkErrorRateLimit'],

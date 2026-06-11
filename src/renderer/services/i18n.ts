@@ -1421,6 +1421,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
 
     // Cowork 错误消息
     coworkErrorAuthInvalid: 'API 密钥无效或已过期，请在设置中检查并更新您的 API 密钥。',
+    coworkErrorFreeQuotaExhausted:
+      '当前模型的免费额度已用完，升级套餐后可继续使用。\n\n[立即升级](https://c.youdao.com/dict/hardware/octopus/lobsterai-portal.html)',
     coworkErrorInsufficientBalance: 'API 余额不足，请充值后重试。',
     coworkErrorInputTooLong: '输入内容过长，超出模型上下文限制，请缩短对话内容后重试。',
     coworkErrorMessageTooLarge:
@@ -1637,6 +1639,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
     kitSearchPlaceholder: '搜索 Kits',
     searchKits: '搜索 Kits',
     noKitsInstalled: '暂无已安装 Kit',
+    kitInstallGuideDescription: '前往 Kit 市场安装后，即可在对话中快速调用套件能力。',
+    kitGoInstall: '去安装 Kit',
     kitSearchNoResults: '没有匹配的 Kit',
     clearKit: '移除 Kit',
 
@@ -3683,6 +3687,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
 
     // Cowork error messages
     coworkErrorAuthInvalid: 'Invalid or expired API key. Please check and update your API key in settings.',
+    coworkErrorFreeQuotaExhausted:
+      'The current model\'s free quota has been used up. Upgrade your plan to continue.\n\n[Upgrade now](https://c.youdao.com/dict/hardware/octopus/lobsterai-portal.html)',
     coworkErrorInsufficientBalance: 'Insufficient API balance. Please top up and try again.',
     coworkErrorInputTooLong:
       'Input too long, exceeding model context limit. Please shorten the conversation and try again.',
@@ -3905,6 +3911,8 @@ const translations: Record<LanguageType, Record<string, string>> = {
     kitSearchPlaceholder: 'Search kits',
     searchKits: 'Search kits',
     noKitsInstalled: 'No installed kits',
+    kitInstallGuideDescription: 'Install kits from the marketplace to use their capabilities in conversations.',
+    kitGoInstall: 'Install kits',
     kitSearchNoResults: 'No kits match your search',
     clearKit: 'Remove kit',
 

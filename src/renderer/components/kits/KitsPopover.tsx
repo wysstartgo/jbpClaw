@@ -1,4 +1,4 @@
-import { CheckIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, PlusIcon } from '@heroicons/react/24/outline';
 import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
@@ -13,6 +13,16 @@ import SidebarKitsIcon from '../icons/SidebarKitsIcon';
 
 const MIN_SEARCHABLE_KIT_COUNT = 3;
 
+const KitsGuideIcon: React.FC = () => (
+  <div className="relative h-16 w-16">
+    <div className="absolute inset-0 rounded-[18px] bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 ring-1 ring-inset ring-primary/15" />
+    <SidebarKitsIcon className="absolute inset-0 m-auto h-9 w-9 text-primary" />
+    <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white shadow ring-2 ring-surface">
+      <PlusIcon className="h-3 w-3" strokeWidth={3} />
+    </span>
+  </div>
+);
+
 interface KitsPopoverProps {
   isOpen: boolean;
   onClose: () => void;
@@ -25,6 +35,7 @@ const KitsPopover: React.FC<KitsPopoverProps> = ({
   isOpen,
   onClose,
   onSelectKit,
+  onManageKits,
   anchorRef,
 }) => {
   const dispatch = useDispatch();
@@ -38,8 +49,10 @@ const KitsPopover: React.FC<KitsPopoverProps> = ({
   const marketplaceKits = useSelector((state: RootState) => state.kit.marketplaceKits);
   const activeKitIds = useSelector((state: RootState) => state.kit.activeKitIds);
 
+  const installedKitIds = Object.keys(installedKits);
+
   // Build display list: only installed kits, with marketplace metadata for display
-  const installedKitList: MarketplaceKit[] = Object.keys(installedKits)
+  const installedKitList: MarketplaceKit[] = installedKitIds
     .map(kitId => marketplaceKits.find(mk => mk.id === kitId))
     .filter((k): k is MarketplaceKit => k !== undefined);
   const shouldShowSearch = installedKitList.length >= MIN_SEARCHABLE_KIT_COUNT;
@@ -136,12 +149,21 @@ const KitsPopover: React.FC<KitsPopoverProps> = ({
     // Don't close popover to allow multi-selection
   };
 
+  const handleOpenMarketplace = () => {
+    onClose();
+    onManageKits();
+  };
+
   if (!isOpen) return null;
+
+  const shouldShowInstallGuide = !isLoading && installedKitIds.length === 0;
 
   return (
     <div
       ref={popoverRef}
-      className="absolute bottom-full left-0 z-50 mb-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-surface shadow-popover"
+      className={`absolute bottom-full left-0 z-50 mb-2 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-surface shadow-popover ${
+        shouldShowInstallGuide ? 'w-60' : 'w-80'
+      }`}
       role="menu"
     >
       {shouldShowSearch && (
@@ -161,14 +183,32 @@ const KitsPopover: React.FC<KitsPopoverProps> = ({
       )}
 
       {/* Kits list */}
-      <div className="overflow-y-auto px-2 py-1.5" style={{ maxHeight: `${maxListHeight}px` }}>
+      <div
+        className={shouldShowInstallGuide ? 'px-4 py-5' : 'overflow-y-auto px-2 py-1.5'}
+        style={shouldShowInstallGuide ? undefined : { maxHeight: `${maxListHeight}px` }}
+      >
         {isLoading ? (
           <div className="px-3 py-5 text-center text-[13px] text-secondary">
             {i18nService.t('kitLoading')}
           </div>
-        ) : installedKitList.length === 0 ? (
-          <div className="px-3 py-5 text-center text-[13px] text-secondary">
-            {i18nService.t('noKitsInstalled')}
+        ) : shouldShowInstallGuide ? (
+          <div>
+            <div className="mb-3 flex justify-center">
+              <KitsGuideIcon />
+            </div>
+            <div className="text-center text-[13px] font-medium text-foreground">
+              {i18nService.t('noKitsInstalled')}
+            </div>
+            <div className="mt-1 text-center text-[12px] text-secondary">
+              {i18nService.t('kitInstallGuideDescription')}
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenMarketplace}
+              className="mt-3 w-full rounded-lg bg-primary px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-primary/90"
+            >
+              {i18nService.t('kitGoInstall')}
+            </button>
           </div>
         ) : filteredKits.length === 0 ? (
           <div className="px-3 py-5 text-center text-[13px] text-secondary">
