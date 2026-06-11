@@ -127,6 +127,16 @@ const makeConfigWithDeletedProviderModel = (
   },
 });
 
+const addedProviderMigrationCases: Array<{ providerName: ProviderName; deletedModelId: string }> = [
+  { providerName: ProviderName.DeepSeek, deletedModelId: 'deepseek-v4-flash' },
+  { providerName: ProviderName.Moonshot, deletedModelId: 'kimi-k2.6' },
+  { providerName: ProviderName.Qwen, deletedModelId: 'qwen3.6-plus' },
+  { providerName: ProviderName.Volcengine, deletedModelId: 'doubao-seed-2-0-pro-260215' },
+  { providerName: ProviderName.Minimax, deletedModelId: 'MiniMax-M3' },
+  { providerName: ProviderName.Xiaomi, deletedModelId: 'mimo-v2.5-pro' },
+  { providerName: ProviderName.OpenAI, deletedModelId: 'gpt-5.4' },
+];
+
 test('configService fills missing provider model names from model ids', async () => {
   const defaultProviders = defaultConfig.providers!;
   mockStoredConfig.value = {
@@ -349,6 +359,44 @@ test('configService preserves user-configured context windows for known models',
   expect(savedConfig.providers?.[ProviderName.DeepSeek].models?.find(model => model.id === 'deepseek-v4-pro')?.contextWindow).toBe(384_000);
   expect(savedConfig.providers?.[ProviderName.Xiaomi].models?.find(model => model.id === 'mimo-v2.5-pro')?.contextWindow).toBe(640_000);
   expect(savedConfig.providers?.[ProviderName.Xiaomi].models?.find(model => model.id === 'mimo-v2.5')?.contextWindow).toBe(768_000);
+});
+
+test.each(addedProviderMigrationCases)(
+  'configService does not re-inject a deleted $providerName model after migration is applied',
+  async ({ providerName, deletedModelId }) => {
+    mockStoredConfig.value = makeConfigWithDeletedProviderModel(providerName, deletedModelId);
+
+    const { configService } = await import('./config');
+    await configService.init();
+
+    expect(configService.getConfig().providers?.[providerName].models?.map(model => model.id)).not.toContain(deletedModelId);
+  }
+);
+
+test('configService treats a provider with any migrated model as already migrated', async () => {
+  const deletedModelId = 'mimo-v2.5-pro';
+  mockStoredConfig.value = {
+    ...defaultConfig,
+    providerModelMigrationVersions: undefined,
+    providers: {
+      ...defaultConfig.providers,
+      [ProviderName.Xiaomi]: {
+        ...defaultConfig.providers![ProviderName.Xiaomi],
+        enabled: true,
+        apiKey: 'sk-xiaomi',
+        models: defaultConfig.providers![ProviderName.Xiaomi].models?.filter(
+          model => model.id !== deletedModelId
+        ),
+      },
+    },
+  };
+
+  const { configService } = await import('./config');
+  await configService.init();
+
+  const savedConfig = mockStoredConfig.saved as AppConfig;
+  expect(savedConfig.providerModelMigrationVersions?.[ProviderName.Xiaomi]).toBe(1);
+  expect(savedConfig.providers?.[ProviderName.Xiaomi].models?.map(model => model.id)).not.toContain(deletedModelId);
 });
 
 test('configService does not re-inject a deleted model after migration is applied', async () => {

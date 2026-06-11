@@ -1,4 +1,5 @@
 import { type ProviderConfig, ProviderName, ProviderRegistry } from '../../shared/providers';
+import { normalizeBrowserWebAccessConfig } from '../../shared/browserWebAccess/constants';
 import { TtsEngine } from '../../shared/tts/constants';
 import {
   AppConfig,
@@ -443,6 +444,7 @@ const hydrateStoredConfig = (storedConfig: AppConfig): AppConfig => {
     },
     providers: mergedProviders as AppConfig['providers'],
     providerModelMigrationVersions,
+    browserWebAccess: normalizeBrowserWebAccessConfig(storedConfig.browserWebAccess),
   });
 };
 
@@ -524,6 +526,9 @@ class ConfigService {
       ...(newConfig.wakeInput ? { wakeInput: mergedWakeInput } : {}),
       ...(newConfig.tts ? { tts: mergedTts } : {}),
       ...(newConfig.voice ? { voice: mergedVoice } : {}),
+      browserWebAccess: normalizeBrowserWebAccessConfig(
+        newConfig.browserWebAccess ?? baseConfig.browserWebAccess,
+      ),
     };
     await localStore.setItem(CONFIG_KEYS.APP_CONFIG, this.config);
   }
