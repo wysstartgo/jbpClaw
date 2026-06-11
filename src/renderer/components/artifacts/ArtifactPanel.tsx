@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 
 import { i18nService } from '@/services/i18n';
+import { copyTextToClipboard } from '@/services/clipboard';
 import type { RootState } from '@/store';
 import {
   activateArtifactPreviewTab,
@@ -392,7 +393,11 @@ const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
       }
     } else {
-      await navigator.clipboard.writeText(selectedArtifact.content);
+      const success = await copyTextToClipboard(selectedArtifact.content);
+      if (!success) {
+        window.dispatchEvent(new CustomEvent('app:showToast', { detail: t('copyFailed') }));
+        return;
+      }
     }
     window.dispatchEvent(new CustomEvent('app:showToast', { detail: t('messageCopied') }));
   }, [selectedArtifact]);

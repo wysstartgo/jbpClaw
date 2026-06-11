@@ -24,6 +24,7 @@ import { DEFAULT_TTS_CONFIG } from '../../config';
 import { AppCustomEvent } from '../../constants/app';
 import PetCompanion from '../../pet/PetCompanion';
 import { usePetState } from '../../pet/usePetState';
+import { copyTextToClipboard } from '../../services/clipboard';
 import { configService } from '../../services/config';
 import { coworkService } from '../../services/cowork';
 import { i18nService } from '../../services/i18n';
@@ -965,12 +966,10 @@ const CopyButton: React.FC<{
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(content);
+    const success = await copyTextToClipboard(content);
+    if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
     }
   };
 
@@ -1052,7 +1051,8 @@ const ArtifactBadge: React.FC<{
     }
 
     try {
-      await navigator.clipboard.writeText(artifact.content);
+      const success = await copyTextToClipboard(artifact.content);
+      if (!success) return;
       window.dispatchEvent(new CustomEvent(AppCustomEvent.ShowToast, {
         detail: i18nService.t('artifactCopied'),
       }));
@@ -2141,7 +2141,8 @@ const CoworkSessionDetail: React.FC<CoworkSessionDetailProps> = ({
     e.stopPropagation();
     if (!currentSession) return;
     try {
-      await navigator.clipboard.writeText(currentSession.id);
+      const success = await copyTextToClipboard(currentSession.id);
+      if (!success) return;
       closeMenu();
       window.dispatchEvent(new CustomEvent(AppCustomEvent.ShowToast, {
         detail: i18nService.t('sessionIdCopied'),

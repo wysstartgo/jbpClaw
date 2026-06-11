@@ -98,32 +98,32 @@ const normalizeProvidersConfig = (providers: AppConfig['providers']): AppConfig[
   ) as AppConfig['providers'];
 };
 
-const legacyShortcutDefaults: Partial<Record<ShortcutAction, string>> = {
-  [ShortcutAction.NewChat]: 'Ctrl+N',
-  [ShortcutAction.Search]: 'Ctrl+F',
-  [ShortcutAction.Settings]: 'Ctrl+,',
-  [ShortcutAction.ShowShortcuts]: 'Ctrl+/',
-  [ShortcutAction.FocusPrompt]: 'Ctrl+K',
-  [ShortcutAction.StopCurrentTask]: 'Ctrl+.',
-  [ShortcutAction.ToggleSidebar]: 'Ctrl+B',
-  [ShortcutAction.ToggleArtifacts]: 'Ctrl+Shift+B',
-  [ShortcutAction.PreviousAgent]: 'Ctrl+Alt+Left',
-  [ShortcutAction.NextAgent]: 'Ctrl+Alt+Right',
-  [ShortcutAction.ShowCurrentAgentTasks]: 'Ctrl+Alt+H',
-  [ShortcutAction.OpenAgentTask1]: 'Ctrl+Alt+1',
-  [ShortcutAction.OpenAgentTask2]: 'Ctrl+Alt+2',
-  [ShortcutAction.OpenAgentTask3]: 'Ctrl+Alt+3',
-  [ShortcutAction.OpenAgentTask4]: 'Ctrl+Alt+4',
-  [ShortcutAction.OpenAgentTask5]: 'Ctrl+Alt+5',
-  [ShortcutAction.OpenAgentTask6]: 'Ctrl+Alt+6',
-  [ShortcutAction.OpenAgentTask7]: 'Ctrl+Alt+7',
-  [ShortcutAction.OpenAgentTask8]: 'Ctrl+Alt+8',
-  [ShortcutAction.OpenAgentTask9]: 'Ctrl+Alt+9',
-  [ShortcutAction.OpenCowork]: 'Ctrl+1',
-  [ShortcutAction.OpenScheduledTasks]: 'Ctrl+2',
-  [ShortcutAction.OpenKits]: 'Ctrl+3',
-  [ShortcutAction.OpenSkills]: 'Ctrl+4',
-  [ShortcutAction.OpenMcp]: 'Ctrl+5',
+const legacyShortcutDefaults: Partial<Record<ShortcutAction, string[]>> = {
+  [ShortcutAction.NewChat]: ['Ctrl+N'],
+  [ShortcutAction.Search]: ['Ctrl+F'],
+  [ShortcutAction.Settings]: ['Ctrl+,'],
+  [ShortcutAction.ShowShortcuts]: ['Ctrl+/'],
+  [ShortcutAction.FocusPrompt]: ['Ctrl+K'],
+  [ShortcutAction.StopCurrentTask]: ['Ctrl+.'],
+  [ShortcutAction.ToggleSidebar]: ['Ctrl+B'],
+  [ShortcutAction.ToggleArtifacts]: ['Ctrl+Shift+B'],
+  [ShortcutAction.PreviousAgent]: ['Ctrl+Alt+Left', 'CommandOrControl+Shift+['],
+  [ShortcutAction.NextAgent]: ['Ctrl+Alt+Right', 'CommandOrControl+Shift+]'],
+  [ShortcutAction.ShowCurrentAgentTasks]: ['Ctrl+Alt+H', 'CommandOrControl+Shift+H'],
+  [ShortcutAction.OpenAgentTask1]: ['Ctrl+Alt+1', 'CommandOrControl+Shift+1'],
+  [ShortcutAction.OpenAgentTask2]: ['Ctrl+Alt+2', 'CommandOrControl+Shift+2'],
+  [ShortcutAction.OpenAgentTask3]: ['Ctrl+Alt+3', 'CommandOrControl+Shift+3'],
+  [ShortcutAction.OpenAgentTask4]: ['Ctrl+Alt+4', 'CommandOrControl+Shift+4'],
+  [ShortcutAction.OpenAgentTask5]: ['Ctrl+Alt+5', 'CommandOrControl+Shift+5'],
+  [ShortcutAction.OpenAgentTask6]: ['Ctrl+Alt+6', 'CommandOrControl+Shift+6'],
+  [ShortcutAction.OpenAgentTask7]: ['Ctrl+Alt+7', 'CommandOrControl+Shift+7'],
+  [ShortcutAction.OpenAgentTask8]: ['Ctrl+Alt+8', 'CommandOrControl+Shift+8'],
+  [ShortcutAction.OpenAgentTask9]: ['Ctrl+Alt+9', 'CommandOrControl+Shift+9'],
+  [ShortcutAction.OpenCowork]: ['Ctrl+1'],
+  [ShortcutAction.OpenScheduledTasks]: ['Ctrl+2'],
+  [ShortcutAction.OpenKits]: ['Ctrl+3'],
+  [ShortcutAction.OpenSkills]: ['Ctrl+4'],
+  [ShortcutAction.OpenMcp]: ['Ctrl+5'],
 };
 
 const normalizeShortcutsConfig = (storedShortcuts?: AppConfig['shortcuts']): ShortcutConfig => {
@@ -137,7 +137,7 @@ const normalizeShortcutsConfig = (storedShortcuts?: AppConfig['shortcuts']): Sho
   }
 
   Object.values(ShortcutAction).forEach((action) => {
-    if (storedShortcuts[action] === legacyShortcutDefaults[action]) {
+    if (legacyShortcutDefaults[action]?.includes(storedShortcuts[action] ?? '')) {
       shortcuts[action] = defaultConfig.shortcuts![action];
     }
   });

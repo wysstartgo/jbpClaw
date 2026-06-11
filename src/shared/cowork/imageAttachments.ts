@@ -40,7 +40,7 @@ export function estimateBase64DecodedBytes(base64Value: string): number {
 }
 
 export function formatCoworkImageAttachmentLimit(bytes = COWORK_IMAGE_ATTACHMENT_MAX_BYTES): string {
-  return `约 ${Math.floor(bytes / 1000 / 1000)}MB`;
+  return `${Math.floor(bytes / 1000 / 1000)}MB`;
 }
 
 export function validateCoworkImageAttachmentSize(

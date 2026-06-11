@@ -529,6 +529,8 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke(ArtifactIpcChannel.OpenHtmlInBrowser, htmlContent),
   },
   clipboard: {
+    writeText: (text: string) =>
+      ipcRenderer.invoke(ClipboardIpc.WriteText, text),
     writeImageFromFile: (filePath: string) =>
       ipcRenderer.invoke(ClipboardIpc.WriteImageFromFile, filePath),
     writeImageFromDataUrl: (dataUrl: string) =>

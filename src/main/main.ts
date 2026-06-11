@@ -7817,6 +7817,15 @@ end tell'`, { timeout: 5000 });
     }
   });
 
+  ipcMain.handle(ClipboardIpc.WriteText, async (_event, text: string) => {
+    try {
+      clipboard.writeText(text);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
   ipcMain.handle(ClipboardIpc.WriteImageFromFile, async (_event, filePath: string) => {
     try {
       const normalizedPath = resolveShellFilePath(filePath);

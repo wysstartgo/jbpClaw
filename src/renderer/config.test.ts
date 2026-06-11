@@ -3,9 +3,11 @@ import {
   DEFAULT_TTS_CONFIG,
   DEFAULT_VOICE_POST_PROCESS_CONFIG,
   DEFAULT_WAKE_INPUT_CONFIG,
+  defaultConfig,
   isCustomProvider,
   getCustomProviderDefaultName,
   getProviderDisplayName,
+  ShortcutAction,
 } from './config';
 
 test('isCustomProvider: custom_0 is custom', () => {
@@ -95,4 +97,19 @@ test('DEFAULT_WAKE_INPUT_CONFIG: wake activation reply stays off by default', ()
 
 test('DEFAULT_TTS_CONFIG: macOS native engine remains the default engine', () => {
   expect(DEFAULT_TTS_CONFIG.engine).toBe('macos_native');
+});
+
+test('defaultConfig leaves agent shortcuts unset', () => {
+  expect(defaultConfig.shortcuts?.[ShortcutAction.PreviousAgent]).toBe('');
+  expect(defaultConfig.shortcuts?.[ShortcutAction.NextAgent]).toBe('');
+  expect(defaultConfig.shortcuts?.[ShortcutAction.ShowCurrentAgentTasks]).toBe('');
+  expect(defaultConfig.shortcuts?.[ShortcutAction.OpenAgentTask1]).toBe('');
+  expect(defaultConfig.shortcuts?.[ShortcutAction.OpenAgentTask2]).toBe('');
+  expect(defaultConfig.shortcuts?.[ShortcutAction.OpenAgentTask3]).toBe('');
+  expect(defaultConfig.shortcuts?.[ShortcutAction.OpenAgentTask4]).toBe('');
+  expect(defaultConfig.shortcuts?.[ShortcutAction.OpenAgentTask5]).toBe('');
+  expect(defaultConfig.shortcuts?.[ShortcutAction.OpenAgentTask6]).toBe('');
+  expect(defaultConfig.shortcuts?.[ShortcutAction.OpenAgentTask7]).toBe('');
+  expect(defaultConfig.shortcuts?.[ShortcutAction.OpenAgentTask8]).toBe('');
+  expect(defaultConfig.shortcuts?.[ShortcutAction.OpenAgentTask9]).toBe('');
 });

@@ -1,4 +1,5 @@
 export const ClipboardIpc = {
+  WriteText: 'clipboard:writeText',
   WriteImageFromFile: 'clipboard:writeImageFromFile',
   WriteImageFromDataUrl: 'clipboard:writeImageFromDataUrl',
 } as const;

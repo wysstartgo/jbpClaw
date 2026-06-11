@@ -1426,7 +1426,7 @@ const translations: Record<LanguageType, Record<string, string>> = {
     coworkErrorInsufficientBalance: 'API 余额不足，请充值后重试。',
     coworkErrorInputTooLong: '输入内容过长，超出模型上下文限制，请缩短对话内容后重试。',
     coworkErrorMessageTooLarge:
-      '本次消息过大，请减少附件、压缩图片或拆分提交。（单次整体需小于约 30MB）',
+      '本次消息过大，请减少附件、压缩图片或拆分提交。（单次整体需小于 30MB）',
     coworkErrorCouldNotProcessPdf: '无法处理 PDF 文件。请尝试将 PDF 转换为文本格式后重新发送。',
     coworkErrorModelNotFound: '请求的模型不存在或不可用，请在设置中检查模型配置。',
     coworkErrorGatewayDisconnected: 'AI 引擎连接中断，请重试。如果问题持续，请尝试重启应用。',

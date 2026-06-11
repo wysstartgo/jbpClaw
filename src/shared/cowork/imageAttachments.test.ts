@@ -16,8 +16,8 @@ test('estimateBase64DecodedBytes handles padding and data URL prefixes', () => {
   expect(estimateBase64DecodedBytes('data:image/png;base64,TWFu')).toBe(3);
 });
 
-test('formatCoworkImageAttachmentLimit uses a user-facing approximate MB label', () => {
-  expect(formatCoworkImageAttachmentLimit()).toBe('约 30MB');
+test('formatCoworkImageAttachmentLimit uses a locale-neutral MB label', () => {
+  expect(formatCoworkImageAttachmentLimit()).toBe('30MB');
 });
 
 test('validateCoworkImageAttachmentSize accepts exactly the 30MB limit', () => {
