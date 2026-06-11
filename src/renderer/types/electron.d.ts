@@ -1,4 +1,8 @@
 import type { AppUpdateCheckResult, AppUpdateInfo as RuntimeAppUpdateInfo, AppUpdateRuntimeState, AppUpdateSource } from '../../shared/appUpdate/constants';
+import type {
+  AsrRecognizeRequest,
+  AsrRecognizeResult,
+} from '../../shared/asr/constants';
 import type { NimQrLoginPollResult, NimQrLoginStartResult } from '../../shared/im/nimQrLogin';
 import type {
   InstalledKitRecord,
@@ -886,6 +890,9 @@ interface IElectronAPI {
     updateStatus: (options: { shareId: string; status: string }) => Promise<HtmlShareResult>;
     disable: (shareId: string) => Promise<HtmlShareResult>;
     get: (shareId: string) => Promise<HtmlShareResult>;
+  };
+  asr: {
+    recognize: (options: AsrRecognizeRequest) => Promise<AsrRecognizeResult>;
   };
   autoLaunch: {
     get: () => Promise<{ enabled: boolean }>;

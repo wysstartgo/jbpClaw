@@ -44,6 +44,10 @@ import {
 } from '../shared/appUpdate/constants';
 import { ArtifactIpcChannel } from '../shared/artifact/constants';
 import { ArtifactPreviewIpc } from '../shared/artifactPreview/constants';
+import {
+  AsrIpcChannel,
+  type AsrRecognizeRequest,
+} from '../shared/asr/constants';
 import { AuthIpcChannel } from '../shared/auth/constants';
 import { ClipboardIpc } from '../shared/clipboard/constants';
 import { CoworkIpcChannel } from '../shared/cowork/constants';
@@ -567,6 +571,10 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke(HtmlShareIpc.UpdateStatus, options),
     disable: (shareId: string) => ipcRenderer.invoke(HtmlShareIpc.Disable, shareId),
     get: (shareId: string) => ipcRenderer.invoke(HtmlShareIpc.Get, shareId),
+  },
+  asr: {
+    recognize: (options: AsrRecognizeRequest) =>
+      ipcRenderer.invoke(AsrIpcChannel.Recognize, options),
   },
   autoLaunch: {
     get: () => ipcRenderer.invoke('app:getAutoLaunch'),
